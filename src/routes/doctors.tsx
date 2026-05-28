@@ -6,13 +6,25 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
 import { haversineKm } from "@/lib/distance";
 import { Search, MapPin, Star, Stethoscope, BadgeCheck, Loader2, SlidersHorizontal, Navigation } from "lucide-react";
+import { buildMeta, buildSeoLinks } from "@/lib/seo";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 export const Route = createFileRoute("/doctors")({
   head: () => ({
-    meta: [
-      { title: "Find a Doctor — Tabibi" },
-      { name: "description", content: "Search and book appointments with verified doctors on Tabibi." },
-    ],
+    meta: buildMeta({
+      title: "ابحث عن طبيب أونلاين — 2,500+ طبيب موثّق | طبيبي",
+      description:
+        "تصفّح أفضل الأطباء حسب التخصص والمدينة والتقييم. احجز موعدك حضورياً أو عبر فيديو خلال دقائق على منصة طبيبي.",
+      path: "/doctors",
+      keywords: [
+        "ابحث عن طبيب",
+        "أطباء معتمدون",
+        "طبيب قريب مني",
+        "حجز موعد طبيب أونلاين",
+        "أفضل طبيب",
+      ],
+    }),
+    links: buildSeoLinks("/doctors"),
   }),
   component: DoctorsPage,
 });
@@ -179,6 +191,7 @@ function DoctorsPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Breadcrumbs items={[{ name: t("Doctors", "الأطباء"), path: "/doctors" }]} />
       {/* Hero search */}
       <div className="bg-gradient-to-br from-primary/10 via-background to-teal/10 border-b border-border">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">

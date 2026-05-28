@@ -15,14 +15,62 @@ import {
   Award,
   Globe,
 } from "lucide-react";
+import { buildMeta, buildSeoLinks } from "@/lib/seo";
+import { faqSchema, jsonLdString } from "@/lib/schema";
+
+const HOMEPAGE_FAQ = [
+  {
+    question: "كيف أحجز موعد مع طبيب على طبيبي؟",
+    answer:
+      "ابحث عن الطبيب المناسب عن طريق التخصص أو المدينة، ثم اختر الموعد المتاح، وأكد الحجز خلال دقائق. ستصلك رسالة تأكيد فورية على البريد الإلكتروني والرسائل النصية.",
+  },
+  {
+    question: "هل أستطيع الاستشارة أونلاين بالفيديو؟",
+    answer:
+      "نعم. منصة طبيبي توفر استشارات فيديو آمنة ومشفّرة مع أطباء معتمدين، بدون الحاجة لتثبيت أي تطبيق. تكفي متصفح حديث على الهاتف أو الكمبيوتر.",
+  },
+  {
+    question: "هل الأطباء على طبيبي موثوقون ومرخّصون؟",
+    answer:
+      "كل طبيب على المنصة يمر بمرحلة تحقق صارمة من الترخيص والشهادات قبل عرض ملفه. تظهر شارة \"موثّق\" بجانب اسم الطبيب الذي اكتمل التحقق منه.",
+  },
+  {
+    question: "كم تكلفة الاستشارة الطبية؟",
+    answer:
+      "الأسعار تختلف حسب الطبيب والتخصص ونوع الاستشارة (حضوري أو فيديو). يظهر السعر بوضوح في ملف كل طبيب قبل تأكيد الحجز، بدون رسوم مخفية.",
+  },
+  {
+    question: "هل بياناتي الصحية آمنة؟",
+    answer:
+      "نعم. كل سجلاتك مشفّرة بمعايير HIPAA وتُحفظ بأمان في خوادم مؤمّنة. لا يطّلع عليها سوى الطبيب الذي تختار مشاركتها معه، ويمكنك حذفها في أي وقت.",
+  },
+  {
+    question: "في أي دول يعمل تطبيق طبيبي؟",
+    answer:
+      "نخدم حالياً مرضى وأطباء في مصر والسعودية والإمارات وقطر والكويت والبحرين وعُمان والأردن، ونتوسع باستمرار لخدمة المزيد من الدول العربية.",
+  },
+];
 
 export const Route = createFileRoute("/")({
   head: () => ({
-    meta: [
-      { title: "Tabibi - Your Health, Connected" },
-      { name: "description", content: "Tabibi connects patients with trusted doctors across the Arab world. Book appointments, consult online, and manage your health records all in one place." },
-      { property: "og:title", content: "Tabibi - Your Health, Connected" },
-      { property: "og:description", content: "Tabibi connects patients with trusted doctors across the Arab world. Book appointments, consult online, and manage your health records all in one place." },
+    meta: buildMeta({
+      title: "احجز موعد طبيب أونلاين 24/7 — 2,500+ طبيب موثّق | طبيبي",
+      description:
+        "احجز موعدك مع أفضل الأطباء في الوطن العربي خلال دقائق — استشارة فيديو آمنة، أسعار شفافة، تأكيد فوري. جرّب طبيبي مجاناً اليوم.",
+      path: "/",
+      keywords: [
+        "حجز موعد طبيب",
+        "طبيب أونلاين",
+        "استشارة طبية فيديو",
+        "أطباء معتمدون مصر",
+        "تطبيب عن بعد",
+        "كشف أونلاين",
+        "Tabibi",
+      ],
+    }),
+    links: buildSeoLinks("/"),
+    scripts: [
+      { type: "application/ld+json", children: jsonLdString(faqSchema(HOMEPAGE_FAQ)) },
     ],
   }),
   component: LandingPage,
@@ -38,6 +86,7 @@ function LandingPage() {
       <StatsSection t={t} />
       <FeaturesSection t={t} isRTL={isRTL} />
       <HowItWorksSection t={t} isRTL={isRTL} />
+      <FaqSection t={t} />
       <CTASection t={t} isRTL={isRTL} />
     </div>
   );
@@ -362,6 +411,50 @@ function HowItWorksSection({ t, isRTL }: { t: (en: string, ar: string) => string
                 </div>
               )}
             </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FaqSection({ t }: { t: (en: string, ar: string) => string }) {
+  return (
+    <section className="bg-background py-20 sm:py-28" id="faq">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            {t("Frequently Asked Questions", "الأسئلة الأكثر شيوعاً")}
+          </h2>
+          <p className="mt-4 text-lg text-muted-foreground">
+            {t(
+              "Quick answers about booking, online consultations, security, and pricing.",
+              "إجابات سريعة عن الحجز، الاستشارة أونلاين، الأمان، والأسعار."
+            )}
+          </p>
+        </div>
+
+        <div className="mt-12 divide-y divide-border rounded-2xl border border-border bg-card">
+          {HOMEPAGE_FAQ.map((item, i) => (
+            <details
+              key={i}
+              className="group p-6 [&_summary::-webkit-details-marker]:hidden"
+            >
+              <summary className="flex cursor-pointer items-start justify-between gap-4 text-right">
+                <h3 className="text-base font-semibold text-foreground sm:text-lg">
+                  {item.question}
+                </h3>
+                <span
+                  aria-hidden
+                  className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-transform group-open:rotate-45"
+                >
+                  +
+                </span>
+              </summary>
+              <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+                {item.answer}
+              </p>
+            </details>
           ))}
         </div>
       </div>

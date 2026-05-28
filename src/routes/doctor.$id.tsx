@@ -10,13 +10,20 @@ import { Star, MapPin, Calendar, Clock, ArrowLeft, Loader2, MessageSquare, Video
 import { toast } from "sonner";
 import { PatientConsentModal, CONSENT_TEXT_VERSION } from "@/components/PatientConsentModal";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { buildMeta, buildSeoLinks, truncate } from "@/lib/seo";
+import { physicianSchema, jsonLdString } from "@/lib/schema";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 export const Route = createFileRoute("/doctor/$id")({
   head: ({ params }) => ({
-    meta: [
-      { title: `Doctor Profile — Tabibi` },
-      { name: "description", content: `View doctor profile and book an appointment on Tabibi. ID: ${params.id}` },
-    ],
+    meta: buildMeta({
+      title: `ملف الطبيب — احجز موعدك الآن | طبيبي`,
+      description:
+        "تعرّف على خبرات الطبيب وتقييمات المرضى وأسعار الكشف، واحجز موعدك حضورياً أو عبر فيديو في دقائق على منصة طبيبي.",
+      path: `/doctor/${params.id}`,
+      type: "profile",
+    }),
+    links: buildSeoLinks(`/doctor/${params.id}`),
   }),
   component: DoctorDetailPage,
 });
@@ -191,8 +198,42 @@ function DoctorDetailPage() {
 
   const name = doctor.profile?.full_name ?? t("Doctor", "طبيب");
 
+  // Aggregate rating from reviews
+  const avgRating =
+    reviews.length > 0
+      ? reviews.reduce((sum: number, r: any) => sum + (r.rating ?? 0), 0) / reviews.length
+      : null;
+  const primaryClinic = clinics[0];
+  const docSchema = physicianSchema({
+    id,
+    name,
+    specialty: doctor.specialty,
+    description: doctor.bio ? truncate(doctor.bio, 300) : null,
+    image: (doctor.profile as any)?.avatar_url ?? null,
+    telephone: primaryClinic?.phone ?? null,
+    city: primaryClinic?.city ?? null,
+    country: "EG",
+    consultationFee: doctor.consultation_fee ?? primaryClinic?.consultation_fee ?? null,
+    currency: doctor.currency ?? primaryClinic?.currency ?? "EGP",
+    ratingValue: avgRating,
+    reviewCount: reviews.length,
+    acceptsVideo: Boolean((doctor as any).telemedicine_enabled),
+    languages: ["Arabic", "English"],
+  });
+
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: jsonLdString(docSchema) }}
+      />
+      <Breadcrumbs
+        items={[
+          { name: t("Doctors", "الأطباء"), path: "/doctors" },
+          { name, path: `/doctor/${id}` },
+        ]}
+      />
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         <Link to="/doctors" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6">
           <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
