@@ -25,10 +25,15 @@ async function fetchRole(userId: string): Promise<UserRole | null> {
     const { data, error } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (error || !data) return null;
-    return data.role as UserRole;
+      .eq("user_id", userId);
+    if (error || !data || data.length === 0) return null;
+    const roles = data.map((r) => r.role as UserRole);
+    // Priority: admin > doctor > pharmacy > patient
+    const priority: UserRole[] = ["admin", "doctor", "pharmacy", "patient"];
+    for (const p of priority) {
+      if (roles.includes(p)) return p;
+    }
+    return roles[0] ?? null;
   } catch {
     return null;
   }

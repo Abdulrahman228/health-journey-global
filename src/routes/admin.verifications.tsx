@@ -5,12 +5,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Loader2, ShieldCheck, BadgeCheck, XCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { pingIndexNowForDoctor } from "@/lib/indexnow.functions";
+import { AdminNav } from "@/components/admin/AdminNav";
 
 export const Route = createFileRoute("/admin/verifications")({
   head: () => ({
     meta: [
       { title: "لوحة الأدمن - توثيق الأطباء" },
       { name: "description", content: "مراجعة طلبات توثيق الأطباء." },
+      { name: "robots", content: "noindex, nofollow" },
     ],
   }),
   component: AdminVerificationsPage,
@@ -99,6 +102,16 @@ function AdminVerificationsPage() {
         metadata: { syndicate_number: row.syndicate_number, notes },
       });
       toast.success(approve ? "تم التوثيق" : "تم الرفض");
+      if (approve) {
+        // Fire-and-forget: tell IndexNow about the freshly-public profile
+        // so Bing/Yandex/etc. crawl it within minutes (module 3.3 in the
+        // Rank Math course). Failure is non-fatal — sitemap still works.
+        pingIndexNowForDoctor({ data: { doctorId: row.id } })
+          .then((r) => {
+            if (r.ok) console.info(`[IndexNow] submitted ${r.submitted} URLs`);
+          })
+          .catch((e) => console.warn("[IndexNow] ping failed:", e));
+      }
       await load();
     } else {
       toast.error("حصل خطأ");
@@ -124,7 +137,8 @@ function AdminVerificationsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6" dir="rtl">
+      <AdminNav />
       <div className="flex items-center gap-2">
         <ShieldCheck className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold">توثيق الأطباء</h1>
