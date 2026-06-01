@@ -1,7 +1,8 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { ShieldCheck, Users, Wallet, Star, FileText } from "lucide-react";
+import { ShieldCheck, Users, Wallet, Star, FileText, LayoutDashboard } from "lucide-react";
 
 const items = [
+  { to: "/admin", label: "نظرة عامة", icon: LayoutDashboard, exact: true },
   { to: "/admin/verifications", label: "التوثيق", icon: ShieldCheck },
   { to: "/admin/doctors", label: "الأطباء", icon: Users },
   { to: "/admin/withdrawals", label: "السحوبات", icon: Wallet },
@@ -13,8 +14,8 @@ export function AdminNav() {
   const { pathname } = useLocation();
   return (
     <nav className="mb-6 flex flex-wrap gap-2 border-b border-border pb-3">
-      {items.map(({ to, label, icon: Icon }) => {
-        const active = pathname.startsWith(to);
+      {items.map(({ to, label, icon: Icon, exact }) => {
+        const active = exact ? pathname === to || pathname === to + "/" : pathname.startsWith(to);
         return (
           <Link
             key={to}
