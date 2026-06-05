@@ -15,20 +15,20 @@ export type Language =
   | "pt"
   | "sw";
 
+/**
+ * Currently active languages shown in the language picker.
+ *
+ * Only languages with FULL, professionally-verified translations are listed here
+ * to keep the UX honest and avoid SEO penalties (Google/Rank Math flag pages
+ * that declare hreflang=fr but serve English content).
+ *
+ * The `Language` type still includes future locales (fr, de, tr, ur, …) so
+ * translation dictionaries can be added incrementally — once a locale reaches
+ * full coverage, just re-add it to this array.
+ */
 export const LANGUAGES: { code: Language; label: string; nativeLabel: string; dir: "ltr" | "rtl" }[] = [
   { code: "ar", label: "Arabic", nativeLabel: "العربية", dir: "rtl" },
   { code: "en", label: "English", nativeLabel: "English", dir: "ltr" },
-  { code: "fr", label: "French", nativeLabel: "Français", dir: "ltr" },
-  { code: "es", label: "Spanish", nativeLabel: "Español", dir: "ltr" },
-  { code: "de", label: "German", nativeLabel: "Deutsch", dir: "ltr" },
-  { code: "tr", label: "Turkish", nativeLabel: "Türkçe", dir: "ltr" },
-  { code: "ur", label: "Urdu", nativeLabel: "اردو", dir: "rtl" },
-  { code: "fa", label: "Persian", nativeLabel: "فارسی", dir: "rtl" },
-  { code: "hi", label: "Hindi", nativeLabel: "हिन्दी", dir: "ltr" },
-  { code: "zh", label: "Chinese", nativeLabel: "中文", dir: "ltr" },
-  { code: "ru", label: "Russian", nativeLabel: "Русский", dir: "ltr" },
-  { code: "pt", label: "Portuguese", nativeLabel: "Português", dir: "ltr" },
-  { code: "sw", label: "Swahili", nativeLabel: "Kiswahili", dir: "ltr" },
 ];
 
 const RTL_LANGS: Language[] = ["ar", "ur", "fa"];

@@ -14,9 +14,12 @@ import {
   Users,
   Award,
   Globe,
+  BookOpen,
 } from "lucide-react";
 import { buildMeta, buildSeoLinks } from "@/lib/seo";
 import { faqSchema, jsonLdString } from "@/lib/schema";
+import heroMedicalTeamImage from "@/assets/hero-medical-team.png";
+import { HeroHierarchicalSearch } from "@/components/HeroHierarchicalSearch";
 
 const HOMEPAGE_FAQ = [
   {
@@ -86,6 +89,7 @@ function LandingPage() {
       <StatsSection t={t} />
       <FeaturesSection t={t} isRTL={isRTL} />
       <HowItWorksSection t={t} isRTL={isRTL} />
+      <ArticlesTeaserSection t={t} isRTL={isRTL} />
       <FaqSection t={t} />
       <CTASection t={t} isRTL={isRTL} />
     </div>
@@ -96,7 +100,7 @@ function HeroSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRT
   const Arrow = isRTL ? ArrowLeft : ArrowRight;
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-background via-background to-secondary/50 py-20 sm:py-28 lg:py-32">
+    <section className="relative overflow-hidden bg-gradient-to-br from-background via-background to-secondary/50 pt-6 pb-12 sm:pt-8 sm:pb-16 lg:pt-10 lg:pb-20">
       {/* Decorative background elements */}
       <div className="absolute inset-3 -z-10 overflow-hidden">
         <div className="absolute -right-20 -top-20 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
@@ -111,19 +115,23 @@ function HeroSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRT
               <HeartPulse className="h-4 w-4" />
               {t("Now available in Egypt", "متاح الآن في مصر")}
             </div>
-            <h1 className="mt-6 text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+            <h1 className="arabic-elegant mt-6 text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
               {t(
-                "Your Health, Just a Click Away",
-                "صحتك، على بعد نقرة واحدة"
+                "Tabibi — Book your trusted doctor in minutes. Video consultations & in-person visits",
+                "طبيبي — احجز طبيبك الموثّق في دقائق، استشارات فيديو ومواعيد حضورية"
               )}
             </h1>
             <p className="mt-6 text-lg leading-8 text-muted-foreground">
               {t(
-                "Book appointments with verified doctors, consult online, and manage your health records — all in one trusted platform for the Arab world.",
-                "احجز مواعيد مع أطباء موثوق بهم، استشر أونلاين، وادارء سجلاتك الطبية — كل ذلك في منصة واحدة موثوقة للعالم العربي."
+                "Tabibi connects you with 2,500+ licensed doctors across the Arab world — book in-person visits or secure video consultations, compare prices, read genuine reviews, and manage your medical records on one trusted platform.",
+                "منصة طبيبي تربطك بأكثر من 2,500 طبيب مرخّص في الوطن العربي — احجز كشف حضوري أو استشارة فيديو آمنة، قارن الأسعار، اقرأ تقييمات حقيقية، وأدر سجلك الطبي على منصة موثوقة واحدة."
               )}
             </p>
-            <div className="mt-8 flex flex-wrap gap-4">
+
+            {/* Search box — hierarchical Country → Governorate → City → District + Near me */}
+            <HeroHierarchicalSearch language={isRTL ? "ar" : "en"} isRTL={isRTL} t={t} />
+
+            <div className="mt-6 flex flex-wrap gap-4">
               <Link
                 to="/doctors"
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30"
@@ -157,70 +165,12 @@ function HeroSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRT
 
           {/* Visual */}
           <div className="relative hidden lg:block">
-            <div className="relative rounded-3xl bg-gradient-to-br from-primary/10 to-teal/10 p-8">
-              <div className="rounded-2xl bg-card p-6 shadow-xl">
-                {/* Mock doctor card */}
-                <div className="flex items-start gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-                    <Stethoscope className="h-7 w-7 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">
-                      {t("Dr. Ahmed Mohamed", "د. أحمد محمد")}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {t("Cardiologist", "أخصائي قلب")}
-                    </p>
-                    <div className="mt-2 flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                      <span className="text-sm font-medium">4.9</span>
-                      <span className="text-sm text-muted-foreground">(128 reviews)</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-accent p-3 text-center">
-                    <Calendar className="mx-auto h-5 w-5 text-teal" />
-                    <p className="mt-1 text-xs text-muted-foreground">{t("Book Now", "احجز الآن")}</p>
-                  </div>
-                  <div className="rounded-lg bg-accent p-3 text-center">
-                    <Video className="mx-auto h-5 w-5 text-teal" />
-                    <p className="mt-1 text-xs text-muted-foreground">{t("Online", "أونلاين")}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Floating stats card */}
-              <div className="absolute -bottom-4 -left-4 rounded-xl bg-card p-4 shadow-lg">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal/10">
-                    <Users className="h-5 w-5 text-teal" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-foreground">2,500+</p>
-                    <p className="text-xs text-muted-foreground">{t("Doctors", "طبيب")}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Floating review card */}
-              <div className="absolute -right-4 top-8 rounded-xl bg-card p-4 shadow-lg">
-                <div className="flex items-center gap-2">
-                  <div className="flex -space-x-2">
-                    {[1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-primary/20 text-xs font-bold text-primary"
-                      >
-                        {String.fromCharCode(64 + i)}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t("Joined this week", "انضموا هذا الأسبوع")}
-                  </p>
-                </div>
-              </div>
+            <div className="rounded-[2rem] bg-linear-to-br from-primary/10 to-teal/10 p-5 shadow-2xl shadow-primary/10">
+              <img
+                src={heroMedicalTeamImage}
+                alt={t("Doctors using telehealth platform", "أطباء يستخدمون منصة استشارات طبية عن بعد")}
+                className="block aspect-square w-full rounded-[1.5rem] object-cover shadow-xl"
+              />
             </div>
           </div>
         </div>
@@ -456,6 +406,106 @@ function FaqSection({ t }: { t: (en: string, ar: string) => string }) {
               </p>
             </details>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ArticlesTeaserSection({
+  t,
+  isRTL,
+}: {
+  t: (en: string, ar: string) => string;
+  isRTL: boolean;
+}) {
+  const Arrow = isRTL ? ArrowLeft : ArrowRight;
+  const cards = [
+    {
+      icon: <HeartPulse className="h-6 w-6" />,
+      title: t("Symptoms & red flags", "الأعراض والعلامات المُقلقة"),
+      desc: t(
+        "Know when chest pain, fever or numbness need urgent care.",
+        "اعرف متى يكون ألم الصدر أو الحرارة أو التنميل بحاجة لتدخل عاجل.",
+      ),
+    },
+    {
+      icon: <Stethoscope className="h-6 w-6" />,
+      title: t("When to see which doctor", "متى تستشير طبيب الاختصاص"),
+      desc: t(
+        "Cardiologist, neurologist, pediatrician — pick the right specialty in seconds.",
+        "قلب، مخ وأعصاب، أطفال... اختر التخصص الصحيح في ثوانٍ.",
+      ),
+    },
+    {
+      icon: <Shield className="h-6 w-6" />,
+      title: t("Trusted, doctor-written", "محتوى يكتبه أطباء موثّقون"),
+      desc: t(
+        "Every article is reviewed by a licensed physician on the platform.",
+        "كل مقال يُراجع بواسطة طبيب مرخّص على المنصة.",
+      ),
+    },
+  ];
+
+  return (
+    <section className="py-16 sm:py-20" aria-labelledby="articles-teaser-heading">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/5 via-background to-teal/5 p-8 sm:p-12">
+          <div className="grid items-center gap-10 lg:grid-cols-2">
+            <div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                <BookOpen className="h-3.5 w-3.5" />
+                {t("Medical Library", "مكتبة طبية")}
+              </span>
+              <h2
+                id="articles-teaser-heading"
+                className="mt-4 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl"
+              >
+                {t(
+                  "Read before you book — answers from real doctors",
+                  "اقرأ قبل ما تحجز — إجابات من أطباء حقيقيين",
+                )}
+              </h2>
+              <p className="mt-4 text-lg leading-8 text-muted-foreground">
+                {t(
+                  "Browse our growing library of medical articles written and reviewed by licensed doctors. Understand symptoms, treatment options, and know when it's time to consult a specialist.",
+                  "تصفح مكتبة المحتوى الطبي المتنامية — مقالات يكتبها ويراجعها أطباء مرخّصون لتفهم الأعراض، الخيارات العلاجية، ومتى يجب استشارة الاختصاصي.",
+                )}
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  to="/articles"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-xl"
+                >
+                  <BookOpen className="h-5 w-5" />
+                  {t("Browse all articles", "تصفّح كل المقالات")}
+                  <Arrow className="h-5 w-5" />
+                </Link>
+                <Link
+                  to="/doctors"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-3 text-base font-semibold text-foreground transition-all hover:bg-accent"
+                >
+                  {t("Find a doctor", "ابحث عن طبيب")}
+                </Link>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              {cards.map((c, i) => (
+                <Link
+                  key={i}
+                  to="/articles"
+                  className="group rounded-2xl border border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                    {c.icon}
+                  </div>
+                  <h3 className="mt-4 text-base font-bold text-foreground">{c.title}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">{c.desc}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>

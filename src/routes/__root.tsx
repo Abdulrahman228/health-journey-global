@@ -12,8 +12,12 @@ import { useEffect, useState } from "react";
 import appCss from "../styles.css?url";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { SoloShell } from "@/components/SoloShell";
+import { useSoloMode } from "@/hooks/useSoloMode";
 import { buildMeta, buildSeoLinks, siteConfig } from "@/lib/seo";
 import { organizationSchema, websiteSchema, jsonLdString } from "@/lib/schema";
+import { WebVitalsReporter } from "@/lib/web-vitals";
+import { installClientErrorHandlers } from "@/lib/error-reporter";
 
 function NotFoundComponent() {
   return (
@@ -77,12 +81,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { name: "theme-color", content: "#0f766e" },
-      { name: "author", content: siteConfig.brand.en },
-      { name: "application-name", content: siteConfig.brand.en },
+      { name: "theme-color", content: "#1d4ed8" },
+      { name: "color-scheme", content: "light" },
+      { name: "format-detection", content: "telephone=no" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
+      { name: "apple-mobile-web-app-title", content: "طبيبي Tabibi" },
+      { name: "author", content: `${siteConfig.brand.en} — ${siteConfig.brand.ar}` },
+      { name: "application-name", content: `${siteConfig.brand.en} — ${siteConfig.brand.ar}` },
       { httpEquiv: "x-ua-compatible", content: "IE=edge" },
       ...buildMeta({
-        title: `${siteConfig.brand.ar} | ${siteConfig.tagline.ar} — حجز موعد طبيب أونلاين`,
+        title: `طبيبي Tabibi | ${siteConfig.tagline.ar} — حجز طبيب أونلاين`,
         description: siteConfig.defaultDescription.ar,
         path: "/",
         keywords: [...siteConfig.defaultKeywords],
@@ -91,17 +101,27 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "apple-touch-icon", href: "/icon-192.svg" },
+      { rel: "mask-icon", href: "/favicon.svg", color: "#1d4ed8" },
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap",
-      },
+      // Fonts are injected asynchronously by the inline script below to avoid
+      // render-blocking. <noscript> fallback added via scripts array.
       ...buildSeoLinks("/"),
     ],
     scripts: [
+      {
+        // Inject Google Fonts non-blockingly. Body has system-ui fallback so
+        // text renders immediately, then swaps to Cairo/Inter on load.
+        children:
+          "(function(){var h='https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap';var l=document.createElement('link');l.rel='stylesheet';l.href=h;l.media='print';l.onload=function(){this.media='all';this.onload=null};(document.head||document.documentElement).appendChild(l);})();",
+      },
+      {
+        // Register service worker for offline-first PWA experience.
+        children:
+          "if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(function(){});});}",
+      },
       {
         type: "application/ld+json",
         children: jsonLdString(organizationSchema()),
@@ -145,6 +165,22 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const solo = useSoloMode();
+
+  useEffect(() => {
+    installClientErrorHandlers();
+  }, []);
+
+  if (solo.isSolo) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <SoloShell ctx={solo}>
+          <Outlet />
+          <WebVitalsReporter />
+        </SoloShell>
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -154,6 +190,7 @@ function RootComponent() {
           <Outlet />
         </main>
         <Footer />
+        <WebVitalsReporter />
       </div>
     </QueryClientProvider>
   );

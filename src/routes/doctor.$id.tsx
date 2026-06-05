@@ -1,30 +1,154 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
 import { ClinicMap } from "@/components/maps/ClinicMap";
-import { Star, MapPin, Calendar, Clock, ArrowLeft, Loader2, MessageSquare, Video, Building2, Phone } from "lucide-react";
+import { PrivateFeedbackButton } from "@/components/PrivateFeedbackButton";
+import { Star, MapPin, ArrowLeft, Loader2, MessageSquare, Phone, Sparkles, Video, Building2, Crown } from "lucide-react";
 import { toast } from "sonner";
-import { PatientConsentModal, CONSENT_TEXT_VERSION } from "@/components/PatientConsentModal";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { TierBadge } from "@/components/TierBadge";
+import { BookingCard } from "@/components/booking/BookingCard";
 import { buildMeta, buildSeoLinks, truncate } from "@/lib/seo";
-import { physicianSchema, jsonLdString } from "@/lib/schema";
+import { physicianSchema, breadcrumbSchema, medicalClinicSchema, reviewSchema, jsonLdString } from "@/lib/schema";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { loadDoctorForSeo, type DoctorSeoData } from "@/lib/seo.functions";
+import { determineVisitFee } from "@/lib/visit-fee.functions";
+
+/**
+ * Build the SEO title for a doctor page following Rank Math rules:
+ *   keyword (احجز/طبيب + specialty) + name + city + brand, ≤ 60 chars.
+ */
+function buildDoctorTitle(d: DoctorSeoData | null): string {
+  if (!d || !d.name) return "ملف الطبيب — احجز موعدك الآن | طبيبي";
+  const drName = d.name.startsWith("د.") || d.name.startsWith("Dr") ? d.name : `د. ${d.name}`;
+  const spec = d.specialty ? ` ${d.specialty}` : "";
+  const city = d.city ? ` — ${d.city}` : "";
+  return `${drName}${spec}${city} | احجز موعد | طبيبي`;
+}
+
+function buildDoctorDescription(d: DoctorSeoData | null): string {
+  if (!d || !d.name) {
+    return "تعرّف على خبرات الطبيب وتقييمات المرضى وأسعار الكشف، واحجز موعدك حضورياً أو عبر فيديو في دقائق على منصة طبيبي.";
+  }
+  const drName = d.name.startsWith("د.") || d.name.startsWith("Dr") ? d.name : `د. ${d.name}`;
+  const exp = d.yearsExperience ? `${d.yearsExperience}+ سنة خبرة` : "طبيب موثّق";
+  const spec = d.specialty ? `، تخصص ${d.specialty}` : "";
+  const city = d.city ? ` في ${d.city}` : "";
+  const video = d.telemedicineEnabled ? " — متاح كشف فيديو أونلاين" : "";
+  const rating =
+    typeof d.rating === "number" && d.reviewCount > 0
+      ? ` تقييم ${d.rating.toFixed(1)}/5 من ${d.reviewCount} مراجعة.`
+      : "";
+  return `${drName}${spec}${city} — ${exp}.${rating}${video} احجز موعدك الآن على طبيبي.`;
+}
 
 export const Route = createFileRoute("/doctor/$id")({
-  head: ({ params }) => ({
-    meta: buildMeta({
-      title: `ملف الطبيب — احجز موعدك الآن | طبيبي`,
-      description:
-        "تعرّف على خبرات الطبيب وتقييمات المرضى وأسعار الكشف، واحجز موعدك حضورياً أو عبر فيديو في دقائق على منصة طبيبي.",
-      path: `/doctor/${params.id}`,
-      type: "profile",
-    }),
-    links: buildSeoLinks(`/doctor/${params.id}`),
-  }),
+  loader: async ({ params }) => {
+    const seo = await loadDoctorForSeo({ data: params.id });
+    return { seo };
+  },
+  head: ({ params, loaderData }) => {
+    const d = loaderData?.seo ?? null;
+    const title = buildDoctorTitle(d);
+    const description = buildDoctorDescription(d);
+    const image = d?.avatarUrl ?? undefined;
+    const path = `/doctor/${params.id}`;
+
+    const scripts: Array<{ type: string; children: string }> = [];
+    if (d && d.name) {
+      scripts.push({
+        type: "application/ld+json",
+        children: jsonLdString(
+          physicianSchema({
+            id: d.id,
+            name: d.name,
+            specialty: d.specialty,
+            description: d.bio ? truncate(d.bio, 300) : null,
+            image: d.avatarUrl,
+            telephone: d.primaryClinic?.phone ?? null,
+            city: d.city,
+            country: "EG",
+            consultationFee: d.consultationFee,
+            currency: d.currency || "EGP",
+            ratingValue: d.rating,
+            reviewCount: d.reviewCount,
+            acceptsVideo: d.telemedicineEnabled,
+            languages: d.languages,
+          }),
+        ),
+      });
+      scripts.push({
+        type: "application/ld+json",
+        children: jsonLdString(
+          breadcrumbSchema([
+            { name: "الأطباء", path: "/doctors" },
+            ...(d.specialty
+              ? [{ name: d.specialty, path: `/doctors?specialty=${encodeURIComponent(d.specialty)}` }]
+              : []),
+            { name: d.name, path },
+          ]),
+        ),
+      });
+      // One MedicalClinic schema per practice location — helps Google
+      // surface this doctor in Local Pack + "near me" queries.
+      for (const c of d.clinics ?? []) {
+        scripts.push({
+          type: "application/ld+json",
+          children: jsonLdString(
+            medicalClinicSchema({
+              id: c.id,
+              name: c.name,
+              address: c.address,
+              city: c.city,
+              phone: c.phone,
+              lat: c.lat,
+              lng: c.lng,
+              doctorId: d.id,
+              doctorName: d.name,
+              specialty: d.specialty,
+            }),
+          ),
+        });
+      }
+      // Individual Review items — unlocks star snippets + review text
+      // in SERP (CTR uplift ~25–40% per the Rank Math course).
+      for (const rv of d.reviews ?? []) {
+        scripts.push({
+          type: "application/ld+json",
+          children: jsonLdString(
+            reviewSchema({
+              id: rv.id,
+              doctorId: d.id,
+              doctorName: d.name,
+              rating: rv.rating,
+              comment: rv.comment,
+              authorName: rv.authorName,
+              createdAt: rv.createdAt,
+            }),
+          ),
+        });
+      }
+    }
+
+    return {
+      meta: buildMeta({
+        title,
+        description,
+        path,
+        image,
+        type: "profile",
+        keywords: d?.specialty
+          ? [d.specialty, "حجز موعد طبيب", "طبيب أونلاين", d.city || "", "طبيبي"].filter(Boolean)
+          : undefined,
+      }),
+      links: buildSeoLinks(path),
+      scripts,
+    };
+  },
   component: DoctorDetailPage,
 });
 
@@ -35,13 +159,8 @@ function DoctorDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { formatPrice } = useCurrency();
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedTime, setSelectedTime] = useState("");
-  const [appointmentType, setAppointmentType] = useState<"in_person" | "video">("in_person");
-  const [notes, setNotes] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
-  const [consentOpen, setConsentOpen] = useState(false);
 
   const { data: doctor, isLoading } = useQuery({
     queryKey: ["doctor", id],
@@ -60,11 +179,43 @@ function DoctorDetailPage() {
         .from("reviews")
         .select("*")
         .eq("doctor_id", id)
+        .eq("status", "approved")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
   });
+
+  // Track profile view (analytics) — fire-and-forget, once per mount.
+  // Suppressed for the doctor's own profile so they don't inflate stats.
+  useEffect(() => {
+    if (!id) return;
+    if (doctor?.profile_id && profile?.id === doctor.profile_id) return;
+    supabase.rpc("track_doctor_view", { _doctor_details_id: id }).then(
+      () => {},
+      () => {},
+    );
+  }, [id, doctor?.profile_id, profile?.id]);
+
+  // Patient-aware fee preview (free follow-up vs new visit)
+  const { data: feeDecision } = useQuery({
+    queryKey: ["visit-fee", id, profile?.id],
+    enabled: Boolean(user && profile?.id && id),
+    queryFn: async () =>
+      determineVisitFee({
+        data: { patientProfileId: profile!.id, doctorDetailsId: id },
+      }),
+  });
+
+  const { data: tier } = useQuery({
+    queryKey: ["doctor-tier", id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("doctor_active_tier", { doctor_details_id: id });
+      if (error) return "free";
+      return (data as string) ?? "free";
+    },
+  });
+  const isGold = tier === "gold";
 
   const { data: clinics = [] } = useQuery({
     queryKey: ["doctor-clinics", id],
@@ -88,76 +239,6 @@ function DoctorDetailPage() {
     },
   });
 
-  const bookMutation = useMutation({
-    mutationFn: async (consents?: {
-      telemedicine_consent: boolean;
-      data_processing_consent: boolean;
-      recording_consent: boolean;
-    }) => {
-      if (!user || !profile) throw new Error("Login required");
-      if (!selectedDate || !selectedTime) throw new Error("Pick date & time");
-      if (appointmentType === "video") {
-        if (!doctor?.is_verified || !doctor?.telemedicine_enabled) {
-          throw new Error("هذا الطبيب لم يفعّل الكشف أون لاين");
-        }
-        if (!consents?.telemedicine_consent || !consents?.data_processing_consent) {
-          throw new Error("الموافقة مطلوبة لإتمام الحجز");
-        }
-      }
-      const scheduled = new Date(`${selectedDate}T${selectedTime}`).toISOString();
-      const { data: appt, error } = await supabase.from("appointments").insert({
-        patient_id: profile.id,
-        doctor_id: id,
-        scheduled_at: scheduled,
-        appointment_type: appointmentType,
-        fee: doctor?.consultation_fee ?? 0,
-        notes: notes || null,
-        patient_consent_accepted: appointmentType === "video",
-      }).select("id").single();
-      if (error) throw error;
-
-      if (appointmentType === "video" && appt && consents) {
-        await supabase.from("patient_appointment_consent").insert({
-          appointment_id: appt.id,
-          patient_id: profile.id,
-          doctor_id: id,
-          telemedicine_consent: consents.telemedicine_consent,
-          data_processing_consent: consents.data_processing_consent,
-          recording_consent: consents.recording_consent,
-          consent_text_version: CONSENT_TEXT_VERSION,
-          user_agent: navigator.userAgent,
-        });
-        await supabase.from("audit_logs").insert({
-          user_id: user.id,
-          action: "telemedicine_consent_given",
-          resource_type: "appointment",
-          resource_id: appt.id,
-          metadata: { doctor_id: id, version: CONSENT_TEXT_VERSION },
-        });
-      }
-    },
-    onSuccess: () => {
-      toast.success(t("Appointment booked successfully", "تم حجز الموعد بنجاح"));
-      setSelectedDate("");
-      setSelectedTime("");
-      setNotes("");
-      setConsentOpen(false);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const handleBook = () => {
-    if (appointmentType === "video") {
-      if (!doctor?.is_verified || !doctor?.telemedicine_enabled) {
-        toast.error(t("Doctor not enabled for video consults", "هذا الطبيب لم يفعّل الكشف أون لاين"));
-        return;
-      }
-      setConsentOpen(true);
-      return;
-    }
-    bookMutation.mutate(undefined);
-  };
-
   const reviewMutation = useMutation({
     mutationFn: async () => {
       if (!user || !profile) throw new Error("Login required");
@@ -170,7 +251,12 @@ function DoctorDetailPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(t("Review submitted", "تم إرسال التقييم"));
+      toast.success(
+        t(
+          "Review submitted — pending admin approval",
+          "تم استلام تقييمك وسيُنشر بعد المراجعة",
+        ),
+      );
       setReviewText("");
       queryClient.invalidateQueries({ queryKey: ["reviews", id] });
     },
@@ -198,36 +284,19 @@ function DoctorDetailPage() {
 
   const name = doctor.profile?.full_name ?? t("Doctor", "طبيب");
 
-  // Aggregate rating from reviews
-  const avgRating =
-    reviews.length > 0
-      ? reviews.reduce((sum: number, r: any) => sum + (r.rating ?? 0), 0) / reviews.length
-      : null;
   const primaryClinic = clinics[0];
-  const docSchema = physicianSchema({
-    id,
-    name,
-    specialty: doctor.specialty,
-    description: doctor.bio ? truncate(doctor.bio, 300) : null,
-    image: (doctor.profile as any)?.avatar_url ?? null,
-    telephone: primaryClinic?.phone ?? null,
-    city: primaryClinic?.city ?? null,
-    country: "EG",
-    consultationFee: doctor.consultation_fee ?? primaryClinic?.consultation_fee ?? null,
-    currency: doctor.currency ?? primaryClinic?.currency ?? "EGP",
-    ratingValue: avgRating,
-    reviewCount: reviews.length,
-    acceptsVideo: Boolean((doctor as any).telemedicine_enabled),
-    languages: ["Arabic", "English"],
-  });
 
   return (
     <div className="min-h-screen bg-background">
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: jsonLdString(docSchema) }}
-      />
+      {isGold && (
+        <div className="bg-linear-to-r from-amber-400 via-amber-500 to-amber-600 py-2 text-center text-xs font-bold text-amber-950 shadow-sm">
+          <span className="inline-flex items-center gap-1.5">
+            <Crown className="h-3.5 w-3.5" />
+            {t("Featured Gold Doctor — Verified leader in their specialty", "طبيب Gold مميّز — موثّق ورائد فى تخصصه")}
+            <Crown className="h-3.5 w-3.5" />
+          </span>
+        </div>
+      )}
       <Breadcrumbs
         items={[
           { name: t("Doctors", "الأطباء"), path: "/doctors" },
@@ -243,15 +312,30 @@ function DoctorDetailPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Profile column */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-card border border-border rounded-2xl p-6">
-              <div className="flex items-start gap-4">
-                <div className="h-20 w-20 rounded-full bg-gradient-to-br from-primary to-teal flex items-center justify-center text-primary-foreground text-3xl font-semibold shrink-0">
-                  {name.charAt(0).toUpperCase()}
+            <div className={`relative overflow-hidden rounded-2xl bg-card p-6 ${isGold ? "border-2 border-amber-300 shadow-lg" : "border border-border"}`}>
+              {isGold && (
+                <>
+                  <div className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full bg-linear-to-br from-amber-200/40 to-amber-400/20 blur-2xl" />
+                  <div className="pointer-events-none absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-linear-to-tl from-amber-200/30 to-amber-400/10 blur-2xl" />
+                </>
+              )}
+              <div className="relative flex items-start gap-4">
+                <div className="relative shrink-0">
+                  {isGold && <div className="absolute -inset-1 rounded-full bg-linear-to-tr from-amber-400 to-amber-600 blur-sm" />}
+                  <div className={`relative h-20 w-20 rounded-full bg-linear-to-br from-primary to-teal flex items-center justify-center text-primary-foreground text-3xl font-semibold ${isGold ? "ring-4 ring-amber-400" : ""}`}>
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+                  {isGold && (
+                    <div className="absolute -top-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-linear-to-br from-amber-400 to-amber-600 shadow-md ring-2 ring-background">
+                      <Crown className="h-3.5 w-3.5 text-white" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-2xl font-bold text-foreground">{name}</h1>
                     <VerifiedBadge verified={!!doctor.is_verified} />
+                    <TierBadge tier={tier} size="md" ar />
                     {doctor.telemedicine_enabled && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-teal/10 px-2 py-0.5 text-xs text-teal">
                         <Video className="h-3 w-3" /> كشف أون لاين
@@ -301,9 +385,9 @@ function DoctorDetailPage() {
                       {c.lat != null && c.lng != null && (
                         <ClinicMap markers={[{ lat: c.lat, lng: c.lng, title: c.name }]} className="h-44" />
                       )}
-                      {c.clinic_schedules.length > 0 && (
+                      {(c.clinic_schedules ?? []).length > 0 && (
                         <ul className="text-sm space-y-0.5">
-                          {c.clinic_schedules
+                          {(c.clinic_schedules ?? [])
                             .slice()
                             .sort((a, b) => a.day_of_week - b.day_of_week)
                             .map((s) => (
@@ -332,9 +416,12 @@ function DoctorDetailPage() {
 
             {/* Reviews */}
             <div className="bg-card border border-border rounded-2xl p-6">
-              <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" /> {t("Reviews", "التقييمات")}
-              </h2>
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+                <h2 className="font-semibold text-foreground flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" /> {t("Reviews", "التقييمات")}
+                </h2>
+                <PrivateFeedbackButton doctorDetailsId={doctor.id} doctorName={doctor.profile?.full_name ?? undefined} />
+              </div>
 
               {user && profile && (
                 <div className="mb-6 p-4 bg-muted/30 rounded-lg">
@@ -384,119 +471,39 @@ function DoctorDetailPage() {
 
           {/* Booking column */}
           <div className="lg:col-span-1">
-            <div className="bg-card border border-border rounded-2xl p-6 sticky top-4">
-              <div className="text-center pb-4 border-b border-border">
-                <p className="text-sm text-muted-foreground">{t("Consultation fee", "رسوم الكشف")}</p>
-                <p className="text-2xl font-bold text-primary mt-1">
-                  {formatPrice(Number(doctor.consultation_fee ?? 0), doctor.currency ?? "EGP")}
-                </p>
-              </div>
-
-              {!user ? (
-                <div className="mt-4 text-center">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {t("Login to book an appointment", "سجّل الدخول لحجز موعد")}
-                  </p>
-                  <button
-                    onClick={() => navigate({ to: "/login" })}
-                    className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90"
-                  >
-                    {t("Login", "تسجيل الدخول")}
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">
-                      {t("Consultation type", "نوع الاستشارة")}
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setAppointmentType("in_person")}
-                        className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition ${
-                          appointmentType === "in_person"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border bg-background text-muted-foreground hover:bg-accent"
-                        }`}
-                      >
-                        <Building2 className="h-4 w-4" />
-                        {t("In-person", "في العيادة")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAppointmentType("video")}
-                        className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition ${
-                          appointmentType === "video"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border bg-background text-muted-foreground hover:bg-accent"
-                        }`}
-                      >
-                        <Video className="h-4 w-4" />
-                        {t("Video", "فيديو")}
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-foreground flex items-center gap-1 mb-1">
-                      <Calendar className="h-4 w-4" /> {t("Date", "التاريخ")}
-                    </label>
-                    <input
-                      type="date"
-                      value={selectedDate}
-                      min={new Date().toISOString().split("T")[0]}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-foreground flex items-center gap-1 mb-1">
-                      <Clock className="h-4 w-4" /> {t("Time", "الوقت")}
-                    </label>
-                    <input
-                      type="time"
-                      value={selectedTime}
-                      onChange={(e) => setSelectedTime(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-1 block">
-                      {t("Notes (optional)", "ملاحظات (اختياري)")}
-                    </label>
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                  {appointmentType === "video" && (!doctor.is_verified || !doctor.telemedicine_enabled) && (
-                    <p className="text-xs text-amber-600">
-                      {t("This doctor hasn't enabled video consults yet.", "هذا الطبيب لم يفعّل الكشف أون لاين بعد.")}
-                    </p>
+            <BookingCard
+              doctorId={id}
+              doctorName={name}
+              consultationFee={Number(feeDecision?.fee ?? doctor.consultation_fee ?? 0)}
+              currency={feeDecision?.currency || (doctor.currency ?? "EGP")}
+              isVerified={Boolean(doctor.is_verified)}
+              telemedicineEnabled={Boolean(doctor.telemedicine_enabled)}
+            />
+            {feeDecision?.visitType === "follow_up" && (
+              <div
+                className="mt-3 inline-flex items-start gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                role="status"
+              >
+                <Sparkles className="h-3.5 w-3.5 mt-0.5" aria-hidden="true" />
+                <span>
+                  {feeDecision.fee === 0
+                    ? t("Free follow-up within window", "متابعة مجانية ضمن فترة الطبيب")
+                    : t("Discounted follow-up", "متابعة بسعر مخفّض")}
+                  {typeof feeDecision.remainingFreeFollowups === "number" && (
+                    <>
+                      {" "}·{" "}
+                      {t(
+                        `${feeDecision.remainingFreeFollowups} left`,
+                        `متبقّي ${feeDecision.remainingFreeFollowups}`,
+                      )}
+                    </>
                   )}
-                  <button
-                    onClick={handleBook}
-                    disabled={bookMutation.isPending || !selectedDate || !selectedTime || (appointmentType === "video" && (!doctor.is_verified || !doctor.telemedicine_enabled))}
-                    className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
-                  >
-                    {bookMutation.isPending ? t("Booking...", "جارٍ الحجز...") : t("Book appointment", "احجز موعداً")}
-                  </button>
-                </div>
-              )}
-            </div>
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      <PatientConsentModal
-        open={consentOpen}
-        doctorName={name}
-        onCancel={() => setConsentOpen(false)}
-        onConfirm={(consents) => bookMutation.mutate(consents)}
-        isSubmitting={bookMutation.isPending}
-      />
     </div>
   );
 }

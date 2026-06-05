@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { HeartPulse } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
+import { BrandName } from "@/components/BrandName";
 
 const footerContent = {
   en: {
@@ -12,6 +13,7 @@ const footerContent = {
       { label: "Book Appointment", to: "/doctors" },
       { label: "Online Consultation", to: "/online" },
       { label: "Medical Records", to: "/records" },
+      { label: "Manual Payment", to: "/pay" },
     ],
     doctors: "For Doctors",
     doctorsLinks: [
@@ -30,7 +32,7 @@ const footerContent = {
       { label: "Privacy Policy", to: "/privacy" },
       { label: "Terms of Service", to: "/terms" },
     ],
-    copyright: "© 2025 Tabibi. All rights reserved.",
+    copyright: "© 2026 Tabibi (طبيبي). All rights reserved.",
   },
   ar: {
     tagline: "صحتك، متصلة",
@@ -41,6 +43,7 @@ const footerContent = {
       { label: "احجز موعد", to: "/doctors" },
       { label: "استشارة أونلاين", to: "/online" },
       { label: "السجل الطبي", to: "/records" },
+      { label: "ادفع يدوياً", to: "/pay" },
     ],
     doctors: "للأطباء",
     doctorsLinks: [
@@ -59,7 +62,7 @@ const footerContent = {
       { label: "سياسة الخصوصية", to: "/privacy" },
       { label: "شروط الخدمة", to: "/terms" },
     ],
-    copyright: "© 2025 طبيبي. جميع الحقوق محفوظة.",
+    copyright: "© 2026 طبيبي (Tabibi). جميع الحقوق محفوظة.",
   },
 };
 
@@ -74,13 +77,15 @@ export function Footer() {
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-teal">
-                <HeartPulse className="h-5 w-5 text-white" />
+            <Link to="/" className="flex items-center gap-2" aria-label="طبيبي - Tabibi">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-linear-to-br from-primary to-primary/75 shadow-sm shadow-primary/20 ring-1 ring-primary/10">
+                <HeartPulse className="h-5 w-5 text-white" strokeWidth={2.4} />
               </div>
-              <span className="text-xl font-bold tracking-tight text-foreground">
-                Tabibi
-              </span>
+              <BrandName
+                variant="wordmark"
+                primary={isRTL ? "ar" : "en"}
+                className="text-xl text-foreground"
+              />
             </Link>
             <p className="mt-4 max-w-xs text-sm text-muted-foreground">
               {content.description}
@@ -89,7 +94,7 @@ export function Footer() {
 
           {/* Links */}
           <div>
-            <h3 className="text-sm font-semibold text-foreground">{content.patients}</h3>
+            <h2 className="text-sm font-semibold text-foreground">{content.patients}</h2>
             <ul className="mt-4 space-y-2">
               {content.patientsLinks.map((link) => (
                 <li key={link.to}>
@@ -105,7 +110,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-foreground">{content.company}</h3>
+            <h2 className="text-sm font-semibold text-foreground">{content.company}</h2>
             <ul className="mt-4 space-y-2">
               {content.companyLinks.map((link) => (
                 <li key={link.to}>
@@ -131,7 +136,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-foreground">{content.doctors}</h3>
+            <h2 className="text-sm font-semibold text-foreground">{content.doctors}</h2>
             <ul className="mt-4 space-y-2">
               {content.doctorsLinks.map((link) => (
                 <li key={link.to}>

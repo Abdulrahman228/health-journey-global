@@ -7,7 +7,7 @@ export function ListingCard({ listing }: { listing: DrugListing }) {
   const chainName = language === "ar" && listing.chain?.name_ar ? listing.chain.name_ar : listing.chain?.name;
 
   return (
-    <article className="rounded-2xl border-2 border-teal/30 bg-gradient-to-br from-teal/5 to-background p-5 transition-shadow hover:shadow-md">
+    <article className="rounded-2xl border-2 border-teal/30 bg-linear-to-br from-teal/5 to-background p-5 transition-shadow hover:shadow-md">
       <div className="flex items-start gap-3">
         {listing.chain?.logo_url ? (
           <img

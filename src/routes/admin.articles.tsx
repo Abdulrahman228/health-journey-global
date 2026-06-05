@@ -14,7 +14,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { pingIndexNowForArticle } from "@/lib/indexnow.functions";
 import { marked } from "marked";
-import DOMPurify from "isomorphic-dompurify";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { autoLinkSpecialties } from "@/lib/auto-link";
 import { Loader2, Plus, Save, Trash2, Eye, FileText, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -144,7 +144,7 @@ function AdminArticlesPage() {
   const previewHtml = useMemo(() => {
     if (!draft.body_md) return "";
     const raw = marked.parse(draft.body_md) as string;
-    const safe = DOMPurify.sanitize(raw, { ADD_ATTR: ["target", "rel"] });
+    const safe = sanitizeHtml(raw, { ADD_ATTR: ["target", "rel"] });
     return autoLinkSpecialties(safe, draft.specialty_slug || null);
   }, [draft.body_md, draft.specialty_slug]);
 

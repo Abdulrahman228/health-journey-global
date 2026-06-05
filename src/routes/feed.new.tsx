@@ -2,8 +2,6 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Megaphone, AlertTriangle, Pill, ImagePlus, X, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
@@ -128,36 +126,26 @@ function NewPostPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col bg-background">
-        <Header />
-        <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-12">
+      <div className="mx-auto w-full max-w-2xl px-4 py-12">
           <div className="h-96 animate-pulse rounded-2xl bg-muted" />
-        </main>
-        <Footer />
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="flex min-h-screen flex-col bg-background">
-        <Header />
-        <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-12 text-center">
+      <div className="mx-auto w-full max-w-2xl px-4 py-12 text-center">
           <Lock className="mx-auto h-12 w-12 text-muted-foreground" />
           <h1 className="mt-4 text-2xl font-bold text-foreground">{t("Sign in to post", "سجّل دخول للنشر")}</h1>
           <Link to="/login" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
             {t("Sign In", "تسجيل الدخول")}
           </Link>
-        </main>
-        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <Header />
-      <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
         <h1 className="text-2xl font-bold text-foreground">{t("New Post", "بوست جديد")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t("Share with the medical community.", "شارك مع المجتمع الطبي.")}
@@ -319,8 +307,6 @@ function NewPostPage() {
             </button>
           </div>
         </form>
-      </main>
-      <Footer />
     </div>
   );
 }

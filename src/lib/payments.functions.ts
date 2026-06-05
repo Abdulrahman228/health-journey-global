@@ -114,3 +114,74 @@ export const createPortalSession = createServerFn({ method: "POST" })
     });
     return portal.url;
   });
+
+// =============================================================================
+// One-off appointment checkout (hosted redirect, ad-hoc price)
+// =============================================================================
+import { getStripeEnvironment } from "@/lib/stripe";
+
+export const createAppointmentCheckout = createServerFn({ method: "POST" })
+  .inputValidator((data: {
+    appointmentId: string;
+    amount: number; // in smallest currency unit (e.g. cents / piastres)
+    currency: string; // ISO lowercase (egp, usd, sar…)
+    doctorName: string;
+    returnUrl: string;
+    cancelUrl: string;
+    customerEmail?: string;
+    userId?: string;
+  }) => {
+    if (!/^[a-zA-Z0-9-]+$/.test(data.appointmentId)) throw new Error("Invalid appointmentId");
+    if (!Number.isInteger(data.amount) || data.amount < 50) {
+      throw new Error("Invalid amount");
+    }
+    if (!/^[a-z]{3}$/.test(data.currency)) throw new Error("Invalid currency");
+    if (data.userId && !/^[a-zA-Z0-9_-]+$/.test(data.userId)) {
+      throw new Error("Invalid userId");
+    }
+    return data;
+  })
+  .handler(async ({ data }) => {
+    const env: StripeEnv = getStripeEnvironment();
+    const stripe = createStripeClient(env);
+
+    const customerId = (data.customerEmail || data.userId)
+      ? await resolveOrCreateCustomer(stripe, {
+          email: data.customerEmail,
+          userId: data.userId,
+        })
+      : undefined;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      success_url: data.returnUrl,
+      cancel_url: data.cancelUrl,
+      ...(customerId && { customer: customerId }),
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: data.currency,
+            unit_amount: data.amount,
+            product_data: {
+              name: `كشف د. ${data.doctorName}`,
+              description: `Tabibi appointment ${data.appointmentId}`,
+            },
+          },
+        },
+      ],
+      payment_intent_data: {
+        description: `Tabibi appointment ${data.appointmentId}`,
+        metadata: {
+          appointment_id: data.appointmentId,
+          ...(data.userId && { userId: data.userId }),
+        },
+      },
+      metadata: {
+        appointment_id: data.appointmentId,
+        ...(data.userId && { userId: data.userId }),
+      },
+    });
+
+    return session.url;
+  });

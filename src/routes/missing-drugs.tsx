@@ -2,8 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pill, Search, MapPin, Plus, Loader2, Filter, Building2 } from "lucide-react";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
 import { PostCard } from "@/components/feed/PostCard";
 import { ListingCard } from "@/components/pharmacy/ListingCard";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -95,12 +93,9 @@ function MissingDrugsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Header />
-
-      <main className="flex-1">
+    <div>
         {/* Hero */}
-        <section className="border-b border-border bg-gradient-to-br from-rose-500/10 via-background to-background">
+        <section className="border-b border-border bg-linear-to-br from-rose-500/10 via-background to-background">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
             <div className="flex items-start gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-600">
@@ -268,9 +263,6 @@ function MissingDrugsPage() {
             )}
           </div>
         </section>
-      </main>
-
-      <Footer />
     </div>
   );
 }

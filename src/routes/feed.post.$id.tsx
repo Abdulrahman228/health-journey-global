@@ -2,8 +2,6 @@ import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-ro
 import { useEffect, useState } from "react";
 import { ArrowLeft, BadgeCheck, Stethoscope, User as UserIcon, Heart, Pill, MapPin, Send, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
 import { getPost, listReplies, createReply, toggleReaction, getUserReactions, setResolved, deletePost, type FeedPost, type FeedReply } from "@/lib/feed";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,23 +11,15 @@ export const Route = createFileRoute("/feed/post/$id")({
   head: () => ({ meta: [{ title: "بوست — Tabibi" }] }),
   component: PostPage,
   notFoundComponent: () => (
-    <div className="flex min-h-screen flex-col bg-background">
-      <Header />
-      <main className="flex-1 mx-auto max-w-2xl px-4 py-20 text-center">
+    <div className="mx-auto max-w-2xl px-4 py-20 text-center">
         <h1 className="text-2xl font-bold text-foreground">البوست غير موجود</h1>
         <Link to="/feed" className="mt-4 inline-block text-primary hover:underline">عودة للمجتمع</Link>
-      </main>
-      <Footer />
     </div>
   ),
   errorComponent: () => (
-    <div className="flex min-h-screen flex-col bg-background">
-      <Header />
-      <main className="flex-1 mx-auto max-w-2xl px-4 py-20 text-center">
+    <div className="mx-auto max-w-2xl px-4 py-20 text-center">
         <p className="text-muted-foreground">حدث خطأ</p>
         <Link to="/feed" className="mt-4 inline-block text-primary hover:underline">عودة</Link>
-      </main>
-      <Footer />
     </div>
   ),
 });
@@ -139,12 +129,8 @@ function PostPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-background">
-        <Header />
-        <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-8">
+      <div className="mx-auto w-full max-w-2xl px-4 py-8">
           <div className="h-96 animate-pulse rounded-2xl bg-muted" />
-        </main>
-        <Footer />
       </div>
     );
   }
@@ -155,9 +141,7 @@ function PostPage() {
   const isDoctor = post.author_role === "doctor";
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <Header />
-      <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
         <Link to="/feed" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           {t("Back to feed", "عودة للمجتمع")}
@@ -299,8 +283,6 @@ function PostPage() {
             ))
           )}
         </div>
-      </main>
-      <Footer />
     </div>
   );
 }

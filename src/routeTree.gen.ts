@@ -10,15 +10,24 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as SwDotjsRouteImport } from './routes/sw[.]js'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as SitemapStaticDotxmlRouteImport } from './routes/sitemap-static[.]xml'
+import { Route as SitemapSpecialtiesDotxmlRouteImport } from './routes/sitemap-specialties[.]xml'
+import { Route as SitemapDoctorsDotxmlRouteImport } from './routes/sitemap-doctors[.]xml'
+import { Route as SitemapArticlesDotxmlRouteImport } from './routes/sitemap-articles[.]xml'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as PayRouteImport } from './routes/pay'
+import { Route as NearbyRouteImport } from './routes/nearby'
 import { Route as MissingDrugsRouteImport } from './routes/missing-drugs'
+import { Route as ManifestDotwebmanifestRouteImport } from './routes/manifest[.]webmanifest'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as JoinDoctorRouteImport } from './routes/join-doctor'
+import { Route as IndexnowKeyDottxtRouteImport } from './routes/indexnow-key[.]txt'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as FeedRouteImport } from './routes/feed'
 import { Route as DoctorsRouteImport } from './routes/doctors'
@@ -28,15 +37,51 @@ import { Route as BillingRouteImport } from './routes/billing'
 import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ArticlesIndexRouteImport } from './routes/articles.index'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as USlugRouteImport } from './routes/u.$slug'
+import { Route as SpecialtySlugRouteImport } from './routes/specialty.$slug'
+import { Route as RxIdRouteImport } from './routes/rx.$id'
+import { Route as QShortIdRouteImport } from './routes/q.$shortId'
+import { Route as ProfileMedicalHistoryRouteImport } from './routes/profile.medical-history'
+import { Route as ProfileLabResultsRouteImport } from './routes/profile.lab-results'
 import { Route as PharmacyRegisterRouteImport } from './routes/pharmacy.register'
 import { Route as PharmacyDashboardRouteImport } from './routes/pharmacy.dashboard'
+import { Route as MyQueueAppointmentIdRouteImport } from './routes/my-queue.$appointmentId'
 import { Route as FeedNewRouteImport } from './routes/feed.new'
 import { Route as DoctorVerificationRouteImport } from './routes/doctor.verification'
+import { Route as DoctorSponsorshipRouteImport } from './routes/doctor.sponsorship'
+import { Route as DoctorSoloRouteImport } from './routes/doctor.solo'
+import { Route as DoctorFeedbackRouteImport } from './routes/doctor.feedback'
 import { Route as DoctorIdRouteImport } from './routes/doctor.$id'
+import { Route as DashboardSupportRouteImport } from './routes/dashboard.support'
+import { Route as DashboardPatientsRouteImport } from './routes/dashboard.patients'
+import { Route as DashboardExpensesRouteImport } from './routes/dashboard.expenses'
+import { Route as DashboardEarningsRouteImport } from './routes/dashboard.earnings'
+import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard.analytics'
+import { Route as DSlugRouteImport } from './routes/d.$slug'
 import { Route as ConsultationIdRouteImport } from './routes/consultation.$id'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
+import { Route as AdminWithdrawalsRouteImport } from './routes/admin.withdrawals'
 import { Route as AdminVerificationsRouteImport } from './routes/admin.verifications'
+import { Route as AdminSupportTicketsRouteImport } from './routes/admin.support-tickets'
+import { Route as AdminReviewsRouteImport } from './routes/admin.reviews'
+import { Route as AdminErrorsRouteImport } from './routes/admin.errors'
+import { Route as AdminDocumentsRouteImport } from './routes/admin.documents'
+import { Route as AdminDoctorsRouteImport } from './routes/admin.doctors'
+import { Route as AdminArticlesRouteImport } from './routes/admin.articles'
+import { Route as SpecialtySlugCityRouteImport } from './routes/specialty.$slug.$city'
+import { Route as RxVerifyNumberRouteImport } from './routes/rx.verify.$number'
 import { Route as FeedPostIdRouteImport } from './routes/feed.post.$id'
+import { Route as DashboardVisitNewRouteImport } from './routes/dashboard.visit.new'
+import { Route as DashboardSettingsSignatureRouteImport } from './routes/dashboard.settings.signature'
+import { Route as DashboardSettingsFollowupRouteImport } from './routes/dashboard.settings.followup'
+import { Route as DashboardSettingsBillingRouteImport } from './routes/dashboard.settings.billing'
+import { Route as DashboardPatientIdRouteImport } from './routes/dashboard.patient.$id'
+import { Route as DSlugContactDotvcfRouteImport } from './routes/d.$slug.contact[.]vcf'
+import { Route as ApiPublicWebVitalsRouteImport } from './routes/api/public/web-vitals'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 
 const TermsRoute = TermsRouteImport.update({
@@ -44,9 +89,35 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SwDotjsRoute = SwDotjsRouteImport.update({
+  id: '/sw.js',
+  path: '/sw.js',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapStaticDotxmlRoute = SitemapStaticDotxmlRouteImport.update({
+  id: '/sitemap-static.xml',
+  path: '/sitemap-static.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapSpecialtiesDotxmlRoute =
+  SitemapSpecialtiesDotxmlRouteImport.update({
+    id: '/sitemap-specialties.xml',
+    path: '/sitemap-specialties.xml',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SitemapDoctorsDotxmlRoute = SitemapDoctorsDotxmlRouteImport.update({
+  id: '/sitemap-doctors.xml',
+  path: '/sitemap-doctors.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapArticlesDotxmlRoute = SitemapArticlesDotxmlRouteImport.update({
+  id: '/sitemap-articles.xml',
+  path: '/sitemap-articles.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -74,9 +145,24 @@ const PricingRoute = PricingRouteImport.update({
   path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PayRoute = PayRouteImport.update({
+  id: '/pay',
+  path: '/pay',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NearbyRoute = NearbyRouteImport.update({
+  id: '/nearby',
+  path: '/nearby',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MissingDrugsRoute = MissingDrugsRouteImport.update({
   id: '/missing-drugs',
   path: '/missing-drugs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManifestDotwebmanifestRoute = ManifestDotwebmanifestRouteImport.update({
+  id: '/manifest.webmanifest',
+  path: '/manifest.webmanifest',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -87,6 +173,11 @@ const LoginRoute = LoginRouteImport.update({
 const JoinDoctorRoute = JoinDoctorRouteImport.update({
   id: '/join-doctor',
   path: '/join-doctor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexnowKeyDottxtRoute = IndexnowKeyDottxtRouteImport.update({
+  id: '/indexnow-key.txt',
+  path: '/indexnow-key.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HowItWorksRoute = HowItWorksRouteImport.update({
@@ -134,6 +225,46 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ArticlesIndexRoute = ArticlesIndexRouteImport.update({
+  id: '/articles/',
+  path: '/articles/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const USlugRoute = USlugRouteImport.update({
+  id: '/u/$slug',
+  path: '/u/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SpecialtySlugRoute = SpecialtySlugRouteImport.update({
+  id: '/specialty/$slug',
+  path: '/specialty/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RxIdRoute = RxIdRouteImport.update({
+  id: '/rx/$id',
+  path: '/rx/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QShortIdRoute = QShortIdRouteImport.update({
+  id: '/q/$shortId',
+  path: '/q/$shortId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileMedicalHistoryRoute = ProfileMedicalHistoryRouteImport.update({
+  id: '/medical-history',
+  path: '/medical-history',
+  getParentRoute: () => ProfileRoute,
+} as any)
+const ProfileLabResultsRoute = ProfileLabResultsRouteImport.update({
+  id: '/lab-results',
+  path: '/lab-results',
+  getParentRoute: () => ProfileRoute,
+} as any)
 const PharmacyRegisterRoute = PharmacyRegisterRouteImport.update({
   id: '/pharmacy/register',
   path: '/pharmacy/register',
@@ -142,6 +273,11 @@ const PharmacyRegisterRoute = PharmacyRegisterRouteImport.update({
 const PharmacyDashboardRoute = PharmacyDashboardRouteImport.update({
   id: '/pharmacy/dashboard',
   path: '/pharmacy/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyQueueAppointmentIdRoute = MyQueueAppointmentIdRouteImport.update({
+  id: '/my-queue/$appointmentId',
+  path: '/my-queue/$appointmentId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FeedNewRoute = FeedNewRouteImport.update({
@@ -154,9 +290,54 @@ const DoctorVerificationRoute = DoctorVerificationRouteImport.update({
   path: '/doctor/verification',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DoctorSponsorshipRoute = DoctorSponsorshipRouteImport.update({
+  id: '/doctor/sponsorship',
+  path: '/doctor/sponsorship',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DoctorSoloRoute = DoctorSoloRouteImport.update({
+  id: '/doctor/solo',
+  path: '/doctor/solo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DoctorFeedbackRoute = DoctorFeedbackRouteImport.update({
+  id: '/doctor/feedback',
+  path: '/doctor/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DoctorIdRoute = DoctorIdRouteImport.update({
   id: '/doctor/$id',
   path: '/doctor/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardSupportRoute = DashboardSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardPatientsRoute = DashboardPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardExpensesRoute = DashboardExpensesRouteImport.update({
+  id: '/expenses',
+  path: '/expenses',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardEarningsRoute = DashboardEarningsRouteImport.update({
+  id: '/earnings',
+  path: '/earnings',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DSlugRoute = DSlugRouteImport.update({
+  id: '/d/$slug',
+  path: '/d/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConsultationIdRoute = ConsultationIdRouteImport.update({
@@ -169,15 +350,108 @@ const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
   path: '/checkout/return',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArticlesSlugRoute = ArticlesSlugRouteImport.update({
+  id: '/articles/$slug',
+  path: '/articles/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminWithdrawalsRoute = AdminWithdrawalsRouteImport.update({
+  id: '/admin/withdrawals',
+  path: '/admin/withdrawals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminVerificationsRoute = AdminVerificationsRouteImport.update({
   id: '/admin/verifications',
   path: '/admin/verifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSupportTicketsRoute = AdminSupportTicketsRouteImport.update({
+  id: '/admin/support-tickets',
+  path: '/admin/support-tickets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminReviewsRoute = AdminReviewsRouteImport.update({
+  id: '/admin/reviews',
+  path: '/admin/reviews',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminErrorsRoute = AdminErrorsRouteImport.update({
+  id: '/admin/errors',
+  path: '/admin/errors',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminDocumentsRoute = AdminDocumentsRouteImport.update({
+  id: '/admin/documents',
+  path: '/admin/documents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminDoctorsRoute = AdminDoctorsRouteImport.update({
+  id: '/admin/doctors',
+  path: '/admin/doctors',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminArticlesRoute = AdminArticlesRouteImport.update({
+  id: '/admin/articles',
+  path: '/admin/articles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SpecialtySlugCityRoute = SpecialtySlugCityRouteImport.update({
+  id: '/$city',
+  path: '/$city',
+  getParentRoute: () => SpecialtySlugRoute,
+} as any)
+const RxVerifyNumberRoute = RxVerifyNumberRouteImport.update({
+  id: '/rx/verify/$number',
+  path: '/rx/verify/$number',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FeedPostIdRoute = FeedPostIdRouteImport.update({
   id: '/post/$id',
   path: '/post/$id',
   getParentRoute: () => FeedRoute,
+} as any)
+const DashboardVisitNewRoute = DashboardVisitNewRouteImport.update({
+  id: '/visit/new',
+  path: '/visit/new',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSettingsSignatureRoute =
+  DashboardSettingsSignatureRouteImport.update({
+    id: '/settings/signature',
+    path: '/settings/signature',
+    getParentRoute: () => DashboardRoute,
+  } as any)
+const DashboardSettingsFollowupRoute =
+  DashboardSettingsFollowupRouteImport.update({
+    id: '/settings/followup',
+    path: '/settings/followup',
+    getParentRoute: () => DashboardRoute,
+  } as any)
+const DashboardSettingsBillingRoute =
+  DashboardSettingsBillingRouteImport.update({
+    id: '/settings/billing',
+    path: '/settings/billing',
+    getParentRoute: () => DashboardRoute,
+  } as any)
+const DashboardPatientIdRoute = DashboardPatientIdRouteImport.update({
+  id: '/patient/$id',
+  path: '/patient/$id',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DSlugContactDotvcfRoute = DSlugContactDotvcfRouteImport.update({
+  id: '/contact.vcf',
+  path: '/contact.vcf',
+  getParentRoute: () => DSlugRoute,
+} as any)
+const ApiPublicWebVitalsRoute = ApiPublicWebVitalsRouteImport.update({
+  id: '/api/public/web-vitals',
+  path: '/api/public/web-vitals',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicPaymentsWebhookRoute =
   ApiPublicPaymentsWebhookRouteImport.update({
@@ -192,29 +466,74 @@ export interface FileRoutesByFullPath {
   '/appointments': typeof AppointmentsRoute
   '/billing': typeof BillingRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/doctors': typeof DoctorsRoute
   '/feed': typeof FeedRouteWithChildren
   '/how-it-works': typeof HowItWorksRoute
+  '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
   '/login': typeof LoginRoute
+  '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/missing-drugs': typeof MissingDrugsRoute
+  '/nearby': typeof NearbyRoute
+  '/pay': typeof PayRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/profile': typeof ProfileRoute
+  '/profile': typeof ProfileRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
+  '/sitemap-articles.xml': typeof SitemapArticlesDotxmlRoute
+  '/sitemap-doctors.xml': typeof SitemapDoctorsDotxmlRoute
+  '/sitemap-specialties.xml': typeof SitemapSpecialtiesDotxmlRoute
+  '/sitemap-static.xml': typeof SitemapStaticDotxmlRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
+  '/admin/articles': typeof AdminArticlesRoute
+  '/admin/doctors': typeof AdminDoctorsRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/errors': typeof AdminErrorsRoute
+  '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/support-tickets': typeof AdminSupportTicketsRoute
   '/admin/verifications': typeof AdminVerificationsRoute
+  '/admin/withdrawals': typeof AdminWithdrawalsRoute
+  '/articles/$slug': typeof ArticlesSlugRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/consultation/$id': typeof ConsultationIdRoute
+  '/d/$slug': typeof DSlugRouteWithChildren
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/earnings': typeof DashboardEarningsRoute
+  '/dashboard/expenses': typeof DashboardExpensesRoute
+  '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/doctor/$id': typeof DoctorIdRoute
+  '/doctor/feedback': typeof DoctorFeedbackRoute
+  '/doctor/solo': typeof DoctorSoloRoute
+  '/doctor/sponsorship': typeof DoctorSponsorshipRoute
   '/doctor/verification': typeof DoctorVerificationRoute
   '/feed/new': typeof FeedNewRoute
+  '/my-queue/$appointmentId': typeof MyQueueAppointmentIdRoute
   '/pharmacy/dashboard': typeof PharmacyDashboardRoute
   '/pharmacy/register': typeof PharmacyRegisterRoute
+  '/profile/lab-results': typeof ProfileLabResultsRoute
+  '/profile/medical-history': typeof ProfileMedicalHistoryRoute
+  '/q/$shortId': typeof QShortIdRoute
+  '/rx/$id': typeof RxIdRoute
+  '/specialty/$slug': typeof SpecialtySlugRouteWithChildren
+  '/u/$slug': typeof USlugRoute
+  '/admin/': typeof AdminIndexRoute
+  '/articles/': typeof ArticlesIndexRoute
+  '/api/public/web-vitals': typeof ApiPublicWebVitalsRoute
+  '/d/$slug/contact.vcf': typeof DSlugContactDotvcfRoute
+  '/dashboard/patient/$id': typeof DashboardPatientIdRoute
+  '/dashboard/settings/billing': typeof DashboardSettingsBillingRoute
+  '/dashboard/settings/followup': typeof DashboardSettingsFollowupRoute
+  '/dashboard/settings/signature': typeof DashboardSettingsSignatureRoute
+  '/dashboard/visit/new': typeof DashboardVisitNewRoute
   '/feed/post/$id': typeof FeedPostIdRoute
+  '/rx/verify/$number': typeof RxVerifyNumberRoute
+  '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -223,29 +542,74 @@ export interface FileRoutesByTo {
   '/appointments': typeof AppointmentsRoute
   '/billing': typeof BillingRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/doctors': typeof DoctorsRoute
   '/feed': typeof FeedRouteWithChildren
   '/how-it-works': typeof HowItWorksRoute
+  '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
   '/login': typeof LoginRoute
+  '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/missing-drugs': typeof MissingDrugsRoute
+  '/nearby': typeof NearbyRoute
+  '/pay': typeof PayRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/profile': typeof ProfileRoute
+  '/profile': typeof ProfileRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
+  '/sitemap-articles.xml': typeof SitemapArticlesDotxmlRoute
+  '/sitemap-doctors.xml': typeof SitemapDoctorsDotxmlRoute
+  '/sitemap-specialties.xml': typeof SitemapSpecialtiesDotxmlRoute
+  '/sitemap-static.xml': typeof SitemapStaticDotxmlRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
+  '/admin/articles': typeof AdminArticlesRoute
+  '/admin/doctors': typeof AdminDoctorsRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/errors': typeof AdminErrorsRoute
+  '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/support-tickets': typeof AdminSupportTicketsRoute
   '/admin/verifications': typeof AdminVerificationsRoute
+  '/admin/withdrawals': typeof AdminWithdrawalsRoute
+  '/articles/$slug': typeof ArticlesSlugRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/consultation/$id': typeof ConsultationIdRoute
+  '/d/$slug': typeof DSlugRouteWithChildren
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/earnings': typeof DashboardEarningsRoute
+  '/dashboard/expenses': typeof DashboardExpensesRoute
+  '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/doctor/$id': typeof DoctorIdRoute
+  '/doctor/feedback': typeof DoctorFeedbackRoute
+  '/doctor/solo': typeof DoctorSoloRoute
+  '/doctor/sponsorship': typeof DoctorSponsorshipRoute
   '/doctor/verification': typeof DoctorVerificationRoute
   '/feed/new': typeof FeedNewRoute
+  '/my-queue/$appointmentId': typeof MyQueueAppointmentIdRoute
   '/pharmacy/dashboard': typeof PharmacyDashboardRoute
   '/pharmacy/register': typeof PharmacyRegisterRoute
+  '/profile/lab-results': typeof ProfileLabResultsRoute
+  '/profile/medical-history': typeof ProfileMedicalHistoryRoute
+  '/q/$shortId': typeof QShortIdRoute
+  '/rx/$id': typeof RxIdRoute
+  '/specialty/$slug': typeof SpecialtySlugRouteWithChildren
+  '/u/$slug': typeof USlugRoute
+  '/admin': typeof AdminIndexRoute
+  '/articles': typeof ArticlesIndexRoute
+  '/api/public/web-vitals': typeof ApiPublicWebVitalsRoute
+  '/d/$slug/contact.vcf': typeof DSlugContactDotvcfRoute
+  '/dashboard/patient/$id': typeof DashboardPatientIdRoute
+  '/dashboard/settings/billing': typeof DashboardSettingsBillingRoute
+  '/dashboard/settings/followup': typeof DashboardSettingsFollowupRoute
+  '/dashboard/settings/signature': typeof DashboardSettingsSignatureRoute
+  '/dashboard/visit/new': typeof DashboardVisitNewRoute
   '/feed/post/$id': typeof FeedPostIdRoute
+  '/rx/verify/$number': typeof RxVerifyNumberRoute
+  '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesById {
@@ -255,29 +619,74 @@ export interface FileRoutesById {
   '/appointments': typeof AppointmentsRoute
   '/billing': typeof BillingRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/doctors': typeof DoctorsRoute
   '/feed': typeof FeedRouteWithChildren
   '/how-it-works': typeof HowItWorksRoute
+  '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
   '/login': typeof LoginRoute
+  '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/missing-drugs': typeof MissingDrugsRoute
+  '/nearby': typeof NearbyRoute
+  '/pay': typeof PayRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/profile': typeof ProfileRoute
+  '/profile': typeof ProfileRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
+  '/sitemap-articles.xml': typeof SitemapArticlesDotxmlRoute
+  '/sitemap-doctors.xml': typeof SitemapDoctorsDotxmlRoute
+  '/sitemap-specialties.xml': typeof SitemapSpecialtiesDotxmlRoute
+  '/sitemap-static.xml': typeof SitemapStaticDotxmlRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
+  '/admin/articles': typeof AdminArticlesRoute
+  '/admin/doctors': typeof AdminDoctorsRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/errors': typeof AdminErrorsRoute
+  '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/support-tickets': typeof AdminSupportTicketsRoute
   '/admin/verifications': typeof AdminVerificationsRoute
+  '/admin/withdrawals': typeof AdminWithdrawalsRoute
+  '/articles/$slug': typeof ArticlesSlugRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/consultation/$id': typeof ConsultationIdRoute
+  '/d/$slug': typeof DSlugRouteWithChildren
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/earnings': typeof DashboardEarningsRoute
+  '/dashboard/expenses': typeof DashboardExpensesRoute
+  '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/doctor/$id': typeof DoctorIdRoute
+  '/doctor/feedback': typeof DoctorFeedbackRoute
+  '/doctor/solo': typeof DoctorSoloRoute
+  '/doctor/sponsorship': typeof DoctorSponsorshipRoute
   '/doctor/verification': typeof DoctorVerificationRoute
   '/feed/new': typeof FeedNewRoute
+  '/my-queue/$appointmentId': typeof MyQueueAppointmentIdRoute
   '/pharmacy/dashboard': typeof PharmacyDashboardRoute
   '/pharmacy/register': typeof PharmacyRegisterRoute
+  '/profile/lab-results': typeof ProfileLabResultsRoute
+  '/profile/medical-history': typeof ProfileMedicalHistoryRoute
+  '/q/$shortId': typeof QShortIdRoute
+  '/rx/$id': typeof RxIdRoute
+  '/specialty/$slug': typeof SpecialtySlugRouteWithChildren
+  '/u/$slug': typeof USlugRoute
+  '/admin/': typeof AdminIndexRoute
+  '/articles/': typeof ArticlesIndexRoute
+  '/api/public/web-vitals': typeof ApiPublicWebVitalsRoute
+  '/d/$slug/contact.vcf': typeof DSlugContactDotvcfRoute
+  '/dashboard/patient/$id': typeof DashboardPatientIdRoute
+  '/dashboard/settings/billing': typeof DashboardSettingsBillingRoute
+  '/dashboard/settings/followup': typeof DashboardSettingsFollowupRoute
+  '/dashboard/settings/signature': typeof DashboardSettingsSignatureRoute
+  '/dashboard/visit/new': typeof DashboardVisitNewRoute
   '/feed/post/$id': typeof FeedPostIdRoute
+  '/rx/verify/$number': typeof RxVerifyNumberRoute
+  '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRouteTypes {
@@ -292,25 +701,70 @@ export interface FileRouteTypes {
     | '/doctors'
     | '/feed'
     | '/how-it-works'
+    | '/indexnow-key.txt'
     | '/join-doctor'
     | '/login'
+    | '/manifest.webmanifest'
     | '/missing-drugs'
+    | '/nearby'
+    | '/pay'
     | '/pricing'
     | '/privacy'
     | '/profile'
     | '/robots.txt'
     | '/signup'
+    | '/sitemap-articles.xml'
+    | '/sitemap-doctors.xml'
+    | '/sitemap-specialties.xml'
+    | '/sitemap-static.xml'
     | '/sitemap.xml'
+    | '/sw.js'
     | '/terms'
+    | '/admin/articles'
+    | '/admin/doctors'
+    | '/admin/documents'
+    | '/admin/errors'
+    | '/admin/reviews'
+    | '/admin/support-tickets'
     | '/admin/verifications'
+    | '/admin/withdrawals'
+    | '/articles/$slug'
+    | '/auth/callback'
     | '/checkout/return'
     | '/consultation/$id'
+    | '/d/$slug'
+    | '/dashboard/analytics'
+    | '/dashboard/earnings'
+    | '/dashboard/expenses'
+    | '/dashboard/patients'
+    | '/dashboard/support'
     | '/doctor/$id'
+    | '/doctor/feedback'
+    | '/doctor/solo'
+    | '/doctor/sponsorship'
     | '/doctor/verification'
     | '/feed/new'
+    | '/my-queue/$appointmentId'
     | '/pharmacy/dashboard'
     | '/pharmacy/register'
+    | '/profile/lab-results'
+    | '/profile/medical-history'
+    | '/q/$shortId'
+    | '/rx/$id'
+    | '/specialty/$slug'
+    | '/u/$slug'
+    | '/admin/'
+    | '/articles/'
+    | '/api/public/web-vitals'
+    | '/d/$slug/contact.vcf'
+    | '/dashboard/patient/$id'
+    | '/dashboard/settings/billing'
+    | '/dashboard/settings/followup'
+    | '/dashboard/settings/signature'
+    | '/dashboard/visit/new'
     | '/feed/post/$id'
+    | '/rx/verify/$number'
+    | '/specialty/$slug/$city'
     | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -323,25 +777,70 @@ export interface FileRouteTypes {
     | '/doctors'
     | '/feed'
     | '/how-it-works'
+    | '/indexnow-key.txt'
     | '/join-doctor'
     | '/login'
+    | '/manifest.webmanifest'
     | '/missing-drugs'
+    | '/nearby'
+    | '/pay'
     | '/pricing'
     | '/privacy'
     | '/profile'
     | '/robots.txt'
     | '/signup'
+    | '/sitemap-articles.xml'
+    | '/sitemap-doctors.xml'
+    | '/sitemap-specialties.xml'
+    | '/sitemap-static.xml'
     | '/sitemap.xml'
+    | '/sw.js'
     | '/terms'
+    | '/admin/articles'
+    | '/admin/doctors'
+    | '/admin/documents'
+    | '/admin/errors'
+    | '/admin/reviews'
+    | '/admin/support-tickets'
     | '/admin/verifications'
+    | '/admin/withdrawals'
+    | '/articles/$slug'
+    | '/auth/callback'
     | '/checkout/return'
     | '/consultation/$id'
+    | '/d/$slug'
+    | '/dashboard/analytics'
+    | '/dashboard/earnings'
+    | '/dashboard/expenses'
+    | '/dashboard/patients'
+    | '/dashboard/support'
     | '/doctor/$id'
+    | '/doctor/feedback'
+    | '/doctor/solo'
+    | '/doctor/sponsorship'
     | '/doctor/verification'
     | '/feed/new'
+    | '/my-queue/$appointmentId'
     | '/pharmacy/dashboard'
     | '/pharmacy/register'
+    | '/profile/lab-results'
+    | '/profile/medical-history'
+    | '/q/$shortId'
+    | '/rx/$id'
+    | '/specialty/$slug'
+    | '/u/$slug'
+    | '/admin'
+    | '/articles'
+    | '/api/public/web-vitals'
+    | '/d/$slug/contact.vcf'
+    | '/dashboard/patient/$id'
+    | '/dashboard/settings/billing'
+    | '/dashboard/settings/followup'
+    | '/dashboard/settings/signature'
+    | '/dashboard/visit/new'
     | '/feed/post/$id'
+    | '/rx/verify/$number'
+    | '/specialty/$slug/$city'
     | '/api/public/payments/webhook'
   id:
     | '__root__'
@@ -354,25 +853,70 @@ export interface FileRouteTypes {
     | '/doctors'
     | '/feed'
     | '/how-it-works'
+    | '/indexnow-key.txt'
     | '/join-doctor'
     | '/login'
+    | '/manifest.webmanifest'
     | '/missing-drugs'
+    | '/nearby'
+    | '/pay'
     | '/pricing'
     | '/privacy'
     | '/profile'
     | '/robots.txt'
     | '/signup'
+    | '/sitemap-articles.xml'
+    | '/sitemap-doctors.xml'
+    | '/sitemap-specialties.xml'
+    | '/sitemap-static.xml'
     | '/sitemap.xml'
+    | '/sw.js'
     | '/terms'
+    | '/admin/articles'
+    | '/admin/doctors'
+    | '/admin/documents'
+    | '/admin/errors'
+    | '/admin/reviews'
+    | '/admin/support-tickets'
     | '/admin/verifications'
+    | '/admin/withdrawals'
+    | '/articles/$slug'
+    | '/auth/callback'
     | '/checkout/return'
     | '/consultation/$id'
+    | '/d/$slug'
+    | '/dashboard/analytics'
+    | '/dashboard/earnings'
+    | '/dashboard/expenses'
+    | '/dashboard/patients'
+    | '/dashboard/support'
     | '/doctor/$id'
+    | '/doctor/feedback'
+    | '/doctor/solo'
+    | '/doctor/sponsorship'
     | '/doctor/verification'
     | '/feed/new'
+    | '/my-queue/$appointmentId'
     | '/pharmacy/dashboard'
     | '/pharmacy/register'
+    | '/profile/lab-results'
+    | '/profile/medical-history'
+    | '/q/$shortId'
+    | '/rx/$id'
+    | '/specialty/$slug'
+    | '/u/$slug'
+    | '/admin/'
+    | '/articles/'
+    | '/api/public/web-vitals'
+    | '/d/$slug/contact.vcf'
+    | '/dashboard/patient/$id'
+    | '/dashboard/settings/billing'
+    | '/dashboard/settings/followup'
+    | '/dashboard/settings/signature'
+    | '/dashboard/visit/new'
     | '/feed/post/$id'
+    | '/rx/verify/$number'
+    | '/specialty/$slug/$city'
     | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -382,27 +926,58 @@ export interface RootRouteChildren {
   AppointmentsRoute: typeof AppointmentsRoute
   BillingRoute: typeof BillingRoute
   ContactRoute: typeof ContactRoute
-  DashboardRoute: typeof DashboardRoute
+  DashboardRoute: typeof DashboardRouteWithChildren
   DoctorsRoute: typeof DoctorsRoute
   FeedRoute: typeof FeedRouteWithChildren
   HowItWorksRoute: typeof HowItWorksRoute
+  IndexnowKeyDottxtRoute: typeof IndexnowKeyDottxtRoute
   JoinDoctorRoute: typeof JoinDoctorRoute
   LoginRoute: typeof LoginRoute
+  ManifestDotwebmanifestRoute: typeof ManifestDotwebmanifestRoute
   MissingDrugsRoute: typeof MissingDrugsRoute
+  NearbyRoute: typeof NearbyRoute
+  PayRoute: typeof PayRoute
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
-  ProfileRoute: typeof ProfileRoute
+  ProfileRoute: typeof ProfileRouteWithChildren
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SignupRoute: typeof SignupRoute
+  SitemapArticlesDotxmlRoute: typeof SitemapArticlesDotxmlRoute
+  SitemapDoctorsDotxmlRoute: typeof SitemapDoctorsDotxmlRoute
+  SitemapSpecialtiesDotxmlRoute: typeof SitemapSpecialtiesDotxmlRoute
+  SitemapStaticDotxmlRoute: typeof SitemapStaticDotxmlRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  SwDotjsRoute: typeof SwDotjsRoute
   TermsRoute: typeof TermsRoute
+  AdminArticlesRoute: typeof AdminArticlesRoute
+  AdminDoctorsRoute: typeof AdminDoctorsRoute
+  AdminDocumentsRoute: typeof AdminDocumentsRoute
+  AdminErrorsRoute: typeof AdminErrorsRoute
+  AdminReviewsRoute: typeof AdminReviewsRoute
+  AdminSupportTicketsRoute: typeof AdminSupportTicketsRoute
   AdminVerificationsRoute: typeof AdminVerificationsRoute
+  AdminWithdrawalsRoute: typeof AdminWithdrawalsRoute
+  ArticlesSlugRoute: typeof ArticlesSlugRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ConsultationIdRoute: typeof ConsultationIdRoute
+  DSlugRoute: typeof DSlugRouteWithChildren
   DoctorIdRoute: typeof DoctorIdRoute
+  DoctorFeedbackRoute: typeof DoctorFeedbackRoute
+  DoctorSoloRoute: typeof DoctorSoloRoute
+  DoctorSponsorshipRoute: typeof DoctorSponsorshipRoute
   DoctorVerificationRoute: typeof DoctorVerificationRoute
+  MyQueueAppointmentIdRoute: typeof MyQueueAppointmentIdRoute
   PharmacyDashboardRoute: typeof PharmacyDashboardRoute
   PharmacyRegisterRoute: typeof PharmacyRegisterRoute
+  QShortIdRoute: typeof QShortIdRoute
+  RxIdRoute: typeof RxIdRoute
+  SpecialtySlugRoute: typeof SpecialtySlugRouteWithChildren
+  USlugRoute: typeof USlugRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  ArticlesIndexRoute: typeof ArticlesIndexRoute
+  ApiPublicWebVitalsRoute: typeof ApiPublicWebVitalsRoute
+  RxVerifyNumberRoute: typeof RxVerifyNumberRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
 }
 
@@ -415,11 +990,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sw.js': {
+      id: '/sw.js'
+      path: '/sw.js'
+      fullPath: '/sw.js'
+      preLoaderRoute: typeof SwDotjsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap-static.xml': {
+      id: '/sitemap-static.xml'
+      path: '/sitemap-static.xml'
+      fullPath: '/sitemap-static.xml'
+      preLoaderRoute: typeof SitemapStaticDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap-specialties.xml': {
+      id: '/sitemap-specialties.xml'
+      path: '/sitemap-specialties.xml'
+      fullPath: '/sitemap-specialties.xml'
+      preLoaderRoute: typeof SitemapSpecialtiesDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap-doctors.xml': {
+      id: '/sitemap-doctors.xml'
+      path: '/sitemap-doctors.xml'
+      fullPath: '/sitemap-doctors.xml'
+      preLoaderRoute: typeof SitemapDoctorsDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap-articles.xml': {
+      id: '/sitemap-articles.xml'
+      path: '/sitemap-articles.xml'
+      fullPath: '/sitemap-articles.xml'
+      preLoaderRoute: typeof SitemapArticlesDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -457,11 +1067,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pay': {
+      id: '/pay'
+      path: '/pay'
+      fullPath: '/pay'
+      preLoaderRoute: typeof PayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/nearby': {
+      id: '/nearby'
+      path: '/nearby'
+      fullPath: '/nearby'
+      preLoaderRoute: typeof NearbyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/missing-drugs': {
       id: '/missing-drugs'
       path: '/missing-drugs'
       fullPath: '/missing-drugs'
       preLoaderRoute: typeof MissingDrugsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manifest.webmanifest': {
+      id: '/manifest.webmanifest'
+      path: '/manifest.webmanifest'
+      fullPath: '/manifest.webmanifest'
+      preLoaderRoute: typeof ManifestDotwebmanifestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -476,6 +1107,13 @@ declare module '@tanstack/react-router' {
       path: '/join-doctor'
       fullPath: '/join-doctor'
       preLoaderRoute: typeof JoinDoctorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/indexnow-key.txt': {
+      id: '/indexnow-key.txt'
+      path: '/indexnow-key.txt'
+      fullPath: '/indexnow-key.txt'
+      preLoaderRoute: typeof IndexnowKeyDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/how-it-works': {
@@ -541,6 +1179,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/articles/': {
+      id: '/articles/'
+      path: '/articles'
+      fullPath: '/articles/'
+      preLoaderRoute: typeof ArticlesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/u/$slug': {
+      id: '/u/$slug'
+      path: '/u/$slug'
+      fullPath: '/u/$slug'
+      preLoaderRoute: typeof USlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/specialty/$slug': {
+      id: '/specialty/$slug'
+      path: '/specialty/$slug'
+      fullPath: '/specialty/$slug'
+      preLoaderRoute: typeof SpecialtySlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rx/$id': {
+      id: '/rx/$id'
+      path: '/rx/$id'
+      fullPath: '/rx/$id'
+      preLoaderRoute: typeof RxIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/q/$shortId': {
+      id: '/q/$shortId'
+      path: '/q/$shortId'
+      fullPath: '/q/$shortId'
+      preLoaderRoute: typeof QShortIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile/medical-history': {
+      id: '/profile/medical-history'
+      path: '/medical-history'
+      fullPath: '/profile/medical-history'
+      preLoaderRoute: typeof ProfileMedicalHistoryRouteImport
+      parentRoute: typeof ProfileRoute
+    }
+    '/profile/lab-results': {
+      id: '/profile/lab-results'
+      path: '/lab-results'
+      fullPath: '/profile/lab-results'
+      preLoaderRoute: typeof ProfileLabResultsRouteImport
+      parentRoute: typeof ProfileRoute
+    }
     '/pharmacy/register': {
       id: '/pharmacy/register'
       path: '/pharmacy/register'
@@ -553,6 +1247,13 @@ declare module '@tanstack/react-router' {
       path: '/pharmacy/dashboard'
       fullPath: '/pharmacy/dashboard'
       preLoaderRoute: typeof PharmacyDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my-queue/$appointmentId': {
+      id: '/my-queue/$appointmentId'
+      path: '/my-queue/$appointmentId'
+      fullPath: '/my-queue/$appointmentId'
+      preLoaderRoute: typeof MyQueueAppointmentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/feed/new': {
@@ -569,11 +1270,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DoctorVerificationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/doctor/sponsorship': {
+      id: '/doctor/sponsorship'
+      path: '/doctor/sponsorship'
+      fullPath: '/doctor/sponsorship'
+      preLoaderRoute: typeof DoctorSponsorshipRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/doctor/solo': {
+      id: '/doctor/solo'
+      path: '/doctor/solo'
+      fullPath: '/doctor/solo'
+      preLoaderRoute: typeof DoctorSoloRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/doctor/feedback': {
+      id: '/doctor/feedback'
+      path: '/doctor/feedback'
+      fullPath: '/doctor/feedback'
+      preLoaderRoute: typeof DoctorFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/doctor/$id': {
       id: '/doctor/$id'
       path: '/doctor/$id'
       fullPath: '/doctor/$id'
       preLoaderRoute: typeof DoctorIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/support': {
+      id: '/dashboard/support'
+      path: '/support'
+      fullPath: '/dashboard/support'
+      preLoaderRoute: typeof DashboardSupportRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/patients': {
+      id: '/dashboard/patients'
+      path: '/patients'
+      fullPath: '/dashboard/patients'
+      preLoaderRoute: typeof DashboardPatientsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/expenses': {
+      id: '/dashboard/expenses'
+      path: '/expenses'
+      fullPath: '/dashboard/expenses'
+      preLoaderRoute: typeof DashboardExpensesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/earnings': {
+      id: '/dashboard/earnings'
+      path: '/earnings'
+      fullPath: '/dashboard/earnings'
+      preLoaderRoute: typeof DashboardEarningsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/analytics': {
+      id: '/dashboard/analytics'
+      path: '/analytics'
+      fullPath: '/dashboard/analytics'
+      preLoaderRoute: typeof DashboardAnalyticsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/d/$slug': {
+      id: '/d/$slug'
+      path: '/d/$slug'
+      fullPath: '/d/$slug'
+      preLoaderRoute: typeof DSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/consultation/$id': {
@@ -590,11 +1354,88 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CheckoutReturnRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/articles/$slug': {
+      id: '/articles/$slug'
+      path: '/articles/$slug'
+      fullPath: '/articles/$slug'
+      preLoaderRoute: typeof ArticlesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/withdrawals': {
+      id: '/admin/withdrawals'
+      path: '/admin/withdrawals'
+      fullPath: '/admin/withdrawals'
+      preLoaderRoute: typeof AdminWithdrawalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/verifications': {
       id: '/admin/verifications'
       path: '/admin/verifications'
       fullPath: '/admin/verifications'
       preLoaderRoute: typeof AdminVerificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/support-tickets': {
+      id: '/admin/support-tickets'
+      path: '/admin/support-tickets'
+      fullPath: '/admin/support-tickets'
+      preLoaderRoute: typeof AdminSupportTicketsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/reviews': {
+      id: '/admin/reviews'
+      path: '/admin/reviews'
+      fullPath: '/admin/reviews'
+      preLoaderRoute: typeof AdminReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/errors': {
+      id: '/admin/errors'
+      path: '/admin/errors'
+      fullPath: '/admin/errors'
+      preLoaderRoute: typeof AdminErrorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/documents': {
+      id: '/admin/documents'
+      path: '/admin/documents'
+      fullPath: '/admin/documents'
+      preLoaderRoute: typeof AdminDocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/doctors': {
+      id: '/admin/doctors'
+      path: '/admin/doctors'
+      fullPath: '/admin/doctors'
+      preLoaderRoute: typeof AdminDoctorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/articles': {
+      id: '/admin/articles'
+      path: '/admin/articles'
+      fullPath: '/admin/articles'
+      preLoaderRoute: typeof AdminArticlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/specialty/$slug/$city': {
+      id: '/specialty/$slug/$city'
+      path: '/$city'
+      fullPath: '/specialty/$slug/$city'
+      preLoaderRoute: typeof SpecialtySlugCityRouteImport
+      parentRoute: typeof SpecialtySlugRoute
+    }
+    '/rx/verify/$number': {
+      id: '/rx/verify/$number'
+      path: '/rx/verify/$number'
+      fullPath: '/rx/verify/$number'
+      preLoaderRoute: typeof RxVerifyNumberRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/feed/post/$id': {
@@ -603,6 +1444,55 @@ declare module '@tanstack/react-router' {
       fullPath: '/feed/post/$id'
       preLoaderRoute: typeof FeedPostIdRouteImport
       parentRoute: typeof FeedRoute
+    }
+    '/dashboard/visit/new': {
+      id: '/dashboard/visit/new'
+      path: '/visit/new'
+      fullPath: '/dashboard/visit/new'
+      preLoaderRoute: typeof DashboardVisitNewRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/settings/signature': {
+      id: '/dashboard/settings/signature'
+      path: '/settings/signature'
+      fullPath: '/dashboard/settings/signature'
+      preLoaderRoute: typeof DashboardSettingsSignatureRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/settings/followup': {
+      id: '/dashboard/settings/followup'
+      path: '/settings/followup'
+      fullPath: '/dashboard/settings/followup'
+      preLoaderRoute: typeof DashboardSettingsFollowupRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/settings/billing': {
+      id: '/dashboard/settings/billing'
+      path: '/settings/billing'
+      fullPath: '/dashboard/settings/billing'
+      preLoaderRoute: typeof DashboardSettingsBillingRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/patient/$id': {
+      id: '/dashboard/patient/$id'
+      path: '/patient/$id'
+      fullPath: '/dashboard/patient/$id'
+      preLoaderRoute: typeof DashboardPatientIdRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/d/$slug/contact.vcf': {
+      id: '/d/$slug/contact.vcf'
+      path: '/contact.vcf'
+      fullPath: '/d/$slug/contact.vcf'
+      preLoaderRoute: typeof DSlugContactDotvcfRouteImport
+      parentRoute: typeof DSlugRoute
+    }
+    '/api/public/web-vitals': {
+      id: '/api/public/web-vitals'
+      path: '/api/public/web-vitals'
+      fullPath: '/api/public/web-vitals'
+      preLoaderRoute: typeof ApiPublicWebVitalsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/payments/webhook': {
       id: '/api/public/payments/webhook'
@@ -613,6 +1503,36 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface DashboardRouteChildren {
+  DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
+  DashboardEarningsRoute: typeof DashboardEarningsRoute
+  DashboardExpensesRoute: typeof DashboardExpensesRoute
+  DashboardPatientsRoute: typeof DashboardPatientsRoute
+  DashboardSupportRoute: typeof DashboardSupportRoute
+  DashboardPatientIdRoute: typeof DashboardPatientIdRoute
+  DashboardSettingsBillingRoute: typeof DashboardSettingsBillingRoute
+  DashboardSettingsFollowupRoute: typeof DashboardSettingsFollowupRoute
+  DashboardSettingsSignatureRoute: typeof DashboardSettingsSignatureRoute
+  DashboardVisitNewRoute: typeof DashboardVisitNewRoute
+}
+
+const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardAnalyticsRoute: DashboardAnalyticsRoute,
+  DashboardEarningsRoute: DashboardEarningsRoute,
+  DashboardExpensesRoute: DashboardExpensesRoute,
+  DashboardPatientsRoute: DashboardPatientsRoute,
+  DashboardSupportRoute: DashboardSupportRoute,
+  DashboardPatientIdRoute: DashboardPatientIdRoute,
+  DashboardSettingsBillingRoute: DashboardSettingsBillingRoute,
+  DashboardSettingsFollowupRoute: DashboardSettingsFollowupRoute,
+  DashboardSettingsSignatureRoute: DashboardSettingsSignatureRoute,
+  DashboardVisitNewRoute: DashboardVisitNewRoute,
+}
+
+const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
+  DashboardRouteChildren,
+)
 
 interface FeedRouteChildren {
   FeedNewRoute: typeof FeedNewRoute
@@ -626,33 +1546,99 @@ const FeedRouteChildren: FeedRouteChildren = {
 
 const FeedRouteWithChildren = FeedRoute._addFileChildren(FeedRouteChildren)
 
+interface ProfileRouteChildren {
+  ProfileLabResultsRoute: typeof ProfileLabResultsRoute
+  ProfileMedicalHistoryRoute: typeof ProfileMedicalHistoryRoute
+}
+
+const ProfileRouteChildren: ProfileRouteChildren = {
+  ProfileLabResultsRoute: ProfileLabResultsRoute,
+  ProfileMedicalHistoryRoute: ProfileMedicalHistoryRoute,
+}
+
+const ProfileRouteWithChildren =
+  ProfileRoute._addFileChildren(ProfileRouteChildren)
+
+interface DSlugRouteChildren {
+  DSlugContactDotvcfRoute: typeof DSlugContactDotvcfRoute
+}
+
+const DSlugRouteChildren: DSlugRouteChildren = {
+  DSlugContactDotvcfRoute: DSlugContactDotvcfRoute,
+}
+
+const DSlugRouteWithChildren = DSlugRoute._addFileChildren(DSlugRouteChildren)
+
+interface SpecialtySlugRouteChildren {
+  SpecialtySlugCityRoute: typeof SpecialtySlugCityRoute
+}
+
+const SpecialtySlugRouteChildren: SpecialtySlugRouteChildren = {
+  SpecialtySlugCityRoute: SpecialtySlugCityRoute,
+}
+
+const SpecialtySlugRouteWithChildren = SpecialtySlugRoute._addFileChildren(
+  SpecialtySlugRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   AppointmentsRoute: AppointmentsRoute,
   BillingRoute: BillingRoute,
   ContactRoute: ContactRoute,
-  DashboardRoute: DashboardRoute,
+  DashboardRoute: DashboardRouteWithChildren,
   DoctorsRoute: DoctorsRoute,
   FeedRoute: FeedRouteWithChildren,
   HowItWorksRoute: HowItWorksRoute,
+  IndexnowKeyDottxtRoute: IndexnowKeyDottxtRoute,
   JoinDoctorRoute: JoinDoctorRoute,
   LoginRoute: LoginRoute,
+  ManifestDotwebmanifestRoute: ManifestDotwebmanifestRoute,
   MissingDrugsRoute: MissingDrugsRoute,
+  NearbyRoute: NearbyRoute,
+  PayRoute: PayRoute,
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
-  ProfileRoute: ProfileRoute,
+  ProfileRoute: ProfileRouteWithChildren,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SignupRoute: SignupRoute,
+  SitemapArticlesDotxmlRoute: SitemapArticlesDotxmlRoute,
+  SitemapDoctorsDotxmlRoute: SitemapDoctorsDotxmlRoute,
+  SitemapSpecialtiesDotxmlRoute: SitemapSpecialtiesDotxmlRoute,
+  SitemapStaticDotxmlRoute: SitemapStaticDotxmlRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  SwDotjsRoute: SwDotjsRoute,
   TermsRoute: TermsRoute,
+  AdminArticlesRoute: AdminArticlesRoute,
+  AdminDoctorsRoute: AdminDoctorsRoute,
+  AdminDocumentsRoute: AdminDocumentsRoute,
+  AdminErrorsRoute: AdminErrorsRoute,
+  AdminReviewsRoute: AdminReviewsRoute,
+  AdminSupportTicketsRoute: AdminSupportTicketsRoute,
   AdminVerificationsRoute: AdminVerificationsRoute,
+  AdminWithdrawalsRoute: AdminWithdrawalsRoute,
+  ArticlesSlugRoute: ArticlesSlugRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
   ConsultationIdRoute: ConsultationIdRoute,
+  DSlugRoute: DSlugRouteWithChildren,
   DoctorIdRoute: DoctorIdRoute,
+  DoctorFeedbackRoute: DoctorFeedbackRoute,
+  DoctorSoloRoute: DoctorSoloRoute,
+  DoctorSponsorshipRoute: DoctorSponsorshipRoute,
   DoctorVerificationRoute: DoctorVerificationRoute,
+  MyQueueAppointmentIdRoute: MyQueueAppointmentIdRoute,
   PharmacyDashboardRoute: PharmacyDashboardRoute,
   PharmacyRegisterRoute: PharmacyRegisterRoute,
+  QShortIdRoute: QShortIdRoute,
+  RxIdRoute: RxIdRoute,
+  SpecialtySlugRoute: SpecialtySlugRouteWithChildren,
+  USlugRoute: USlugRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  ArticlesIndexRoute: ArticlesIndexRoute,
+  ApiPublicWebVitalsRoute: ApiPublicWebVitalsRoute,
+  RxVerifyNumberRoute: RxVerifyNumberRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
 }
 export const routeTree = rootRouteImport

@@ -6,7 +6,16 @@ import { Loader2 } from "lucide-react";
 interface PlacePickerProps {
   value?: string;
   placeholder?: string;
-  onPick: (place: { address: string; lat: number; lng: number; city?: string; country?: string }) => void;
+  onPick: (place: {
+    address: string;
+    lat: number;
+    lng: number;
+    city?: string;
+    country?: string;
+    countryCode?: string;
+    governorate?: string;
+    district?: string;
+  }) => void;
   className?: string;
 }
 
@@ -74,12 +83,22 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
         c.types.includes("locality") || c.types.includes("administrative_area_level_2"),
       );
       const countryComp = components.find((c) => c.types.includes("country"));
+      const govComp = components.find((c) => c.types.includes("administrative_area_level_1"));
+      const districtComp = components.find((c) =>
+        c.types.includes("sublocality_level_1") ||
+        c.types.includes("sublocality") ||
+        c.types.includes("neighborhood") ||
+        c.types.includes("administrative_area_level_3"),
+      );
       onPick({
         address: place.formattedAddress ?? s.placePrediction.text.text,
         lat: loc.lat(),
         lng: loc.lng(),
         city: cityComp?.longText ?? undefined,
         country: countryComp?.longText ?? undefined,
+        countryCode: countryComp?.shortText ?? undefined,
+        governorate: govComp?.longText ?? undefined,
+        district: districtComp?.longText ?? undefined,
       });
       setInput(place.formattedAddress ?? s.placePrediction.text.text);
       setOpen(false);

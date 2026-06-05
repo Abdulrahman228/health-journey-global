@@ -3,13 +3,14 @@ import { HeartPulse, Menu, X, Globe, Check, ChevronDown, User, LogOut, Calendar,
 import { useEffect, useRef, useState } from "react";
 import { useLanguage, LANGUAGES, type Language } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const navLinks = {
   en: [
     { label: "Home", to: "/" },
     { label: "Doctors", to: "/doctors" },
     { label: "Community", to: "/feed" },
-    { label: "Missing Drugs", to: "/missing-drugs" },
+    { label: "Rare Medications", to: "/missing-drugs" },
     { label: "Pricing", to: "/pricing" },
     { label: "How It Works", to: "/how-it-works" },
     { label: "About", to: "/about" },
@@ -18,7 +19,7 @@ const navLinks = {
     { label: "الرئيسية", to: "/" },
     { label: "الأطباء", to: "/doctors" },
     { label: "المجتمع", to: "/feed" },
-    { label: "الأدوية الناقصة", to: "/missing-drugs" },
+    { label: "الأدوية نادرة التوفر", to: "/missing-drugs" },
     { label: "الأسعار", to: "/pricing" },
     { label: "كيف يعمل", to: "/how-it-works" },
     { label: "من نحن", to: "/about" },
@@ -39,7 +40,7 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2" aria-label="طبيبي - Tabibi">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/75 shadow-md shadow-primary/25 ring-1 ring-primary/10">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-primary/75 shadow-md shadow-primary/25 ring-1 ring-primary/10">
             <HeartPulse className="h-[22px] w-[22px] text-white" strokeWidth={2.4} />
           </div>
           <div className="flex flex-col leading-none">
@@ -77,7 +78,10 @@ export function Header() {
           />
 
           {isAuthenticated ? (
-            <UserMenu user={user} role={role} signOut={signOut} t={t} />
+            <>
+              <NotificationBell />
+              <UserMenu user={user} role={role} signOut={signOut} t={t} />
+            </>
           ) : (
             <>
               <Link
@@ -99,6 +103,9 @@ export function Header() {
         {/* Mobile Menu Button */}
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? t("Close menu", "إغلاق القائمة") : t("Open menu", "فتح القائمة")}
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-nav"
           className="inline-flex md:hidden items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-accent"
         >
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -107,7 +114,7 @@ export function Header() {
 
       {/* Mobile Menu */}
       {mobileOpen && (
-        <div className="md:hidden border-t border-border bg-background px-4 py-4">
+        <div id="mobile-nav" className="md:hidden border-t border-border bg-background px-4 py-4">
           <nav className="flex flex-col gap-1">
             {links.map((link) => (
               <Link

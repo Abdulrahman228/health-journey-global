@@ -20,6 +20,40 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Environment files (use .env.example as template)
+.env
+.env.local
+.env.*.local
+.env.backup-*
+
+# Build / debug logs
+build_*.txt
+deploy_*.txt
+deploy_log*.txt
+push_*.txt
+phase_*_combined.sql
+_combined_migrations.sql
+
+# Local quick-check scripts (one-offs, not for repo)
+check_*.ps1
+
+# Local screenshot artifacts
+*.png
+!public/**/*.png
+!src/assets/**/*.png
+
+# Local HTML test files
+prod*.html
+resp*.html
+response.html
+
+# Playwright MCP traces
+.playwright-mcp/
+
+# Temporary files
+.tmp/
+.tmp-*.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

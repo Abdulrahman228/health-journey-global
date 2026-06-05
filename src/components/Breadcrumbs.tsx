@@ -30,7 +30,7 @@ export function Breadcrumbs({ items, showHome = true, className }: BreadcrumbsPr
   const Sep = isRTL ? ChevronLeft : ChevronRight;
 
   const fullItems: BreadcrumbItem[] = showHome
-    ? [{ name: t("Home", "الرئيسية"), path: "/" }, ...items]
+    ? [{ name: t("Tabibi — Home", "طبيبي — Tabibi"), path: "/" }, ...items]
     : items;
 
   return (

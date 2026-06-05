@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- Heart (white) — universal medical symbol -->
+  <path d="M32 50.5C19.5 41.5 11 34 11 24.5c0-6 4.7-10.5 10.6-10.5 3.9 0 7.6 2 10.4 6 2.8-4 6.5-6 10.4-6C48.3 14 53 18.5 53 24.5c0 9.5-8.5 17-21 26z"
+        fill="#ffffff"/>
+  <!-- ECG / heartbeat pulse line cutting through the heart -->
+  <path d="M8 31h10l3-7 4 14 4-10 4 8 3-5h20"
+        fill="none" stroke="#1d4ed8" stroke-width="3.2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

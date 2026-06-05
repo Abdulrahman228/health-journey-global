@@ -55,44 +55,46 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.98 0.01 85);
-  --foreground: oklch(0.15 0.03 260);
+  /* Medical identity: pure white background + strong medical blue (Mayo / Doctolib style).
+   * Hue 255° = professional indigo-blue (high trust). Teal kept only as accent for icons. */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.18 0.04 255);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 1.03 260);
+  --card-foreground: oklch(0.18 0.04 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.03 260);
-  --primary: oklch(0.45 0.12 240);
-  --primary-foreground: oklch(0.98 0.01 85);
-  --secondary: oklch(1.95 0.02 230);
-  --secondary-foreground: oklch(0.35 0.08 240);
-  --muted: oklch(1.95 0.02 230);
-  --muted-foreground: oklch(0.55 0.05 250);
-  --accent: oklch(0.95 0.02 180);
-  --accent-foreground: oklch(0.25 0.08 170);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.98 0.01 85);
-  --border: oklch(0.9 0.02 230);
-  --input: oklch(0.9 0.02 230);
-  --ring: oklch(0.45 0.12 240);
-  --chart-1: oklch(0.45 0.12 240);
-  --chart-2: oklch(0.65 0.14 180);
+  --popover-foreground: oklch(0.18 0.04 255);
+  --primary: oklch(0.46 0.18 255);           /* #1d4ed8 — medical blue */
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.965 0.015 250);       /* very light blue tint */
+  --secondary-foreground: oklch(0.32 0.1 255);
+  --muted: oklch(0.97 0.01 250);
+  --muted-foreground: oklch(0.5 0.04 255);
+  --accent: oklch(0.95 0.025 220);           /* soft cyan-blue */
+  --accent-foreground: oklch(0.3 0.12 250);
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.92 0.015 250);
+  --input: oklch(0.94 0.015 250);
+  --ring: oklch(0.46 0.18 255);
+  --chart-1: oklch(0.46 0.18 255);
+  --chart-2: oklch(0.62 0.13 200);
   --chart-3: oklch(0.75 0.12 90);
-  --chart-4: oklch(0.55 0.22 25);
-  --chart-5: oklch(0.35 0.08 240);
-  --sidebar: oklch(0.98 0.01 85);
-  --sidebar-foreground: oklch(0.15 0.03 260);
-  --sidebar-primary: oklch(0.45 0.12 240);
-  --sidebar-primary-foreground: oklch(0.98 0.01 85);
-  --sidebar-accent: oklch(0.95 0.02 180);
-  --sidebar-accent-foreground: oklch(0.25 0.08 170);
-  --sidebar-border: oklch(0.9 0.02 230);
-  --sidebar-ring: oklch(0.45 0.12 240);
-  --medical: oklch(0.45 0.12 240);
-  --medical-foreground: oklch(0.98 0.01 85);
-  --teal: oklch(0.65 0.14 180);
-  --teal-foreground: oklch(0.15 0.03 260);
-  --sand: oklch(0.97 0.01 85);
-  --sand-foreground: oklch(0.35 0.08 240);
+  --chart-4: oklch(0.58 0.22 27);
+  --chart-5: oklch(0.38 0.1 255);
+  --sidebar: oklch(0.985 0.005 250);
+  --sidebar-foreground: oklch(0.18 0.04 255);
+  --sidebar-primary: oklch(0.46 0.18 255);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.95 0.025 220);
+  --sidebar-accent-foreground: oklch(0.3 0.12 250);
+  --sidebar-border: oklch(0.92 0.015 250);
+  --sidebar-ring: oklch(0.46 0.18 255);
+  --medical: oklch(0.46 0.18 255);
+  --medical-foreground: oklch(1 0 0);
+  --teal: oklch(0.62 0.13 200);              /* accent only */
+  --teal-foreground: oklch(1 0 0);
+  --sand: oklch(0.98 0.01 250);
+  --sand-foreground: oklch(0.32 0.1 255);
 }
 
 .dark {
@@ -149,6 +151,44 @@
 
   html[lang="ar"] body {
     font-family: 'Cairo', 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Arabic typography fixes:
+   * Cairo needs more line-height so the shadda/fatha (ّ ـَ) above letters
+   * don't get clipped by tight leading. Letter-spacing must be 0 (or wider)
+   * because negative tracking breaks Arabic ligatures.
+   * Apply automatically to headings inside RTL. */
+  html[dir="rtl"] h1,
+  html[dir="rtl"] h2,
+  html[dir="rtl"] h3 {
+    letter-spacing: 0 !important;
+    line-height: 1.55;
+    text-wrap: balance;
+  }
+
+  html[dir="rtl"] h1 {
+    line-height: 1.45;
+  }
+
+  /* For bold Arabic display headings — extrabold (800) clips diacritics
+   * with Cairo at large sizes. Cap at 700 + extra top padding. */
+  .arabic-display {
+    font-weight: 700 !important;
+    line-height: 1.45 !important;
+    letter-spacing: 0 !important;
+    padding-top: 0.15em;
+    text-wrap: balance;
+  }
+
+  /* Elegant heading — used for hero H1 to give a premium feel.
+   * Tajawal is a modern clean Arabic font that pairs well with Cairo body text. */
+  .arabic-elegant {
+    font-family: 'Tajawal', 'Cairo', system-ui, -apple-system, sans-serif;
+    font-weight: 800 !important;
+    line-height: 1.45 !important;
+    letter-spacing: 0 !important;
+    padding-top: 0.1em;
+    text-wrap: balance;
   }
 }
 

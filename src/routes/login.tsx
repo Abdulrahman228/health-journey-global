@@ -7,7 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState } from "react";
 import { HeartPulse, Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { lovable } from "@/integrations/lovable";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -15,6 +14,7 @@ const loginSchema = z.object({
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
+const OAUTH_CALLBACK_PATH = "/auth/callback";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -57,14 +57,20 @@ function LoginPage() {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
-    try {
-      const result = await lovable.auth.signInWithOAuth("google");
-      if (result.error) {
-        setError(result.error.message ?? "Google sign in failed");
-      }
-    } catch (e) {
-      setError("Google sign in failed");
-    } finally {
+    setError("");
+    const redirectTo = `${window.location.origin}${OAUTH_CALLBACK_PATH}`;
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        queryParams: {
+          prompt: "select_account",
+        },
+      },
+    });
+
+    if (oauthError) {
+      setError(oauthError.message);
       setIsLoading(false);
     }
   };
@@ -87,7 +93,7 @@ function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-teal">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-teal">
               <HeartPulse className="h-5 w-5 text-white" />
             </div>
             <span className="text-2xl font-bold tracking-tight text-foreground">Tabibi</span>
@@ -198,6 +204,7 @@ function LoginPage() {
             </svg>
             {t("Sign in with Google", "تسجيل الدخول بـ Google")}
           </button>
+
         </div>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">

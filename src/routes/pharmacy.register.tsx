@@ -1,8 +1,6 @@
 import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { Building2, Upload, Loader2, ShieldCheck } from "lucide-react";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { createChain, uploadPharmacyLogo, getMyChain } from "@/lib/pharmacy";
@@ -83,10 +81,8 @@ function PharmacyRegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Header />
-      <main className="flex-1">
-        <section className="border-b border-border bg-gradient-to-br from-teal/10 via-background to-background">
+    <div>
+        <section className="border-b border-border bg-linear-to-br from-teal/10 via-background to-background">
           <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-10">
             <div className="flex items-start gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-teal/15 text-teal">
@@ -202,8 +198,6 @@ function PharmacyRegisterPage() {
             </div>
           </form>
         </section>
-      </main>
-      <Footer />
     </div>
   );
 }

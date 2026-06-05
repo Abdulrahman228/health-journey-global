@@ -1,7 +1,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tanstack-start-app",
+  "name": "mytabibi",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  "routes": [
+    { "pattern": "mytabibi.com/*", "zone_name": "mytabibi.com" },
+    { "pattern": "www.mytabibi.com/*", "zone_name": "mytabibi.com" }
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://wqrrwvaxovrjjiilqkmt.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_yZch0ixRiNtHxjL0PFGXXg_RFdyLcWK",
+    "VITE_SITE_URL": "https://mytabibi.com",
+    "VITE_SUPABASE_URL": "https://wqrrwvaxovrjjiilqkmt.supabase.co",
+    "VITE_SUPABASE_PROJECT_ID": "wqrrwvaxovrjjiilqkmt",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_yZch0ixRiNtHxjL0PFGXXg_RFdyLcWK"
+  },
+  "observability": { "enabled": true }
 }

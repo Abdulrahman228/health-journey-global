@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="192" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
+  <!-- Heart (white) -->
+  <path d="M96 152C58.5 124.5 33 102 33 73.5 33 55.5 47 42 64.8 42c11.7 0 22.8 6 31.2 18 8.4-12 19.5-18 31.2-18C145 42 159 55.5 159 73.5 159 102 133.5 124.5 96 152z"
+        fill="#ffffff"/>
+  <!-- ECG pulse line -->
+  <path d="M24 93h30l9-21 12 42 12-30 12 24 9-15h60"
+        fill="none" stroke="#1d4ed8" stroke-width="9.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

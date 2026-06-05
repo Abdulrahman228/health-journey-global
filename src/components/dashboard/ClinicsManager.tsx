@@ -4,7 +4,8 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
 import { PlacePicker } from "@/components/maps/PlacePicker";
 import { ClinicMap } from "@/components/maps/ClinicMap";
-import { Building2, Plus, Trash2, Save, Loader2, Clock } from "lucide-react";
+import { RegionPicker, type RegionSelection } from "@/components/regions/RegionPicker";
+import { Building2, Plus, Trash2, Save, Loader2, Clock, CalendarOff } from "lucide-react";
 import { toast } from "sonner";
 
 interface Clinic {
@@ -20,6 +21,14 @@ interface Clinic {
   consultation_fee: number | null;
   currency: string | null;
   is_primary: boolean | null;
+  country_id?: string | null;
+  governorate_id?: string | null;
+  city_id?: string | null;
+  district_id?: string | null;
+  street?: string | null;
+  building?: string | null;
+  floor_unit?: string | null;
+  landmark?: string | null;
 }
 
 interface Schedule {
@@ -29,6 +38,9 @@ interface Schedule {
   start_time: string;
   end_time: string;
   slot_duration_minutes: number;
+  max_patients_per_day: number | null;
+  avg_consultation_minutes: number;
+  is_active: boolean;
 }
 
 const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -62,6 +74,14 @@ export function ClinicsManager({ doctorDetailsId }: { doctorDetailsId: string })
         country: payload.country ?? "Egypt",
         lat: payload.lat ?? null,
         lng: payload.lng ?? null,
+        country_id: payload.country_id ?? null,
+        governorate_id: payload.governorate_id ?? null,
+        city_id: payload.city_id ?? null,
+        district_id: payload.district_id ?? null,
+        street: payload.street ?? null,
+        building: payload.building ?? null,
+        floor_unit: payload.floor_unit ?? null,
+        landmark: payload.landmark ?? null,
         is_primary: clinics.length === 0,
       });
       if (error) throw error;
@@ -151,16 +171,97 @@ function NewClinicForm({
     lng: number;
     city?: string;
     country?: string;
+    countryCode?: string;
+    governorate?: string;
+    district?: string;
   } | null>(null);
+  const [region, setRegion] = useState<RegionSelection>({
+    countryId: null,
+    governorateId: null,
+    cityId: null,
+    districtId: null,
+  });
+  const [street, setStreet] = useState("");
+  const [building, setBuilding] = useState("");
+  const [floorUnit, setFloorUnit] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [autoResolving, setAutoResolving] = useState(false);
+
+  // Auto-resolve region IDs from the Google-picked place by matching
+  // address components against the `regions` table (case-insensitive,
+  // both ar/en).
+  useEffect(() => {
+    if (!picked) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setAutoResolving(true);
+        const result: RegionSelection = {
+          countryId: null,
+          governorateId: null,
+          cityId: null,
+          districtId: null,
+        };
+
+        async function findRegion(
+          type: "country" | "governorate" | "city" | "district",
+          name: string | undefined,
+          parentId: string | null,
+        ): Promise<{ id: string; name_ar: string; name_en: string } | null> {
+          if (!name) return null;
+          let q = supabase
+            .from("regions")
+            .select("id,name_ar,name_en")
+            .eq("type", type)
+            .or(`name_ar.ilike.%${name}%,name_en.ilike.%${name}%`)
+            .limit(1);
+          if (parentId) q = q.eq("parent_id", parentId);
+          const { data } = await q;
+          return data && data.length > 0 ? data[0] : null;
+        }
+
+        const country = await findRegion(
+          "country",
+          picked.countryCode || picked.country,
+          null,
+        );
+        if (country) result.countryId = country.id;
+
+        const gov = await findRegion("governorate", picked.governorate, result.countryId);
+        if (gov) result.governorateId = gov.id;
+
+        const city = await findRegion("city", picked.city, result.governorateId);
+        if (city) result.cityId = city.id;
+
+        const district = await findRegion("district", picked.district, result.cityId);
+        if (district) result.districtId = district.id;
+
+        if (!cancelled) {
+          setRegion((prev) => ({
+            countryId: result.countryId ?? prev.countryId,
+            governorateId: result.governorateId ?? prev.governorateId,
+            cityId: result.cityId ?? prev.cityId,
+            districtId: result.districtId ?? prev.districtId,
+          }));
+        }
+      } finally {
+        if (!cancelled) setAutoResolving(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [picked]);
 
   return (
     <div className="border border-border rounded-xl p-4 mb-4 bg-muted/20">
       <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1.5">
+          <label htmlFor="clinic-name" className="block text-sm font-medium text-foreground mb-1.5">
             {t("Clinic name", "اسم العيادة")}
           </label>
           <input
+            id="clinic-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -178,6 +279,57 @@ function NewClinicForm({
           />
         </div>
       </div>
+
+      <div className="mt-4 rounded-lg border border-border bg-background p-3">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">
+            {t("Hierarchical location", "الموقع التفصيلي")}
+          </h4>
+          {autoResolving && (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {t("Auto-filling…", "جارٍ الملء التلقائي…")}
+            </span>
+          )}
+        </div>
+        <RegionPicker value={region} onChange={setRegion} idPrefix="new-clinic" />
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div>
+          <label htmlFor="clinic-street" className="block text-sm font-medium mb-1.5">
+            {t("Street", "الشارع")}
+          </label>
+          <input id="clinic-street" type="text" value={street} onChange={(e) => setStreet(e.target.value)}
+            placeholder={t("e.g. El-Tahrir St.", "مثال: شارع التحرير")}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+        <div>
+          <label htmlFor="clinic-building" className="block text-sm font-medium mb-1.5">
+            {t("Building", "رقم/اسم العمارة")}
+          </label>
+          <input id="clinic-building" type="text" value={building} onChange={(e) => setBuilding(e.target.value)}
+            placeholder={t("e.g. Building 23", "مثال: عمارة 23")}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+        <div>
+          <label htmlFor="clinic-floor" className="block text-sm font-medium mb-1.5">
+            {t("Floor / Unit", "الدور / الشقة")}
+          </label>
+          <input id="clinic-floor" type="text" value={floorUnit} onChange={(e) => setFloorUnit(e.target.value)}
+            placeholder={t("e.g. Floor 3, Apt 5", "مثال: الدور الثالث - شقة 5")}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+        <div>
+          <label htmlFor="clinic-landmark" className="block text-sm font-medium mb-1.5">
+            {t("Landmark", "علامة مميزة")}
+          </label>
+          <input id="clinic-landmark" type="text" value={landmark} onChange={(e) => setLandmark(e.target.value)}
+            placeholder={t("e.g. Next to Carrefour", "مثال: بجوار كارفور")}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+      </div>
+
       {picked && (
         <div className="mt-3">
           <ClinicMap markers={[{ lat: picked.lat, lng: picked.lng }]} className="h-40" />
@@ -194,9 +346,17 @@ function NewClinicForm({
               lng: picked?.lng ?? null,
               city: picked?.city ?? null,
               country: picked?.country ?? null,
+              country_id: region.countryId,
+              governorate_id: region.governorateId,
+              city_id: region.cityId,
+              district_id: region.districtId,
+              street: street || null,
+              building: building || null,
+              floor_unit: floorUnit || null,
+              landmark: landmark || null,
             })
           }
-          disabled={pending}
+          disabled={pending || !region.countryId || !region.governorateId}
           className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Save clinic", "حفظ العيادة")}
@@ -259,6 +419,8 @@ function ClinicCard({
   const [day, setDay] = useState(1);
   const [start, setStart] = useState("09:00");
   const [end, setEnd] = useState("17:00");
+  const [maxPatients, setMaxPatients] = useState(20);
+  const [avgMin, setAvgMin] = useState(15);
 
   return (
     <div className="border border-border rounded-xl p-4">
@@ -297,6 +459,7 @@ function ClinicCard({
               <li key={s.id} className="flex items-center justify-between text-sm bg-muted/30 px-3 py-1.5 rounded-lg">
                 <span>
                   <span className="font-medium">{days[s.day_of_week]}</span> · {s.start_time.slice(0, 5)} – {s.end_time.slice(0, 5)}
+                  <span className="text-muted-foreground mr-2"> · {s.max_patients_per_day ?? "حد آلي"} مريض · {s.avg_consultation_minutes}د/كشف</span>
                 </span>
                 <button onClick={() => delSlot.mutate(s.id)} className="text-destructive hover:opacity-80">
                   <Trash2 className="h-3.5 w-3.5" />
@@ -330,6 +493,28 @@ function ClinicCard({
             onChange={(e) => setEnd(e.target.value)}
             className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
           />
+          <div className="flex flex-col">
+            <label className="text-[10px] text-muted-foreground">{t("Max patients/day", "حد أقصى للمرضى")}</label>
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={maxPatients}
+              onChange={(e) => setMaxPatients(Number(e.target.value))}
+              className="w-20 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-[10px] text-muted-foreground">{t("Avg min/visit", "متوسط دقائق الكشف")}</label>
+            <input
+              type="number"
+              min={5}
+              max={120}
+              value={avgMin}
+              onChange={(e) => setAvgMin(Number(e.target.value))}
+              className="w-20 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+            />
+          </div>
           <button
             onClick={() =>
               addSlot.mutate({
@@ -337,7 +522,10 @@ function ClinicCard({
                 day_of_week: day,
                 start_time: start,
                 end_time: end,
-                slot_duration_minutes: 30,
+                slot_duration_minutes: avgMin,
+                max_patients_per_day: maxPatients > 0 ? maxPatients : null,
+                avg_consultation_minutes: avgMin,
+                is_active: true,
               })
             }
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
@@ -345,6 +533,114 @@ function ClinicCard({
             <Plus className="h-3.5 w-3.5" /> {t("Add slot", "إضافة")}
           </button>
         </div>
+      </div>
+
+      <TimeOffSection clinicId={clinic.id} />
+    </div>
+  );
+}
+
+interface TimeOff {
+  id: string;
+  clinic_id: string;
+  off_date: string;
+  reason: string | null;
+}
+
+function TimeOffSection({ clinicId }: { clinicId: string }) {
+  const { t } = useLanguage();
+  const queryClient = useQueryClient();
+  const [date, setDate] = useState("");
+  const [reason, setReason] = useState("");
+
+  const { data: items = [] } = useQuery({
+    queryKey: ["clinic_time_off", clinicId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinic_time_off")
+        .select("*")
+        .eq("clinic_id", clinicId)
+        .gte("off_date", new Date().toISOString().slice(0, 10))
+        .order("off_date");
+      if (error) throw error;
+      return data as TimeOff[];
+    },
+  });
+
+  const addOff = useMutation({
+    mutationFn: async () => {
+      if (!date) throw new Error(t("Pick a date", "اختر تاريخًا"));
+      const { error } = await supabase
+        .from("clinic_time_off")
+        .insert({ clinic_id: clinicId, off_date: date, reason: reason || null });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(t("Day marked as off", "تم تحديد اليوم كإجازة"));
+      setDate("");
+      setReason("");
+      queryClient.invalidateQueries({ queryKey: ["clinic_time_off", clinicId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeOff = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("clinic_time_off").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clinic_time_off", clinicId] }),
+  });
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <p className="text-sm font-medium text-foreground mb-2 flex items-center gap-1">
+        <CalendarOff className="h-4 w-4" /> {t("Days off / vacation", "أيام الإجازة / الإغلاق")}
+      </p>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground mb-2">
+          {t("No upcoming days off.", "لا توجد أيام إجازة قادمة.")}
+        </p>
+      ) : (
+        <ul className="space-y-1 mb-3">
+          {items.map((o) => (
+            <li
+              key={o.id}
+              className="flex items-center justify-between text-sm bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-lg"
+            >
+              <span>
+                <span className="font-medium">{o.off_date}</span>
+                {o.reason && <span className="text-muted-foreground"> · {o.reason}</span>}
+              </span>
+              <button onClick={() => removeOff.mutate(o.id)} className="text-destructive hover:opacity-80">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-end gap-2">
+        <input
+          type="date"
+          value={date}
+          min={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+        />
+        <input
+          type="text"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={t("Reason (optional)", "السبب (اختياري)")}
+          className="flex-1 min-w-35 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+        />
+        <button
+          onClick={() => addOff.mutate()}
+          disabled={addOff.isPending || !date}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-medium hover:opacity-90 disabled:opacity-50"
+        >
+          <Plus className="h-3.5 w-3.5" /> {t("Mark off", "تحديد إجازة")}
+        </button>
       </div>
     </div>
   );

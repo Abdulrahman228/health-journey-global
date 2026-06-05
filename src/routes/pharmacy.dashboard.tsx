@@ -12,8 +12,6 @@ import {
   BadgeCheck,
   AlertCircle,
 } from "lucide-react";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import {
@@ -71,9 +69,7 @@ function PharmacyDashboard() {
 
   if (!chain) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <Header />
-        <main className="flex-1 mx-auto max-w-2xl px-4 py-16 text-center">
+      <div className="mx-auto max-w-2xl px-4 py-16 text-center">
           <Building2 className="mx-auto h-12 w-12 text-muted-foreground" />
           <h1 className="mt-4 text-2xl font-bold">{t("No pharmacy chain yet", "لا توجد سلسلة صيدليات بعد")}</h1>
           <p className="mt-2 text-muted-foreground">
@@ -86,18 +82,14 @@ function PharmacyDashboard() {
             <Plus className="h-4 w-4" />
             {t("Register pharmacy chain", "تسجيل سلسلة صيدليات")}
           </Link>
-        </main>
-        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Header />
-      <main className="flex-1">
+    <div>
         {/* Header */}
-        <section className="border-b border-border bg-gradient-to-br from-teal/10 via-background to-background">
+        <section className="border-b border-border bg-linear-to-br from-teal/10 via-background to-background">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
             <div className="flex items-start gap-4">
               {chain.logo_url ? (
@@ -171,8 +163,6 @@ function PharmacyDashboard() {
             }}
           />
         </div>
-      </main>
-      <Footer />
     </div>
   );
 }

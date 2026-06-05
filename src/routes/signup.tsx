@@ -8,7 +8,7 @@ import { useState } from "react";
 import { HeartPulse, Mail, Lock, User, Phone, MapPin, Stethoscope, UserRound, Eye, EyeOff } from "lucide-react";
 import { signUpUser } from "@/lib/auth.functions";
 import { useServerFn } from "@tanstack/react-start";
-import { lovable } from "@/integrations/lovable";
+import { supabase } from "@/integrations/supabase/client";
 
 const signupSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
@@ -20,6 +20,8 @@ const signupSchema = z.object({
 });
 
 type SignupForm = z.infer<typeof signupSchema>;
+const OAUTH_CALLBACK_PATH = "/auth/callback";
+const OAUTH_ROLE_KEY = "tabibi-oauth-role";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -58,6 +60,13 @@ function SignupPage() {
     setError("");
     try {
       await signUp({ data });
+      // Server function created the account (email pre-confirmed). Now sign in
+      // the client so the session cookie is established before redirect.
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
+      if (signInError) throw signInError;
       window.location.href = "/";
     } catch (e: any) {
       setError(e?.message ?? "Sign up failed");
@@ -68,14 +77,26 @@ function SignupPage() {
 
   const handleGoogleSignUp = async () => {
     setIsLoading(true);
+    setError("");
     try {
-      const result = await lovable.auth.signInWithOAuth("google");
-      if (result.error) {
-        setError(result.error.message ?? "Google sign up failed");
+      localStorage.setItem(OAUTH_ROLE_KEY, selectedRole);
+      const redirectTo = `${window.location.origin}${OAUTH_CALLBACK_PATH}`;
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+
+      if (oauthError) {
+        localStorage.removeItem(OAUTH_ROLE_KEY);
+        throw oauthError;
       }
     } catch (e) {
-      setError("Google sign up failed");
-    } finally {
+      setError(e instanceof Error ? e.message : "Google sign up failed");
       setIsLoading(false);
     }
   };
@@ -99,7 +120,7 @@ function SignupPage() {
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <Link to="/" className="inline-flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-teal">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-teal">
                 <HeartPulse className="h-5 w-5 text-white" />
               </div>
               <span className="text-2xl font-bold tracking-tight text-foreground">Tabibi</span>
@@ -171,7 +192,7 @@ function SignupPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-teal">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-teal">
               <HeartPulse className="h-5 w-5 text-white" />
             </div>
             <span className="text-2xl font-bold tracking-tight text-foreground">Tabibi</span>

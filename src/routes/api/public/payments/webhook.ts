@@ -178,12 +178,223 @@ async function handleInvoicePaid(invoice: any, env: StripeEnv) {
   }
 }
 
-async function handleWebhook(req: Request, env: StripeEnv) {
-  const event = await verifyWebhook(req, env);
+// =============================================================
+// PaymentIntent flow (appointments / one-off charges)
+// =============================================================
+//
+// When a patient pays for an appointment we receive a series of events.
+// We use `payment_intent.succeeded` as the single source of truth because
+// it fires for every successful capture (Cards, Apple Pay, etc.) and
+// includes the PI id (pi_…) we stored on the appointment row.
+//
+// Steps:
+//   1. Insert a row into `payments` (idempotent on provider_payment_id+env)
+//   2. Locate the appointment (by metadata.appointment_id → fallback by pi id)
+//   3. Update appointment: payment_status='paid', status='confirmed', paid_at
+//
+// The `trg_appt_completion_tx` trigger then creates the
+// `doctor_transactions` row automatically when the doctor later marks
+// the appointment as 'completed'.
 
-  switch (event.type) {
-    case "customer.subscription.created":
-    case "customer.subscription.updated":
+async function upsertPayment(args: {
+  env: StripeEnv;
+  userId: string | null;
+  appointmentId: string | null;
+  providerPaymentId: string;
+  providerSessionId: string | null;
+  amountCents: number;
+  currency: string;
+  status: "succeeded" | "failed" | "cancelled";
+  raw: unknown;
+}) {
+  const sb = getSupabase();
+  const { data: existing } = await sb
+    .from("payments")
+    .select("id")
+    .eq("provider_payment_id", args.providerPaymentId)
+    .eq("environment", args.env)
+    .maybeSingle();
+
+  const row = {
+    provider: "stripe",
+    provider_payment_id: args.providerPaymentId,
+    provider_session_id: args.providerSessionId,
+    user_id: args.userId,
+    appointment_id: args.appointmentId,
+    amount_cents: args.amountCents,
+    currency: args.currency.toUpperCase(),
+    status: args.status,
+    raw_payload: args.raw as never,
+    environment: args.env,
+    updated_at: new Date().toISOString(),
+  } as never;
+
+  if (existing?.id) {
+    await sb.from("payments").update(row).eq("id", existing.id as string);
+  } else {
+    await sb.from("payments").insert(row);
+  }
+}
+
+async function findAppointmentForPI(pi: {
+  id: string;
+  metadata?: Record<string, string> | null;
+}): Promise<{ id: string; status: string; payment_status: string } | null> {
+  const sb = getSupabase();
+  const appointmentId = pi.metadata?.appointment_id;
+
+  if (appointmentId) {
+    const { data } = await sb
+      .from("appointments")
+      .select("id,status,payment_status")
+      .eq("id", appointmentId)
+      .maybeSingle();
+    if (data) return data as never;
+  }
+
+  const { data: byPi } = await sb
+    .from("appointments")
+    .select("id,status,payment_status")
+    .eq("payment_intent_id", pi.id)
+    .maybeSingle();
+  return (byPi as never) ?? null;
+}
+
+async function handlePaymentIntentSucceeded(pi: any, env: StripeEnv) {
+  const userId = pi.metadata?.userId || pi.metadata?.user_id || null;
+  const amount = pi.amount_received ?? pi.amount ?? 0;
+  const currency = (pi.currency || "egp") as string;
+
+  const appt = await findAppointmentForPI(pi);
+
+  await upsertPayment({
+    env,
+    userId,
+    appointmentId: appt?.id ?? null,
+    providerPaymentId: pi.id,
+    providerSessionId: pi.metadata?.checkout_session_id ?? null,
+    amountCents: amount,
+    currency,
+    status: "succeeded",
+    raw: pi,
+  });
+
+  if (!appt) {
+    console.warn("payment_intent.succeeded without matching appointment", pi.id);
+    return;
+  }
+
+  const sb = getSupabase();
+  const update: Record<string, unknown> = {
+    payment_status: "paid",
+    payment_intent_id: pi.id,
+    payment_environment: env,
+    paid_at: new Date().toISOString(),
+    currency: currency.toUpperCase(),
+    updated_at: new Date().toISOString(),
+  };
+  // Auto-confirm pending appointments once payment lands
+  if (appt.status === "pending") update.status = "confirmed";
+
+  await sb.from("appointments").update(update as never).eq("id", appt.id);
+
+  // If this appointment was created from a consultation request, mark it paid.
+  const consultationRequestId = pi.metadata?.consultation_request_id;
+  if (consultationRequestId) {
+    await sb
+      .from("consultation_requests")
+      .update({
+        status: "paid",
+        paid_at: new Date().toISOString(),
+        payment_intent_id: pi.id,
+      } as never)
+      .eq("id", consultationRequestId);
+  } else {
+    // Fallback: locate by appointment_id link.
+    await sb
+      .from("consultation_requests")
+      .update({
+        status: "paid",
+        paid_at: new Date().toISOString(),
+        payment_intent_id: pi.id,
+      } as never)
+      .eq("appointment_id", appt.id)
+      .eq("status", "accepted");
+  }
+}
+
+async function handlePaymentIntentFailed(pi: any, env: StripeEnv) {
+  const userId = pi.metadata?.userId || pi.metadata?.user_id || null;
+  const appt = await findAppointmentForPI(pi);
+
+  await upsertPayment({
+    env,
+    userId,
+    appointmentId: appt?.id ?? null,
+    providerPaymentId: pi.id,
+    providerSessionId: pi.metadata?.checkout_session_id ?? null,
+    amountCents: pi.amount ?? 0,
+    currency: (pi.currency as string) || "egp",
+    status: "failed",
+    raw: pi,
+  });
+
+  if (appt) {
+    await getSupabase()
+      .from("appointments")
+      .update({
+        payment_status: "failed",
+        payment_intent_id: pi.id,
+        payment_environment: env,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", appt.id);
+  }
+}
+
+async function handleChargeRefunded(charge: any, env: StripeEnv) {
+  const piId: string | null = charge.payment_intent ?? null;
+  if (!piId) return;
+
+  const sb = getSupabase();
+  const { data: appt } = await sb
+    .from("appointments")
+    .select("id,fee")
+    .eq("payment_intent_id", piId)
+    .maybeSingle();
+
+  const refundedAmount = charge.amount_refunded ?? 0;
+  const totalAmount = charge.amount ?? 0;
+  const fullyRefunded = totalAmount > 0 && refundedAmount >= totalAmount;
+
+  await upsertPayment({
+    env,
+    userId: charge.metadata?.userId || null,
+    appointmentId: (appt as { id?: string } | null)?.id ?? null,
+    providerPaymentId: piId,
+    providerSessionId: charge.metadata?.checkout_session_id ?? null,
+    amountCents: refundedAmount,
+    currency: (charge.currency as string) || "egp",
+    status: fullyRefunded ? "cancelled" : "succeeded",
+    raw: charge,
+  });
+
+  if (appt) {
+    await sb
+      .from("appointments")
+      .update({
+        payment_status: fullyRefunded ? "refunded" : "partially_refunded",
+        refunded_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...(fullyRefunded ? { status: "cancelled" } : {}),
+      } as never)
+      .eq("id", (appt as { id: string }).id);
+  }
+}
+
+async function handleWebhook(req: Request, env: StripeEnv) {  const event = await verifyWebhook(req, env);
+
+  switch (event.type) {    case "customer.subscription.updated":
       await handleSubscriptionUpsert(event.data.object, env);
       break;
     case "customer.subscription.deleted":
@@ -192,6 +403,15 @@ async function handleWebhook(req: Request, env: StripeEnv) {
     case "invoice.paid":
     case "invoice.payment_succeeded":
       await handleInvoicePaid(event.data.object, env);
+      break;
+    case "payment_intent.succeeded":
+      await handlePaymentIntentSucceeded(event.data.object, env);
+      break;
+    case "payment_intent.payment_failed":
+      await handlePaymentIntentFailed(event.data.object, env);
+      break;
+    case "charge.refunded":
+      await handleChargeRefunded(event.data.object, env);
       break;
     default:
       console.log("Unhandled event:", event.type);

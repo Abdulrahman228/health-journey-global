@@ -8,6 +8,8 @@ import { haversineKm } from "@/lib/distance";
 import { Search, MapPin, Star, Stethoscope, BadgeCheck, Loader2, SlidersHorizontal, Navigation } from "lucide-react";
 import { buildMeta, buildSeoLinks } from "@/lib/seo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { SponsoredDoctorsRow } from "@/components/doctors/SponsoredDoctorsRow";
+import { TierBadge, type DoctorTier } from "@/components/TierBadge";
 
 export const Route = createFileRoute("/doctors")({
   head: () => ({
@@ -25,6 +27,8 @@ export const Route = createFileRoute("/doctors")({
       ],
     }),
     links: buildSeoLinks("/doctors"),
+    // Note: BreadcrumbList JSON-LD is emitted by the <Breadcrumbs /> component
+    // below, so we don't duplicate it here.
   }),
   component: DoctorsPage,
 });
@@ -77,6 +81,37 @@ function DoctorsPage() {
   const [locError, setLocError] = useState<string | null>(null);
   const [maxDistanceKm, setMaxDistanceKm] = useState<string>("");
 
+  // Hydrate filters from URL query string on mount (so the new Hero
+  // hierarchical search and "Near me" button can pre-populate this page).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const sp = params.get("specialty");
+    const c = params.get("city");
+    const d = params.get("district");
+    const g = params.get("gov");
+    const co = params.get("country");
+    const lat = params.get("lat");
+    const lng = params.get("lng");
+    const km = params.get("max_km");
+
+    if (sp) setSpecialty(sp);
+    // Use any of the location slugs as a free-text city filter (matches
+    // against profiles.city / clinics.city via case-insensitive includes).
+    const locSlug = d || c || g || co;
+    if (locSlug) setCity(locSlug.replace(/-/g, " "));
+
+    if (lat && lng) {
+      const latN = Number(lat);
+      const lngN = Number(lng);
+      if (Number.isFinite(latN) && Number.isFinite(lngN)) {
+        setUserLoc({ lat: latN, lng: lngN });
+        setSort("distance");
+      }
+    }
+    if (km) setMaxDistanceKm(km);
+  }, []);
+
   const days = language === "ar" ? DAYS_AR : DAYS_EN;
 
   const { data: specialties = [] } = useQuery({
@@ -113,6 +148,24 @@ function DoctorsPage() {
         })) as DoctorRow[];
       }
       return data as unknown as DoctorRow[];
+    },
+  });
+
+  // Fetch tier (free/premium/gold) for all visible doctors in one round-trip.
+  const { data: tierMap = {} } = useQuery<Record<string, DoctorTier>>({
+    queryKey: ["doctor-tiers", doctors.map((d) => d.id).join(",")],
+    enabled: doctors.length > 0,
+    queryFn: async () => {
+      const ids = doctors.map((d) => d.id);
+      const { data, error } = await supabase.rpc("doctor_active_tiers", { _doctor_ids: ids });
+      if (error) return {};
+      const map: Record<string, DoctorTier> = {};
+      for (const r of (data ?? []) as Array<{ doctor_id: string; tier: string }>) {
+        if (r.tier === "premium" || r.tier === "gold") {
+          map[r.doctor_id] = r.tier;
+        }
+      }
+      return map;
     },
   });
 
@@ -193,7 +246,7 @@ function DoctorsPage() {
     <div className="min-h-screen bg-background">
       <Breadcrumbs items={[{ name: t("Doctors", "الأطباء"), path: "/doctors" }]} />
       {/* Hero search */}
-      <div className="bg-gradient-to-br from-primary/10 via-background to-teal/10 border-b border-border">
+      <div className="bg-linear-to-br from-primary/10 via-background to-teal/10 border-b border-border">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
           <h1 className="text-3xl md:text-4xl font-bold text-foreground">
             {t("Find your doctor", "ابحث عن طبيبك")}
@@ -327,6 +380,33 @@ function DoctorsPage() {
         </div>
       </div>
 
+      {/* Specialty pillar links (Silo internal linking for SEO) */}
+      {specialties.length > 0 && (
+        <nav
+          aria-label={t("Browse by specialty", "تصفّح حسب التخصص")}
+          className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8"
+        >
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            {t("Browse doctors by specialty", "تصفّح الأطباء حسب التخصص")}
+          </h2>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {specialties.map((s) => {
+              const label = language === "ar" ? s.name_ar : s.name_en;
+              return (
+                <Link
+                  key={`pillar-${s.id}`}
+                  to="/specialty/$slug"
+                  params={{ slug: s.slug }}
+                  className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground transition hover:border-primary/50 hover:text-primary"
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+
       {/* Specialty chips */}
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex gap-2 overflow-x-auto pb-2">
@@ -358,6 +438,7 @@ function DoctorsPage() {
 
       {/* Results */}
       <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+        <SponsoredDoctorsRow specialty={specialty || undefined} />
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -372,7 +453,7 @@ function DoctorsPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filtered.map((d) => (
-              <DoctorCard key={d.id} doctor={d} />
+              <DoctorCard key={d.id} doctor={d} tier={tierMap[d.id]} />
             ))}
           </div>
         )}
@@ -381,27 +462,33 @@ function DoctorsPage() {
   );
 }
 
-function DoctorCard({ doctor }: { doctor: DoctorRow & { _distance?: number | null } }) {
+function DoctorCard({ doctor, tier }: { doctor: DoctorRow & { _distance?: number | null }; tier?: DoctorTier }) {
   const { t } = useLanguage();
   const { formatPrice } = useCurrency();
   const name = doctor.profiles?.full_name ?? t("Doctor", "طبيب");
   const initial = name.charAt(0).toUpperCase();
   const fee = Number(doctor.consultation_fee ?? 0);
   const ccy = doctor.currency ?? "EGP";
+  const isGold = tier === "gold";
   return (
     <Link
       to="/doctor/$id"
       params={{ id: doctor.id }}
-      className="group block bg-card border border-border rounded-2xl p-5 hover:border-primary/50 hover:shadow-md transition"
+      className={`group block bg-card rounded-2xl p-5 transition ${
+        isGold
+          ? "border-2 border-amber-300 shadow-md hover:shadow-lg"
+          : "border border-border hover:border-primary/50 hover:shadow-md"
+      }`}
     >
       <div className="flex items-start gap-4">
-        <div className="h-14 w-14 rounded-full bg-gradient-to-br from-primary to-teal flex items-center justify-center text-primary-foreground text-xl font-semibold shrink-0">
+        <div className="h-14 w-14 rounded-full bg-linear-to-br from-primary to-teal flex items-center justify-center text-primary-foreground text-xl font-semibold shrink-0">
           {initial}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <h3 className="font-semibold text-foreground truncate">{name}</h3>
             {doctor.is_verified && <BadgeCheck className="h-4 w-4 text-primary shrink-0" />}
+            <TierBadge tier={tier} size="sm" />
           </div>
           <p className="text-sm text-muted-foreground truncate">{doctor.specialty}</p>
           {doctor.profiles?.city && (

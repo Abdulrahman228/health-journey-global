@@ -1,6 +1,7 @@
 /// <reference types="google.maps" />
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGoogleMaps } from "@/hooks/useGoogleMaps";
+import { MapPin, AlertTriangle } from "lucide-react";
 
 interface MapMarker {
   lat: number;
@@ -16,33 +17,64 @@ interface ClinicMapProps {
   onClick?: (lat: number, lng: number) => void;
 }
 
+// Listen for Google Maps "auth failure" so we can render a graceful fallback
+// (no `Oops! Something went wrong` overlay). This fires once per page load
+// when the API key is invalid / referrer not allowed / billing disabled.
+declare global {
+  interface Window {
+    gm_authFailure?: () => void;
+    __tabibiGmAuthFailed?: boolean;
+  }
+}
+if (typeof window !== "undefined" && !window.gm_authFailure) {
+  window.gm_authFailure = () => {
+    window.__tabibiGmAuthFailed = true;
+    window.dispatchEvent(new CustomEvent("tabibi:gm-auth-failed"));
+  };
+}
+
 export function ClinicMap({ markers, center, zoom = 13, className, onClick }: ClinicMapProps) {
   const { ready, error } = useGoogleMaps();
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRefs = useRef<google.maps.Marker[]>([]);
+  const [authFailed, setAuthFailed] = useState<boolean>(
+    typeof window !== "undefined" && !!window.__tabibiGmAuthFailed,
+  );
+
+  useEffect(() => {
+    function onAuthFail() {
+      setAuthFailed(true);
+    }
+    window.addEventListener("tabibi:gm-auth-failed", onAuthFail);
+    return () => window.removeEventListener("tabibi:gm-auth-failed", onAuthFail);
+  }, []);
 
   // Init map
   useEffect(() => {
-    if (!ready || !elRef.current || mapRef.current) return;
+    if (!ready || authFailed || !elRef.current || mapRef.current) return;
     const fallback = center ?? markers[0] ?? { lat: 30.0444, lng: 31.2357 }; // Cairo
-    mapRef.current = new google.maps.Map(elRef.current, {
-      center: fallback,
-      zoom,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-    });
-    if (onClick) {
-      mapRef.current.addListener("click", (e: google.maps.MapMouseEvent) => {
-        if (e.latLng) onClick(e.latLng.lat(), e.latLng.lng());
+    try {
+      mapRef.current = new google.maps.Map(elRef.current, {
+        center: fallback,
+        zoom,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
       });
+      if (onClick) {
+        mapRef.current.addListener("click", (e: google.maps.MapMouseEvent) => {
+          if (e.latLng) onClick(e.latLng.lat(), e.latLng.lng());
+        });
+      }
+    } catch {
+      setAuthFailed(true);
     }
-  }, [ready, center, zoom, markers, onClick]);
+  }, [ready, authFailed, center, zoom, markers, onClick]);
 
   // Sync markers
   useEffect(() => {
-    if (!ready || !mapRef.current) return;
+    if (!ready || authFailed || !mapRef.current) return;
     markerRefs.current.forEach((m) => m.setMap(null));
     markerRefs.current = markers.map(
       (m) =>
@@ -56,12 +88,30 @@ export function ClinicMap({ markers, center, zoom = 13, className, onClick }: Cl
       const c = center ?? markers[0];
       mapRef.current.setCenter(c);
     }
-  }, [ready, markers, center]);
+  }, [ready, authFailed, markers, center]);
 
-  if (error) {
+  if (error || authFailed) {
     return (
-      <div className={`flex items-center justify-center bg-muted text-xs text-muted-foreground rounded-lg ${className ?? "h-48"}`}>
-        {error}
+      <div
+        className={`flex flex-col items-center justify-center gap-3 bg-muted/40 text-xs text-muted-foreground rounded-lg p-4 ${className ?? "h-48"}`}
+      >
+        <AlertTriangle className="h-6 w-6 text-amber-500" />
+        <p className="text-center max-w-xs leading-relaxed">
+          الخريطة غير متاحة حاليًا. النتائج معروضة بالأسفل.
+        </p>
+        {markers.length > 0 && (
+          <div className="grid grid-cols-2 gap-1 max-h-24 overflow-auto w-full max-w-md">
+            {markers.slice(0, 6).map((m, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded bg-background/80 px-2 py-1 text-[10px]"
+              >
+                <MapPin className="h-3 w-3 text-primary" />
+                {m.title ?? `${m.lat.toFixed(3)}, ${m.lng.toFixed(3)}`}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

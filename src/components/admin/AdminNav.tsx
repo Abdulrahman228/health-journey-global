@@ -1,14 +1,24 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { ShieldCheck, Users, Wallet, Star, FileText, LayoutDashboard } from "lucide-react";
+import { ShieldCheck, Users, Wallet, Star, FileText, LayoutDashboard, FileCheck, HeadphonesIcon, AlertTriangle } from "lucide-react";
 
-const items = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+};
+
+const items: NavItem[] = [
   { to: "/admin", label: "نظرة عامة", icon: LayoutDashboard, exact: true },
   { to: "/admin/verifications", label: "التوثيق", icon: ShieldCheck },
+  { to: "/admin/documents", label: "المستندات", icon: FileCheck },
   { to: "/admin/doctors", label: "الأطباء", icon: Users },
   { to: "/admin/withdrawals", label: "السحوبات", icon: Wallet },
   { to: "/admin/reviews", label: "التقييمات", icon: Star },
   { to: "/admin/articles", label: "المقالات", icon: FileText },
-] as const;
+  { to: "/admin/support-tickets", label: "الدعم", icon: HeadphonesIcon },
+  { to: "/admin/errors", label: "الأخطاء", icon: AlertTriangle },
+];
 
 export function AdminNav() {
   const { pathname } = useLocation();

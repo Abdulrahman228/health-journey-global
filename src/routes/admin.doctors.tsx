@@ -15,7 +15,7 @@
  *    page directly controls what enters Google's index.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -24,14 +24,26 @@ import { pingIndexNow } from "@/lib/indexnow.functions";
 import { siteConfig } from "@/lib/seo";
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
   Loader2,
+  Plus,
   Save,
   Search,
   ShieldAlert,
   Stethoscope,
+  Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ClinicsManager } from "@/components/dashboard/ClinicsManager";
+import {
+  adminCreateDoctor,
+  adminDeleteDoctor,
+  adminGetDoctorQueue,
+} from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/admin/doctors")({
   head: () => ({
@@ -84,6 +96,12 @@ function AdminDoctorsPage() {
   const [search, setSearch] = useState("");
   const [edit, setEdit] = useState<EditDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [queueModal, setQueueModal] = useState<{
+    doctorId: string;
+    doctorName: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -258,6 +276,13 @@ function AdminDoctorsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" /> إضافة طبيب
+          </button>
           {(["all", "pending", "verified"] as const).map((f) => (
             <button
               key={f}
@@ -313,8 +338,8 @@ function AdminDoctorsPage() {
             </thead>
             <tbody>
               {filtered.map((r) => (
+                <Fragment key={r.id}>
                 <tr
-                  key={r.id}
                   className="border-b border-border last:border-0 hover:bg-muted/30"
                 >
                   <td className="px-4 py-3">
@@ -362,7 +387,7 @@ function AdminDoctorsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => toggleVerify(r)}
@@ -382,9 +407,74 @@ function AdminDoctorsPage() {
                       >
                         تحرير
                       </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpanded(expanded === r.id ? null : r.id)
+                        }
+                        className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                      >
+                        {expanded === r.id ? (
+                          <ChevronUp className="h-3 w-3" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3" />
+                        )}
+                        العيادات
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setQueueModal({
+                            doctorId: r.id,
+                            doctorName: r.profile?.full_name ?? r.id,
+                          })
+                        }
+                        className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                      >
+                        <Users className="h-3 w-3" /> الطابور
+                      </button>
+                      <a
+                        href={`/doctor/${r.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                      >
+                        <ExternalLink className="h-3 w-3" /> الصفحة
+                      </a>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (
+                            !window.confirm(
+                              `حذف الطبيب ${r.profile?.full_name ?? r.id} وكل بياناته؟ لا يمكن التراجع.`,
+                            )
+                          )
+                            return;
+                          try {
+                            await adminDeleteDoctor({ data: { doctorId: r.id } });
+                            toast.success("تم حذف الطبيب");
+                            load();
+                          } catch (e) {
+                            toast.error(
+                              "فشل الحذف: " + (e as Error).message,
+                            );
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
                     </div>
                   </td>
                 </tr>
+                {expanded === r.id && (
+                  <tr className="border-b border-border bg-muted/20">
+                    <td colSpan={8} className="px-4 py-4">
+                      <ClinicsManager doctorDetailsId={r.id} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -514,6 +604,347 @@ function AdminDoctorsPage() {
           </div>
         </div>
       )}
+
+      {showCreate && (
+        <CreateDoctorModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setShowCreate(false);
+            load();
+          }}
+        />
+      )}
+
+      {queueModal && (
+        <QueueModal
+          doctorId={queueModal.doctorId}
+          doctorName={queueModal.doctorName}
+          onClose={() => setQueueModal(null)}
+        />
+      )}
     </div>
   );
 }
+
+// =====================================================================
+// Create Doctor modal — calls server fn adminCreateDoctor
+// =====================================================================
+function CreateDoctorModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    fullName: "",
+    phone: "",
+    city: "",
+    specialty: "",
+    consultationFee: 200,
+    yearsExperience: 0,
+    bio: "",
+    telemedicineEnabled: false,
+    isVerified: true,
+  });
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await adminCreateDoctor({ data: form });
+      toast.success("تم إنشاء الطبيب");
+      onCreated();
+    } catch (e) {
+      toast.error("فشل: " + (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="إضافة طبيب"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    >
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl">
+        <header className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-lg font-bold">إضافة طبيب جديد</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="إغلاق"
+            className="rounded-md p-1 hover:bg-muted"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="الاسم الكامل *"
+              value={form.fullName}
+              onChange={(v) => setForm({ ...form, fullName: v })}
+            />
+            <Field
+              label="البريد الإلكتروني *"
+              type="email"
+              value={form.email}
+              onChange={(v) => setForm({ ...form, email: v })}
+            />
+            <Field
+              label="كلمة المرور المؤقتة (8+ حروف) *"
+              type="text"
+              value={form.password}
+              onChange={(v) => setForm({ ...form, password: v })}
+            />
+            <Field
+              label="رقم الهاتف"
+              value={form.phone}
+              onChange={(v) => setForm({ ...form, phone: v })}
+            />
+            <Field
+              label="المدينة"
+              value={form.city}
+              onChange={(v) => setForm({ ...form, city: v })}
+            />
+            <Field
+              label="التخصص *"
+              value={form.specialty}
+              onChange={(v) => setForm({ ...form, specialty: v })}
+            />
+            <Field
+              label="سعر الكشف"
+              type="number"
+              value={String(form.consultationFee)}
+              onChange={(v) =>
+                setForm({ ...form, consultationFee: Number(v) || 0 })
+              }
+            />
+            <Field
+              label="سنوات الخبرة"
+              type="number"
+              value={String(form.yearsExperience)}
+              onChange={(v) =>
+                setForm({ ...form, yearsExperience: Number(v) || 0 })
+              }
+            />
+          </div>
+          <label className="block">
+            <span className="text-sm font-medium">نبذة قصيرة</span>
+            <textarea
+              rows={4}
+              value={form.bio}
+              onChange={(e) => setForm({ ...form, bio: e.target.value })}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+          </label>
+          <div className="flex flex-wrap gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.telemedicineEnabled}
+                onChange={(e) =>
+                  setForm({ ...form, telemedicineEnabled: e.target.checked })
+                }
+              />
+              يقبل الاستشارات عن بُعد
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.isVerified}
+                onChange={(e) =>
+                  setForm({ ...form, isVerified: e.target.checked })
+                }
+              />
+              توثيق فوري
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            بعد الإنشاء افتح صف الطبيب من &quot;العيادات&quot; لإضافة عيادة + جدول
+            مواعيد.
+          </p>
+        </div>
+        <footer className="flex justify-end gap-2 border-t border-border px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            إلغاء
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            إنشاء
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+      />
+    </label>
+  );
+}
+
+// =====================================================================
+// Queue modal — today's appointments for a given doctor
+// =====================================================================
+type QueueRow = {
+  id: string;
+  queue_number: number | null;
+  status: string;
+  scheduled_at: string | null;
+  estimated_start_at: string | null;
+  fee: number | null;
+  clinic: { name: string | null } | null;
+  patient: { full_name: string | null; phone: string | null } | null;
+};
+
+function QueueModal({
+  doctorId,
+  doctorName,
+  onClose,
+}: {
+  doctorId: string;
+  doctorName: string;
+  onClose: () => void;
+}) {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [rows, setRows] = useState<QueueRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    adminGetDoctorQueue({ data: { doctorId, date } })
+      .then((res) => {
+        if (!cancelled) setRows(res.rows as unknown as QueueRow[]);
+      })
+      .catch((e: Error) => toast.error(e.message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [doctorId, date]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="طابور الطبيب"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    >
+      <div className="w-full max-w-4xl overflow-hidden rounded-xl bg-card shadow-xl">
+        <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-bold">طابور: {doctorName}</h2>
+            <p className="text-xs text-muted-foreground">عرض إداري للحجوزات</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+            />
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="إغلاق"
+              className="rounded-md p-1 hover:bg-muted"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+        <div className="max-h-[70vh] overflow-y-auto p-5">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+              لا توجد حجوزات في هذا اليوم.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="px-2 py-2 text-start">#</th>
+                  <th className="px-2 py-2 text-start">المريض</th>
+                  <th className="px-2 py-2 text-start">هاتف</th>
+                  <th className="px-2 py-2 text-start">العيادة</th>
+                  <th className="px-2 py-2 text-start">الوقت المقدّر</th>
+                  <th className="px-2 py-2 text-start">الرسوم</th>
+                  <th className="px-2 py-2 text-start">الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-border last:border-0">
+                    <td className="px-2 py-2 font-bold">{r.queue_number ?? "—"}</td>
+                    <td className="px-2 py-2">{r.patient?.full_name ?? "—"}</td>
+                    <td className="px-2 py-2 font-mono text-xs">
+                      {r.patient?.phone ?? "—"}
+                    </td>
+                    <td className="px-2 py-2">{r.clinic?.name ?? "—"}</td>
+                    <td className="px-2 py-2 text-xs">
+                      {r.estimated_start_at
+                        ? new Date(r.estimated_start_at).toLocaleTimeString(
+                            "ar-EG",
+                            { hour: "2-digit", minute: "2-digit" },
+                          )
+                        : "—"}
+                    </td>
+                    <td className="px-2 py-2">{r.fee ?? "—"}</td>
+                    <td className="px-2 py-2">
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                        {r.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+

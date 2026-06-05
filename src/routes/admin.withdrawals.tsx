@@ -52,7 +52,7 @@ function AdminWithdrawalsPage() {
     const r = await adminListWithdrawals({
       data: { userId: user.id, status: filter },
     });
-    setRows(r);
+    setRows(r as AdminWithdrawalRow[]);
     setLoading(false);
   }, [user, filter]);
 

@@ -18,7 +18,7 @@
  */
 export const SITE_URL: string =
   (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_SITE_URL) ||
-  "https://tabibi.health";
+  "https://mytabibi.com";
 
 export const siteConfig = {
   url: SITE_URL,
@@ -26,23 +26,52 @@ export const siteConfig = {
     en: "Tabibi",
     ar: "طبيبي",
   },
+  /**
+   * All recognized spellings of the brand name across Arabic, English,
+   * and common transliterations users type into Google and app stores.
+   * Used in JSON-LD `alternateName`, meta keywords, and OG metadata so
+   * the site ranks for any of these queries.
+   */
+  brandAliases: [
+    "طبيبي",
+    "Tabibi",
+    "Tabeebi",
+    "Tbibi",
+    "Taibi",
+    "Tabibi Health",
+    "طبيبي اونلاين",
+    "تطبيق طبيبي",
+    "موقع طبيبي",
+    "Tabibi app",
+  ],
   tagline: {
     en: "Your Health, Connected",
     ar: "صحتك بين يديك",
   },
   defaultDescription: {
-    en: "Tabibi connects patients with verified doctors across the Arab world. Book appointments, video consultations, and manage medical records — all in one trusted platform.",
-    ar: "طبيبي يربطك بأفضل الأطباء الموثوقين في الوطن العربي. احجز موعدك، استشر أونلاين عبر الفيديو، وأدر سجلك الطبي في منصة واحدة آمنة.",
+    en: "Tabibi (طبيبي) connects patients with verified doctors across the Arab world. Book appointments, video consultations, and manage medical records — all in one trusted platform.",
+    ar: "طبيبي (Tabibi) يربطك بأفضل الأطباء الموثوقين في الوطن العربي. احجز موعدك، استشر أونلاين عبر الفيديو، وأدر سجلك الطبي في منصة واحدة آمنة.",
   },
   defaultKeywords: [
+    // Arabic brand + intent queries
+    "طبيبي",
+    "تطبيق طبيبي",
+    "موقع طبيبي",
+    "طبيبي اونلاين",
     "طبيب أونلاين",
     "حجز موعد طبيب",
     "استشارة طبية أونلاين",
     "أطباء معتمدون",
     "تطبيب عن بعد",
+    // English brand + transliterations
     "Tabibi",
+    "Tabibi app",
+    "Tabibi Health",
+    "Tabeebi",
+    "Taibi",
     "online doctor",
     "telemedicine Arab world",
+    "book doctor online",
   ],
   ogImage: "/og/tabibi-og-default.jpg",
   twitterHandle: "@tabibi_health",
@@ -136,6 +165,9 @@ export function buildMeta(input: SeoMetaInput) {
     { property: "og:site_name", content: siteConfig.brand.en },
     { property: "og:locale", content: ogLocale },
     { property: "og:locale:alternate", content: ogLocaleAlt },
+    // Content freshness signal (Rank Math advanced SEO)
+    { property: "og:updated_time", content: new Date().toISOString() },
+    { property: "article:modified_time", content: new Date().toISOString() },
     // Twitter
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:site", content: siteConfig.twitterHandle },
@@ -159,14 +191,28 @@ export function buildMeta(input: SeoMetaInput) {
   return meta;
 }
 
-/** Build the canonical + hreflang link tags for TanStack Start `head()`. */
+/**
+ * Build canonical + hreflang link tags for TanStack Start `head()`.
+ *
+ * Tabibi serves the same URL for all Arabic-speaking markets (the UI
+ * language is controlled by user preference, not the URL), so we
+ * declare regional hreflang variants pointing back to the same
+ * canonical. This is the Google-recommended pattern for sites that
+ * use one URL for multiple regions of the same language:
+ *   https://developers.google.com/search/docs/specialty/international/localized-versions
+ *
+ * Region codes target our priority Arab markets (Egypt + GCC + Jordan).
+ * `x-default` is the global fallback for any other Arabic locale.
+ */
 export function buildSeoLinks(path: string = "/") {
   const canonical = canonicalUrl(path);
-  const cleanPath = path === "/" ? "" : path.startsWith("/") ? path : `/${path}`;
+  // All hreflang variants currently point to the same canonical because
+  // we don't have a separate /en URL tree yet. When the English variant
+  // ships, swap the `en-*` entries to their `/en${path}` equivalents.
+  const arRegions = ["ar", "ar-EG", "ar-SA", "ar-AE", "ar-QA", "ar-KW", "ar-BH", "ar-OM", "ar-JO"];
   return [
     { rel: "canonical", href: canonical },
-    { rel: "alternate", hrefLang: "ar", href: `${siteConfig.url}${cleanPath}` },
-    { rel: "alternate", hrefLang: "en", href: `${siteConfig.url}/en${cleanPath}` },
+    ...arRegions.map((lang) => ({ rel: "alternate", hrefLang: lang, href: canonical })),
     { rel: "alternate", hrefLang: "x-default", href: canonical },
   ];
 }

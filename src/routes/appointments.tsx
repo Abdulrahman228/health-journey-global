@@ -7,7 +7,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
 import { Calendar, Clock, Loader2, X, CheckCircle2, Video, Building2, User as UserIcon, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
-
+import { ConsultationsInbox } from "@/components/ConsultationsInbox";
 export const Route = createFileRoute("/appointments")({
   head: () => ({
     meta: [
@@ -209,6 +209,11 @@ function AppointmentsPage() {
           )}
         </div>
       )}
+
+      {/* Online consultation requests */}
+      <div className="mt-10">
+        <ConsultationsInbox />
+      </div>
     </div>
   );
 }

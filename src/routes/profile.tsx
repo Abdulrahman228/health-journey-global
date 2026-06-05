@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { HeartPulse, User, Mail, Shield } from "lucide-react";
+import { PublicPageManager } from "@/components/dashboard/PublicPageManager";
+import { MedicalCardEditor } from "@/components/dashboard/MedicalCardEditor";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -14,7 +16,7 @@ export const Route = createFileRoute("/profile")({
 });
 
 function ProfilePage() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, profile, role, isAuthenticated, isLoading } = useAuth();
   const { t } = useLanguage();
 
   if (isLoading) {
@@ -79,7 +81,38 @@ function ProfilePage() {
             </div>
           </div>
         </div>
+
+        <div className="mt-6 border-t border-border pt-6">
+          <Link
+            to="/profile/medical-history"
+            className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-4 transition hover:border-primary hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <div className="flex items-center gap-3">
+              <HeartPulse className="h-5 w-5 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {t("My Medical Record", "ملفي الطبي")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "View visit history across all doctors",
+                    "اعرض سجل زياراتك مع كل الأطباء",
+                  )}
+                </p>
+              </div>
+            </div>
+            <span aria-hidden="true" className="text-primary">←</span>
+          </Link>
+        </div>
       </div>
+
+      {/* Public page + QR (patients) */}
+      {profile?.id && role !== "doctor" && (
+        <>
+          <PublicPageManager profileId={profile.id} role="patient" />
+          <MedicalCardEditor profileId={profile.id} />
+        </>
+      )}
     </div>
   );
 }

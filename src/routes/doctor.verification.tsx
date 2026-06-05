@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { BadgeCheck, ShieldCheck, Loader2, Clock, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { DoctorDocumentsUploader } from "@/components/verification/DoctorDocumentsUploader";
 
 export const Route = createFileRoute("/doctor/verification")({
   head: () => ({
@@ -205,6 +206,10 @@ function VerificationPage() {
       <p className="mt-4 text-center text-xs text-muted-foreground">
         بمتابعتك أنت توافق على معالجة بياناتك طبقاً لقانون حماية البيانات 151/2020.
       </p>
+
+      <div className="mt-8 rounded-2xl border border-border bg-card p-6">
+        <DoctorDocumentsUploader />
+      </div>
     </div>
   );
 }

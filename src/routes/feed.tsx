@@ -1,8 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Plus, Search, Megaphone, AlertTriangle, Pill, Layers } from "lucide-react";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
 import { PostCard } from "@/components/feed/PostCard";
 import { listPosts, getUserReactions, type FeedPost, type PostType } from "@/lib/feed";
 import { useAuth } from "@/hooks/useAuth";
@@ -61,9 +59,7 @@ function FeedPage() {
   }, [type, search, user]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <Header />
-      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
         {/* Hero */}
         <div className="mb-6 flex items-end justify-between gap-3 flex-wrap">
           <div>
@@ -150,8 +146,6 @@ function FeedPage() {
             ))}
           </div>
         )}
-      </main>
-      <Footer />
     </div>
   );
 }
