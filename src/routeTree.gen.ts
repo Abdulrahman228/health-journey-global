@@ -42,6 +42,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as USlugRouteImport } from './routes/u.$slug'
 import { Route as SpecialtySlugRouteImport } from './routes/specialty.$slug'
 import { Route as RxIdRouteImport } from './routes/rx.$id'
+import { Route as ReceiptAppointmentIdRouteImport } from './routes/receipt.$appointmentId'
 import { Route as QShortIdRouteImport } from './routes/q.$shortId'
 import { Route as ProfileMedicalHistoryRouteImport } from './routes/profile.medical-history'
 import { Route as ProfileLabResultsRouteImport } from './routes/profile.lab-results'
@@ -248,6 +249,11 @@ const SpecialtySlugRoute = SpecialtySlugRouteImport.update({
 const RxIdRoute = RxIdRouteImport.update({
   id: '/rx/$id',
   path: '/rx/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptAppointmentIdRoute = ReceiptAppointmentIdRouteImport.update({
+  id: '/receipt/$appointmentId',
+  path: '/receipt/$appointmentId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QShortIdRoute = QShortIdRouteImport.update({
@@ -519,6 +525,7 @@ export interface FileRoutesByFullPath {
   '/profile/lab-results': typeof ProfileLabResultsRoute
   '/profile/medical-history': typeof ProfileMedicalHistoryRoute
   '/q/$shortId': typeof QShortIdRoute
+  '/receipt/$appointmentId': typeof ReceiptAppointmentIdRoute
   '/rx/$id': typeof RxIdRoute
   '/specialty/$slug': typeof SpecialtySlugRouteWithChildren
   '/u/$slug': typeof USlugRoute
@@ -595,6 +602,7 @@ export interface FileRoutesByTo {
   '/profile/lab-results': typeof ProfileLabResultsRoute
   '/profile/medical-history': typeof ProfileMedicalHistoryRoute
   '/q/$shortId': typeof QShortIdRoute
+  '/receipt/$appointmentId': typeof ReceiptAppointmentIdRoute
   '/rx/$id': typeof RxIdRoute
   '/specialty/$slug': typeof SpecialtySlugRouteWithChildren
   '/u/$slug': typeof USlugRoute
@@ -672,6 +680,7 @@ export interface FileRoutesById {
   '/profile/lab-results': typeof ProfileLabResultsRoute
   '/profile/medical-history': typeof ProfileMedicalHistoryRoute
   '/q/$shortId': typeof QShortIdRoute
+  '/receipt/$appointmentId': typeof ReceiptAppointmentIdRoute
   '/rx/$id': typeof RxIdRoute
   '/specialty/$slug': typeof SpecialtySlugRouteWithChildren
   '/u/$slug': typeof USlugRoute
@@ -750,6 +759,7 @@ export interface FileRouteTypes {
     | '/profile/lab-results'
     | '/profile/medical-history'
     | '/q/$shortId'
+    | '/receipt/$appointmentId'
     | '/rx/$id'
     | '/specialty/$slug'
     | '/u/$slug'
@@ -826,6 +836,7 @@ export interface FileRouteTypes {
     | '/profile/lab-results'
     | '/profile/medical-history'
     | '/q/$shortId'
+    | '/receipt/$appointmentId'
     | '/rx/$id'
     | '/specialty/$slug'
     | '/u/$slug'
@@ -902,6 +913,7 @@ export interface FileRouteTypes {
     | '/profile/lab-results'
     | '/profile/medical-history'
     | '/q/$shortId'
+    | '/receipt/$appointmentId'
     | '/rx/$id'
     | '/specialty/$slug'
     | '/u/$slug'
@@ -971,6 +983,7 @@ export interface RootRouteChildren {
   PharmacyDashboardRoute: typeof PharmacyDashboardRoute
   PharmacyRegisterRoute: typeof PharmacyRegisterRoute
   QShortIdRoute: typeof QShortIdRoute
+  ReceiptAppointmentIdRoute: typeof ReceiptAppointmentIdRoute
   RxIdRoute: typeof RxIdRoute
   SpecialtySlugRoute: typeof SpecialtySlugRouteWithChildren
   USlugRoute: typeof USlugRoute
@@ -1212,6 +1225,13 @@ declare module '@tanstack/react-router' {
       path: '/rx/$id'
       fullPath: '/rx/$id'
       preLoaderRoute: typeof RxIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receipt/$appointmentId': {
+      id: '/receipt/$appointmentId'
+      path: '/receipt/$appointmentId'
+      fullPath: '/receipt/$appointmentId'
+      preLoaderRoute: typeof ReceiptAppointmentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/q/$shortId': {
@@ -1632,6 +1652,7 @@ const rootRouteChildren: RootRouteChildren = {
   PharmacyDashboardRoute: PharmacyDashboardRoute,
   PharmacyRegisterRoute: PharmacyRegisterRoute,
   QShortIdRoute: QShortIdRoute,
+  ReceiptAppointmentIdRoute: ReceiptAppointmentIdRoute,
   RxIdRoute: RxIdRoute,
   SpecialtySlugRoute: SpecialtySlugRouteWithChildren,
   USlugRoute: USlugRoute,

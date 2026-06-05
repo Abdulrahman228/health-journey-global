@@ -185,3 +185,181 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
 
     return session.url;
   });
+
+// =============================================================================
+// Patient receipt — printable proof of payment for a paid appointment.
+//
+// Caller must be the patient on the appointment, the doctor on it, or admin.
+// Returns null if not authorized or not yet paid.
+// =============================================================================
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+
+export interface AppointmentReceipt {
+  receiptNumber: string;        // R-{YYYYMMDD}-{shortId}
+  appointmentId: string;
+  status: "paid" | "refunded" | "partially_refunded" | "pending" | "failed";
+  paidAt: string | null;
+  refundedAt: string | null;
+  scheduledAt: string;
+  appointmentType: string;
+  fee: number;                  // Major currency units
+  refundedAmount: number;       // Major currency units
+  netPaid: number;              // fee - refundedAmount
+  currency: string;
+  doctorName: string | null;
+  doctorSpecialty: string | null;
+  doctorSyndicate: string | null;
+  patientName: string | null;
+  paymentProvider: string | null;
+  paymentReference: string | null;  // last 12 chars of provider_payment_id
+  environment: "sandbox" | "live" | null;
+}
+
+function generateReceiptNumber(appointmentId: string, paidAt: string | null): string {
+  const date = paidAt ? new Date(paidAt) : new Date();
+  const yyyymmdd =
+    date.getUTCFullYear().toString() +
+    (date.getUTCMonth() + 1).toString().padStart(2, "0") +
+    date.getUTCDate().toString().padStart(2, "0");
+  const shortId = appointmentId.replace(/-/g, "").slice(0, 8).toUpperCase();
+  return `R-${yyyymmdd}-${shortId}`;
+}
+
+export const getAppointmentReceipt = createServerFn({ method: "GET" })
+  .inputValidator((x: unknown) => {
+    const obj = x as { userId?: unknown; appointmentId?: unknown };
+    if (typeof obj.userId !== "string" || !/^[0-9a-f-]{36}$/i.test(obj.userId)) {
+      throw new Error("Invalid userId");
+    }
+    if (
+      typeof obj.appointmentId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(obj.appointmentId)
+    ) {
+      throw new Error("Invalid appointmentId");
+    }
+    return { userId: obj.userId, appointmentId: obj.appointmentId };
+  })
+  .handler(async ({ data }): Promise<AppointmentReceipt | null> => {
+    // 1. Load the appointment.
+    const { data: appt } = await supabaseAdmin
+      .from("appointments")
+      .select(
+        "id, patient_id, doctor_id, scheduled_at, appointment_type, status, fee, currency, payment_status, paid_at, refunded_at, refunded_amount, payment_intent_id, payment_environment",
+      )
+      .eq("id", data.appointmentId)
+      .maybeSingle();
+    if (!appt) return null;
+
+    // 2. Authorization — patient profile or doctor profile or admin.
+    const { data: myProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("user_id", data.userId)
+      .maybeSingle();
+    const myProfileId = (myProfile?.id as string | undefined) ?? null;
+
+    const isPatient = myProfileId !== null && myProfileId === (appt.patient_id as string);
+
+    let isDoctor = false;
+    if (!isPatient && myProfileId) {
+      const { data: dd } = await supabaseAdmin
+        .from("doctor_details")
+        .select("id")
+        .eq("profile_id", myProfileId)
+        .maybeSingle();
+      const myDoctorDetailsId = (dd?.id as string | undefined) ?? null;
+      isDoctor = myDoctorDetailsId !== null && myDoctorDetailsId === (appt.doctor_id as string);
+    }
+
+    let isAdminUser = false;
+    if (!isPatient && !isDoctor) {
+      const { data: rolerow } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.userId)
+        .eq("role", "admin")
+        .maybeSingle();
+      isAdminUser = Boolean(rolerow);
+    }
+
+    if (!isPatient && !isDoctor && !isAdminUser) return null;
+
+    // 3. Only show a receipt for a payment that actually landed.
+    const paymentStatus = (appt.payment_status as string | null) ?? "pending";
+    if (paymentStatus === "pending" || paymentStatus === "failed") {
+      // Still surface metadata so the caller can show "not paid yet" UX
+      // without us pretending it's a receipt.
+      return null;
+    }
+
+    // 4. Doctor + patient names.
+    const doctorDetailsId = appt.doctor_id as string;
+    const patientProfileId = appt.patient_id as string;
+
+    const [{ data: dd }, { data: patientProfile }] = await Promise.all([
+      supabaseAdmin
+        .from("doctor_details")
+        .select("profile_id, specialty, syndicate_number")
+        .eq("id", doctorDetailsId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", patientProfileId)
+        .maybeSingle(),
+    ]);
+
+    let doctorName: string | null = null;
+    if (dd?.profile_id) {
+      const { data: dp } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", dd.profile_id as string)
+        .maybeSingle();
+      doctorName = (dp?.full_name as string | null) ?? null;
+    }
+
+    // 5. Optional payment row for provider reference.
+    const { data: payment } = await supabaseAdmin
+      .from("payments")
+      .select("provider, provider_payment_id, environment")
+      .eq("appointment_id", data.appointmentId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const fee = Number(appt.fee ?? 0);
+    const refundedAmount = Number(appt.refunded_amount ?? 0);
+    const netPaid = Math.max(0, fee - refundedAmount);
+
+    const providerPaymentId = (payment?.provider_payment_id as string | null) ?? null;
+    const reference = providerPaymentId
+      ? providerPaymentId.slice(-12).toUpperCase()
+      : ((appt.payment_intent_id as string | null) ?? "").slice(-12).toUpperCase() || null;
+
+    return {
+      receiptNumber: generateReceiptNumber(
+        appt.id as string,
+        (appt.paid_at as string | null) ?? null,
+      ),
+      appointmentId: appt.id as string,
+      status: paymentStatus as AppointmentReceipt["status"],
+      paidAt: (appt.paid_at as string | null) ?? null,
+      refundedAt: (appt.refunded_at as string | null) ?? null,
+      scheduledAt: appt.scheduled_at as string,
+      appointmentType: (appt.appointment_type as string | null) ?? "in_person",
+      fee,
+      refundedAmount,
+      netPaid,
+      currency: ((appt.currency as string | null) ?? "EGP").toUpperCase(),
+      doctorName,
+      doctorSpecialty: (dd?.specialty as string | null) ?? null,
+      doctorSyndicate: (dd?.syndicate_number as string | null) ?? null,
+      patientName: (patientProfile?.full_name as string | null) ?? null,
+      paymentProvider: (payment?.provider as string | null) ?? "stripe",
+      paymentReference: reference,
+      environment: (payment?.environment as AppointmentReceipt["environment"]) ??
+        (appt.payment_environment as AppointmentReceipt["environment"]) ??
+        null,
+    };
+  });

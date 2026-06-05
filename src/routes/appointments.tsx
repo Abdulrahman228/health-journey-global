@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
-import { Calendar, Clock, Loader2, X, CheckCircle2, Video, Building2, User as UserIcon, Stethoscope } from "lucide-react";
+import { Calendar, Clock, Loader2, X, CheckCircle2, Video, Building2, User as UserIcon, Stethoscope, ReceiptText } from "lucide-react";
 import { toast } from "sonner";
 import { ConsultationsInbox } from "@/components/ConsultationsInbox";
 export const Route = createFileRoute("/appointments")({
@@ -31,6 +31,7 @@ interface EnrichedAppointment {
   counterpart_subtitle: string | null;
   iAmDoctor: boolean;
   currency: string;
+  payment_status: string | null;
 }
 
 function AppointmentsPage() {
@@ -123,6 +124,7 @@ function AppointmentsPage() {
             : doc?.name ?? t("Doctor", "طبيب"),
           counterpart_subtitle: iAmDoctor ? null : doc?.specialty ?? null,
           currency: doc?.currency ?? "EGP",
+          payment_status: (a.payment_status as string | null) ?? null,
         };
       });
     },
@@ -277,6 +279,18 @@ function Section({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                {a.payment_status &&
+                  ["paid", "refunded", "partially_refunded"].includes(a.payment_status) && (
+                    <Link
+                      to="/receipt/$appointmentId"
+                      params={{ appointmentId: a.id }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted"
+                      title={t("View receipt", "عرض الإيصال")}
+                    >
+                      <ReceiptText className="h-4 w-4" />
+                      {t("Receipt", "الإيصال")}
+                    </Link>
+                  )}
                 {a.appointment_type === "video" && a.status === "confirmed" && !isPast && (
                   <Link
                     to="/consultation/$id"

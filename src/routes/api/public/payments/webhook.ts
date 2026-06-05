@@ -380,15 +380,22 @@ async function handleChargeRefunded(charge: any, env: StripeEnv) {
   });
 
   if (appt) {
+    // Convert refundedAmount (Stripe = smallest unit, e.g. piastres) to major
+    // currency units to match appointments.fee + appointments.refunded_amount.
+    const refundedMajor = Math.round(refundedAmount) / 100;
+
     await sb
       .from("appointments")
       .update({
         payment_status: fullyRefunded ? "refunded" : "partially_refunded",
         refunded_at: new Date().toISOString(),
+        refunded_amount: refundedMajor,
         updated_at: new Date().toISOString(),
         ...(fullyRefunded ? { status: "cancelled" } : {}),
       } as never)
       .eq("id", (appt as { id: string }).id);
+    // The trg_appt_refund_tx trigger will auto-insert an offsetting
+    // doctor_transactions row to keep the doctor balance correct.
   }
 }
 
