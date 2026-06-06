@@ -3,7 +3,9 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { assertSelf } from "./_authz";
 
 async function isAdmin(userId: string | null): Promise<boolean> {
   if (!userId) return false;
@@ -36,10 +38,12 @@ export interface SupportTicket {
 }
 
 export const listMyTickets = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ userId: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }): Promise<SupportTicket[]> => {
+  .handler(async ({ data, context }): Promise<SupportTicket[]> => {
+    assertSelf(context.userId, data.userId);
     const { data: rows } = await supabaseAdmin
       .from("support_tickets")
       .select("*")
@@ -50,6 +54,7 @@ export const listMyTickets = createServerFn({ method: "GET" })
   });
 
 export const fileSupportTicket = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -62,7 +67,8 @@ export const fileSupportTicket = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<SupportTicket> => {
+  .handler(async ({ data, context }): Promise<SupportTicket> => {
+    assertSelf(context.userId, data.userId);
     const { data: row, error } = await supabaseAdmin
       .from("support_tickets")
       .insert({
@@ -78,6 +84,7 @@ export const fileSupportTicket = createServerFn({ method: "POST" })
   });
 
 export const listAllTickets = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -86,7 +93,8 @@ export const listAllTickets = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<SupportTicket[]> => {
+  .handler(async ({ data, context }): Promise<SupportTicket[]> => {
+    assertSelf(context.userId, data.userId);
     if (!(await isAdmin(data.userId))) return [];
     let q = supabaseAdmin
       .from("support_tickets")
@@ -113,6 +121,7 @@ export const listAllTickets = createServerFn({ method: "GET" })
   });
 
 export const respondToTicket = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -123,7 +132,8 @@ export const respondToTicket = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<{ ok: true }> => {
+  .handler(async ({ data, context }): Promise<{ ok: true }> => {
+    assertSelf(context.userId, data.userId);
     if (!(await isAdmin(data.userId))) throw new Error("forbidden");
     const { error } = await supabaseAdmin
       .from("support_tickets")

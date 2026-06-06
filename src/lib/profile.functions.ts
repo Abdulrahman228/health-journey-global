@@ -7,6 +7,7 @@
  * - bumpProfileView — anonymous view counter
  */
 import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { generateShortId } from "./slug";
 import type { MedicalCard } from "./medical-card";
@@ -156,6 +157,7 @@ export const bumpProfileView = createServerFn({ method: "POST" })
 
 /** Owner creates a short link for their own profile. */
 export const createShortLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown): { profileId: string; targetPath: string; label?: string } => {
     if (
       !input ||
@@ -167,7 +169,23 @@ export const createShortLink = createServerFn({ method: "POST" })
     }
     return input as { profileId: string; targetPath: string; label?: string };
   })
-  .handler(async ({ data }): Promise<{ shortId: string }> => {
+  .handler(async ({ data, context }): Promise<{ shortId: string }> => {
+    // Authorize: caller must own this profile (or be admin).
+    const { data: prof } = await supabaseAdmin
+      .from("profiles")
+      .select("user_id")
+      .eq("id", data.profileId)
+      .maybeSingle();
+    if (!prof) throw new Error("profile not found");
+    if (prof.user_id !== context.userId) {
+      const { data: adminRow } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", context.userId)
+        .eq("role", "admin")
+        .maybeSingle();
+      if (!adminRow) throw new Error("forbidden");
+    }
     // Try up to 5 times in case of collision.
     for (let attempt = 0; attempt < 5; attempt++) {
       const shortId = generateShortId(6);

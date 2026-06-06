@@ -3,7 +3,9 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { assertSelf } from "./_authz";
 
 async function assertAdmin(userId: string) {
   const { data, error } = await supabaseAdmin
@@ -41,8 +43,10 @@ export type EligibleAppointment = {
 };
 
 export const listEligibleAppointments = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => eligibleInput.parse(x))
-  .handler(async ({ data }): Promise<EligibleAppointment[]> => {
+  .handler(async ({ data, context }): Promise<EligibleAppointment[]> => {
+    assertSelf(context.userId, data.userId);
     const profileId = await profileIdForUser(data.userId);
 
     const { data: appts, error } = await supabaseAdmin
@@ -95,8 +99,10 @@ const submitInput = z.object({
 });
 
 export const submitReview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => submitInput.parse(x))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const profileId = await profileIdForUser(data.userId);
 
     const { data: appt, error: appErr } = await supabaseAdmin
@@ -157,8 +163,10 @@ const listInput = z.object({
 });
 
 export const adminListReviews = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => listInput.parse(x))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     await assertAdmin(data.userId);
     let q = supabaseAdmin
       .from("reviews")
@@ -199,8 +207,10 @@ const moderateInput = z.object({
 });
 
 export const adminModerateReview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => moderateInput.parse(x))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     await assertAdmin(data.userId);
     const { data: prof } = await supabaseAdmin
       .from("profiles")
@@ -269,8 +279,10 @@ export type DoctorReviewRow = {
 };
 
 export const doctorListMyReviews = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => doctorListInput.parse(x))
-  .handler(async ({ data }): Promise<DoctorReviewRow[]> => {
+  .handler(async ({ data, context }): Promise<DoctorReviewRow[]> => {
+    assertSelf(context.userId, data.userId);
     const doctorId = await doctorDetailsIdForUser(data.userId);
 
     let q = supabaseAdmin
@@ -325,8 +337,10 @@ const doctorPublishInput = z.object({
 });
 
 export const doctorTogglePublishReview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => doctorPublishInput.parse(x))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const doctorId = await doctorDetailsIdForUser(data.userId);
 
     // Defensive ownership + status check (RLS + trigger also enforce).
@@ -362,8 +376,10 @@ const doctorRespondInput = z.object({
 });
 
 export const doctorRespondToReview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => doctorRespondInput.parse(x))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const doctorId = await doctorDetailsIdForUser(data.userId);
 
     const { data: row, error: rErr } = await supabaseAdmin

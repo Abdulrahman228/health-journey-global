@@ -9,7 +9,9 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { assertSelf } from "./_authz";
 
 // ---- Types ----
 export interface VitalsJson {
@@ -116,20 +118,28 @@ function mapRecord(row: Record<string, unknown>, includePrivate: boolean): Medic
 // Read: doctor or admin lists a patient's full history with THIS doctor
 // ============================================================
 export const getPatientHistoryForDoctor = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ patientProfileId: z.string().uuid() }).parse(x),
   )
   .handler(async ({ data, context }) => {
-    // Tanstack Start exposes request via context.request when needed.
-    // We use Supabase to verify identity via the JWT in cookies — but for
-    // simplicity here we rely on the admin client + caller passing a
-    // verified `viewerUserId` via headers, OR enforce via RLS by using
-    // anon supabase client. For now: use supabaseAdmin and validate caller.
-    void context;
-
-    // TODO: in production, derive userId from cookie session.
-    // For now we let the front-end pass the auth token and we resolve via
-    // supabaseAdmin. Browser-side guards already prevent unauth access.
+    // Caller must be admin OR a doctor who has a medical_record with this patient.
+    const myProfileId = await getMyProfileId(context.userId);
+    const admin = await isAdmin(context.userId);
+    if (!admin) {
+      if (!myProfileId) return [];
+      const { data: link } = await supabaseAdmin
+        .from("medical_records")
+        .select("id")
+        .eq("patient_profile_id", data.patientProfileId)
+        .eq("doctor_profile_id", myProfileId)
+        .limit(1)
+        .maybeSingle();
+      if (!link) {
+        // Allow the patient themselves to read their full history with private notes hidden:
+        if (myProfileId !== data.patientProfileId) return [];
+      }
+    }
 
     const { data: rows, error } = await supabaseAdmin
       .from("medical_records")
@@ -148,10 +158,12 @@ export const getPatientHistoryForDoctor = createServerFn({ method: "GET" })
 // `private_notes` are filtered out.
 // ============================================================
 export const getMyMedicalHistory = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ userId: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const profileId = await getMyProfileId(data.userId);
     if (!profileId) return [];
 
@@ -191,6 +203,7 @@ export const getMyMedicalHistory = createServerFn({ method: "GET" })
 // Doctor: search/list patients they've ever treated
 // ============================================================
 export const searchMyPatients = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -199,7 +212,8 @@ export const searchMyPatients = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const doctorProfileId = await getMyProfileId(data.userId);
     if (!doctorProfileId) return [];
 
@@ -301,7 +315,9 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const doctorProfileId = await getMyProfileId(data.userId);
     if (!doctorProfileId) {
       return { ok: false as const, error: "unauth" };
@@ -374,10 +390,28 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
 // Get prescriptions for a medical record (with items)
 // ============================================================
 export const getPrescriptionsForRecord = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ medicalRecordId: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }): Promise<Prescription[]> => {
+  .handler(async ({ data, context }): Promise<Prescription[]> => {
+    // Authorize: caller must be patient, prescribing doctor, or admin.
+    const { data: rec } = await supabaseAdmin
+      .from("medical_records")
+      .select("patient_profile_id, doctor_profile_id")
+      .eq("id", data.medicalRecordId)
+      .maybeSingle();
+    if (!rec) return [];
+    const myProfileId = await getMyProfileId(context.userId);
+    const admin = await isAdmin(context.userId);
+    if (
+      !admin &&
+      myProfileId !== (rec.patient_profile_id as string) &&
+      myProfileId !== (rec.doctor_profile_id as string)
+    ) {
+      return [];
+    }
+
     const { data: rxs, error } = await supabaseAdmin
       .from("prescriptions")
       .select(
@@ -425,10 +459,25 @@ export const getPrescriptionsForRecord = createServerFn({ method: "GET" })
 // Patient medical profile (allergies, chronic, meds)
 // ============================================================
 export const getPatientMedicalProfile = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ patientProfileId: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Authorize: caller must be the patient, admin, or a treating doctor.
+    const myProfileId = await getMyProfileId(context.userId);
+    const admin = await isAdmin(context.userId);
+    if (!admin && myProfileId !== data.patientProfileId) {
+      if (!myProfileId) return null;
+      const { data: link } = await supabaseAdmin
+        .from("medical_records")
+        .select("id")
+        .eq("patient_profile_id", data.patientProfileId)
+        .eq("doctor_profile_id", myProfileId)
+        .limit(1)
+        .maybeSingle();
+      if (!link) return null;
+    }
     const { data: p } = await supabaseAdmin
       .from("patient_medical_profile")
       .select("*")
@@ -448,6 +497,7 @@ export const getPatientMedicalProfile = createServerFn({ method: "GET" })
   });
 
 export const upsertMyMedicalProfile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -462,7 +512,8 @@ export const upsertMyMedicalProfile = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const profileId = await getMyProfileId(data.userId);
     if (!profileId) return { ok: false as const, error: "unauth" };
     const { error } = await supabaseAdmin.from("patient_medical_profile").upsert(
@@ -596,6 +647,7 @@ export interface PrescriptionView {
 }
 
 export const getPrescriptionView = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -604,7 +656,8 @@ export const getPrescriptionView = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<PrescriptionView | null> => {
+  .handler(async ({ data, context }): Promise<PrescriptionView | null> => {
+    assertSelf(context.userId, data.userId);
     // 1. Load the prescription + record
     const { data: rx } = await supabaseAdmin
       .from("prescriptions")

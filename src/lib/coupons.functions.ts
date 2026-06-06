@@ -12,6 +12,7 @@
  * does not consume a per-user redemption slot.
  */
 import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export interface CouponValidationResult {
@@ -209,6 +210,7 @@ export async function evaluateCoupon(
 // Server fn: validateCoupon (callable from the booking UI)
 // =============================================================================
 export const validateCoupon = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => {
     const obj = x as ValidateInput | undefined;
     if (!obj || typeof obj.code !== "string") throw new Error("Missing code");
@@ -224,7 +226,10 @@ export const validateCoupon = createServerFn({ method: "POST" })
       userId: obj.userId ?? null,
     };
   })
-  .handler(async ({ data }) => evaluateCoupon(data));
+  .handler(async ({ data, context }) => {
+    // Force userId to the authenticated user (prevent probing other users' redemption history).
+    return evaluateCoupon({ ...data, userId: context.userId });
+  });
 
 // =============================================================================
 // Internal: applyCouponToAppointment

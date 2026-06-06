@@ -9,7 +9,9 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { assertSelf } from "./_authz";
 
 const BUCKET = "medical-attachments";
 const SIGNED_URL_TTL = 60 * 60; // 1 hour
@@ -70,6 +72,7 @@ async function isAuthorizedForPatient(
 // List attachments for a patient (optionally scoped to a record)
 // ============================================================
 export const listAttachments = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -79,7 +82,8 @@ export const listAttachments = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<AttachmentRow[]> => {
+  .handler(async ({ data, context }): Promise<AttachmentRow[]> => {
+    assertSelf(context.userId, data.userId);
     const role = await isAuthorizedForPatient(data.userId, data.patientProfileId);
     if (!role) return [];
 
@@ -126,6 +130,7 @@ export const listAttachments = createServerFn({ method: "GET" })
 // directly to storage from the browser (using anon client + RLS).
 // ============================================================
 export const recordAttachment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -149,7 +154,8 @@ export const recordAttachment = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const role = await isAuthorizedForPatient(data.userId, data.patientProfileId);
     if (!role) return { ok: false as const, error: "Unauthorized" };
 
@@ -184,6 +190,7 @@ export const recordAttachment = createServerFn({ method: "POST" })
 // Delete an attachment (row + storage object)
 // ============================================================
 export const deleteAttachment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -192,7 +199,8 @@ export const deleteAttachment = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const { data: row } = await supabaseAdmin
       .from("medical_attachments")
       .select("patient_profile_id, file_url, uploaded_by_profile_id")

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { assertSelf } from "./_authz";
 import { type StripeEnv, createStripeClient } from "@/lib/stripe.server";
 
 async function resolveOrCreateCustomer(
@@ -36,6 +37,7 @@ async function resolveOrCreateCustomer(
 }
 
 export const createCheckoutSession = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data: {
     priceId: string;
     planCode?: string;
@@ -47,7 +49,12 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
     if (!/^[a-zA-Z0-9_-]+$/.test(data.priceId)) throw new Error("Invalid priceId");
     return data;
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Always bind checkout to the authenticated user, never trust input.
+    const userId = context.userId;
+    if (data.userId && data.userId !== userId) {
+      throw new Error("Unauthorized");
+    }
     const stripe = createStripeClient(data.environment);
 
     const prices = await stripe.prices.list({ lookup_keys: [data.priceId] });
@@ -55,10 +62,10 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
     const stripePrice = prices.data[0];
     const isRecurring = stripePrice.type === "recurring";
 
-    const customerId = (data.customerEmail || data.userId)
+    const customerId = (data.customerEmail || userId)
       ? await resolveOrCreateCustomer(stripe, {
           email: data.customerEmail,
-          userId: data.userId,
+          userId,
         })
       : undefined;
 
@@ -78,11 +85,11 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
       return_url: data.returnUrl,
       ...(customerId && { customer: customerId }),
       ...(!isRecurring && { payment_intent_data: { description: productDescription } }),
-      ...(data.userId && {
-        metadata: { userId: data.userId, ...(data.planCode && { planCode: data.planCode }) },
+      ...(userId && {
+        metadata: { userId, ...(data.planCode && { planCode: data.planCode }) },
         ...(isRecurring && {
           subscription_data: {
-            metadata: { userId: data.userId, ...(data.planCode && { planCode: data.planCode }) },
+            metadata: { userId, ...(data.planCode && { planCode: data.planCode }) },
           },
         }),
       }),
@@ -122,6 +129,7 @@ import { getStripeEnvironment } from "@/lib/stripe";
 import { applyCouponToAppointment } from "@/lib/coupons.functions";
 
 export const createAppointmentCheckout = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data: {
     appointmentId: string;
     amount: number; // in smallest currency unit (e.g. cents / piastres)
@@ -148,7 +156,12 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
     }
     return data;
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Bind checkout to authenticated user; reject any mismatched input userId.
+    const userId = context.userId;
+    if (data.userId && data.userId !== userId) {
+      throw new Error("Unauthorized");
+    }
     const env: StripeEnv = getStripeEnvironment();
     const stripe = createStripeClient(env);
 
@@ -167,7 +180,7 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
         currency: data.currency,
         appointmentType: data.appointmentType,
         doctorId: data.doctorId ?? null,
-        userId: data.userId ?? null,
+        userId,
       });
       if (result.valid && result.code) {
         amountMinor = Math.round(result.finalAmount * 100);
@@ -182,10 +195,10 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
       throw new Error("بعد خصم الكود أصبح المبلغ صغيراً جداً. تواصل مع الدعم.");
     }
 
-    const customerId = (data.customerEmail || data.userId)
+    const customerId = (data.customerEmail || userId)
       ? await resolveOrCreateCustomer(stripe, {
           email: data.customerEmail,
-          userId: data.userId,
+          userId,
         })
       : undefined;
 
@@ -211,7 +224,7 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
         description: `Tabibi appointment ${data.appointmentId}`,
         metadata: {
           appointment_id: data.appointmentId,
-          ...(data.userId && { userId: data.userId }),
+          ...(userId && { userId }),
           ...(appliedCoupon && {
             coupon_code: appliedCoupon.code,
             coupon_discount: appliedCoupon.discount.toFixed(2),
@@ -220,7 +233,7 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
       },
       metadata: {
         appointment_id: data.appointmentId,
-        ...(data.userId && { userId: data.userId }),
+        ...(userId && { userId }),
         ...(appliedCoupon && {
           coupon_code: appliedCoupon.code,
           coupon_discount: appliedCoupon.discount.toFixed(2),
@@ -273,6 +286,7 @@ function generateReceiptNumber(appointmentId: string, paidAt: string | null): st
 }
 
 export const getAppointmentReceipt = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => {
     const obj = x as { userId?: unknown; appointmentId?: unknown };
     if (typeof obj.userId !== "string" || !/^[0-9a-f-]{36}$/i.test(obj.userId)) {
@@ -286,7 +300,8 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
     }
     return { userId: obj.userId, appointmentId: obj.appointmentId };
   })
-  .handler(async ({ data }): Promise<AppointmentReceipt | null> => {
+  .handler(async ({ data, context }): Promise<AppointmentReceipt | null> => {
+    assertSelf(context.userId, data.userId);
     // 1. Load the appointment.
     const { data: appt } = await supabaseAdmin
       .from("appointments")

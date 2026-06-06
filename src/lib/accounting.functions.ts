@@ -11,7 +11,9 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { assertSelf } from "./_authz";
 
 // ---- Types ----
 export interface DoctorBalance {
@@ -99,10 +101,12 @@ async function isAdminUser(userId: string): Promise<boolean> {
 // Doctor balance summary
 // ============================================================
 export const getDoctorBalance = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ userId: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }): Promise<DoctorBalance | null> => {
+  .handler(async ({ data, context }): Promise<DoctorBalance | null> => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return null;
 
@@ -197,6 +201,7 @@ export const getDoctorBalance = createServerFn({ method: "GET" })
 // Doctor transactions list
 // ============================================================
 export const getDoctorTransactions = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -205,7 +210,8 @@ export const getDoctorTransactions = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<DoctorTransaction[]> => {
+  .handler(async ({ data, context }): Promise<DoctorTransaction[]> => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return [];
     const { data: txs } = await supabaseAdmin
@@ -235,10 +241,12 @@ export const getDoctorTransactions = createServerFn({ method: "GET" })
 // Doctor withdrawals list
 // ============================================================
 export const getDoctorWithdrawals = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ userId: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }): Promise<DoctorWithdrawal[]> => {
+  .handler(async ({ data, context }): Promise<DoctorWithdrawal[]> => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return [];
     const { data: wds } = await supabaseAdmin
@@ -270,6 +278,7 @@ function mapWd(w: Record<string, unknown>): DoctorWithdrawal {
 // Request a withdrawal
 // ============================================================
 export const requestWithdrawal = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -279,7 +288,8 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return { ok: false as const, error: "Not a doctor" };
 
@@ -334,6 +344,7 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
 // Cancel pending withdrawal (doctor)
 // ============================================================
 export const cancelMyWithdrawal = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -342,7 +353,8 @@ export const cancelMyWithdrawal = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return { ok: false as const, error: "Not a doctor" };
     const { error } = await supabaseAdmin
@@ -359,10 +371,12 @@ export const cancelMyWithdrawal = createServerFn({ method: "POST" })
 // Billing settings — get/upsert
 // ============================================================
 export const getMyBillingSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ userId: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }): Promise<BillingSettings | null> => {
+  .handler(async ({ data, context }): Promise<BillingSettings | null> => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return null;
     const { data: row } = await supabaseAdmin
@@ -401,6 +415,7 @@ export const getMyBillingSettings = createServerFn({ method: "GET" })
   });
 
 export const upsertMyBillingSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -417,7 +432,8 @@ export const upsertMyBillingSettings = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return { ok: false as const, error: "Not a doctor" };
     const { error } = await supabaseAdmin.from("doctor_billing_settings").upsert(
@@ -449,6 +465,7 @@ export interface AdminWithdrawalRow extends DoctorWithdrawal {
 }
 
 export const adminListWithdrawals = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -459,7 +476,8 @@ export const adminListWithdrawals = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<AdminWithdrawalRow[]> => {
+  .handler(async ({ data, context }): Promise<AdminWithdrawalRow[]> => {
+    assertSelf(context.userId, data.userId);
     if (!(await isAdminUser(data.userId))) return [];
     let q = supabaseAdmin
       .from("doctor_withdrawals")
@@ -507,6 +525,7 @@ export const adminListWithdrawals = createServerFn({ method: "GET" })
 // ADMIN: update withdrawal status
 // ============================================================
 export const adminUpdateWithdrawal = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -518,7 +537,8 @@ export const adminUpdateWithdrawal = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     if (!(await isAdminUser(data.userId))) {
       return { ok: false as const, error: "Unauthorized" };
     }

@@ -9,7 +9,9 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { assertSelf } from "./_authz";
 
 export const EXPENSE_CATEGORIES = [
   "rent",
@@ -82,6 +84,7 @@ async function requireTier(
 // LIST
 // ---------------------------------------------------------------------------
 export const listMyExpenses = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -91,7 +94,8 @@ export const listMyExpenses = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<DoctorExpense[]> => {
+  .handler(async ({ data, context }): Promise<DoctorExpense[]> => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return [];
 
@@ -136,6 +140,7 @@ export const listMyExpenses = createServerFn({ method: "GET" })
 // CREATE
 // ---------------------------------------------------------------------------
 export const addMyExpense = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -150,7 +155,8 @@ export const addMyExpense = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) throw new Error("Doctor profile not found");
     const ok = await requireTier(ddId, "premium");
@@ -180,10 +186,12 @@ export const addMyExpense = createServerFn({ method: "POST" })
 // DELETE
 // ---------------------------------------------------------------------------
 export const deleteMyExpense = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ userId: z.string().uuid(), id: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) throw new Error("Doctor profile not found");
 
@@ -201,6 +209,7 @@ export const deleteMyExpense = createServerFn({ method: "POST" })
 // MONTHLY P&L (with CSV)
 // ---------------------------------------------------------------------------
 export const getMyMonthlyPnL = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -210,7 +219,8 @@ export const getMyMonthlyPnL = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<MonthlyPnL | null> => {
+  .handler(async ({ data, context }): Promise<MonthlyPnL | null> => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return null;
     const ok = await requireTier(ddId, "premium");
