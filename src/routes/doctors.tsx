@@ -10,6 +10,7 @@ import { buildMeta, buildSeoLinks } from "@/lib/seo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SponsoredDoctorsRow } from "@/components/doctors/SponsoredDoctorsRow";
 import { TierBadge, type DoctorTier } from "@/components/TierBadge";
+import { HeroHierarchicalSearch } from "@/components/HeroHierarchicalSearch";
 
 export const Route = createFileRoute("/doctors")({
   head: () => ({
@@ -68,7 +69,7 @@ const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAYS_AR = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 function DoctorsPage() {
-  const { t, language } = useLanguage();
+  const { t, language, isRTL } = useLanguage();
   const [search, setSearch] = useState("");
   const [specialty, setSpecialty] = useState<string>("");
   const [city, setCity] = useState("");
@@ -81,8 +82,20 @@ function DoctorsPage() {
   const [locError, setLocError] = useState<string | null>(null);
   const [maxDistanceKm, setMaxDistanceKm] = useState<string>("");
 
+  const days = language === "ar" ? DAYS_AR : DAYS_EN;
+
+  const { data: specialties = [] } = useQuery({
+    queryKey: ["specialties"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("specialties").select("*").order("name_en");
+      if (error) throw error;
+      return data as Specialty[];
+    },
+  });
+
   // Hydrate filters from URL query string on mount (so the new Hero
   // hierarchical search and "Near me" button can pre-populate this page).
+  // Re-run whenever specialties load so we can resolve specialty slug -> name.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -95,7 +108,17 @@ function DoctorsPage() {
     const lng = params.get("lng");
     const km = params.get("max_km");
 
-    if (sp) setSpecialty(sp);
+    if (sp) {
+      // Hero ships slugs, but the filter compares against the localized
+      // specialty name stored on doctor_details.specialty. Resolve the slug
+      // to the canonical name when specialties have loaded.
+      const match = specialties.find((s) => s.slug === sp);
+      if (match) {
+        setSpecialty(language === "ar" ? match.name_ar : match.name_en);
+      } else {
+        setSpecialty(sp);
+      }
+    }
     // Use any of the location slugs as a free-text city filter (matches
     // against profiles.city / clinics.city via case-insensitive includes).
     const locSlug = d || c || g || co;
@@ -110,18 +133,7 @@ function DoctorsPage() {
       }
     }
     if (km) setMaxDistanceKm(km);
-  }, []);
-
-  const days = language === "ar" ? DAYS_AR : DAYS_EN;
-
-  const { data: specialties = [] } = useQuery({
-    queryKey: ["specialties"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("specialties").select("*").order("name_en");
-      if (error) throw error;
-      return data as Specialty[];
-    },
-  });
+  }, [specialties, language]);
 
   const { data: doctors = [], isLoading } = useQuery({
     queryKey: ["doctors-with-clinics"],
@@ -255,7 +267,17 @@ function DoctorsPage() {
             {t("Browse verified doctors and book in seconds.", "تصفح أطباء موثقين واحجز في ثوانٍ.")}
           </p>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-3 bg-card p-4 rounded-xl shadow-sm border border-border">
+          {/* Detailed hierarchical search (Country → Governorate → City → District + specialty + Near me) */}
+          <div className="mt-6">
+            <HeroHierarchicalSearch language={language} isRTL={isRTL} t={t} />
+          </div>
+
+          {/* Quick refine inside loaded results (name / specialty / city free-text) */}
+          <div className="mt-6">
+            <h2 className="text-sm font-semibold text-muted-foreground mb-2">
+              {t("Refine results", "تصفية النتائج")}
+            </h2>
+            <div className="grid gap-3 md:grid-cols-3 bg-card p-4 rounded-xl shadow-sm border border-border">
             <div className="relative">
               <Search className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-muted-foreground" />
               <input
@@ -285,6 +307,7 @@ function DoctorsPage() {
                 placeholder={t("City (e.g. Cairo)", "المدينة (مثال: القاهرة)")}
                 className="w-full ps-10 pe-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
+            </div>
             </div>
           </div>
 
