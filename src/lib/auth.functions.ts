@@ -1,8 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { rateLimitMiddleware } from "./_rate-limit";
+import { assertSelf } from "./_authz";
 
 type BootstrapRole = "doctor" | "patient";
+
+// Strong-password rule: min 10 chars, at least one letter and one digit
+// (kept ASCII-friendly to avoid breaking Arabic/Latin keyboards).
+const strongPassword = z
+  .string()
+  .min(10, "Password must be at least 10 characters")
+  .max(128)
+  .regex(/[A-Za-z]/, "Password must contain a letter")
+  .regex(/[0-9]/, "Password must contain a digit");
 
 async function ensureRoleSpecificDetails(userId: string, role: BootstrapRole) {
   const { data: profile } = await supabaseAdmin
@@ -45,11 +57,13 @@ async function ensureRoleSpecificDetails(userId: string, role: BootstrapRole) {
 }
 
 export const signUpUser = createServerFn({ method: "POST" })
+  // 5 sign-ups per hour per IP keeps account-creation abuse / spam in check.
+  .middleware([rateLimitMiddleware("signup", 5, 60 * 60 * 1000)])
   .inputValidator((data) =>
     z
       .object({
         email: z.string().email(),
-        password: z.string().min(6),
+        password: strongPassword,
         fullName: z.string().min(2),
         role: z.enum(["doctor", "patient"]),
         phone: z.string().optional(),
@@ -110,6 +124,7 @@ export const signUpUser = createServerFn({ method: "POST" })
   });
 
 export const bootstrapOAuthUser = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data) =>
     z
       .object({
@@ -120,7 +135,9 @@ export const bootstrapOAuthUser = createServerFn({ method: "POST" })
       })
       .parse(data)
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Only the user who just authenticated may bootstrap their own profile/role.
+    assertSelf(context.userId, data.userId);
     const { data: authUserResult, error: userError } = await supabaseAdmin.auth.admin.getUserById(data.userId);
     if (userError || !authUserResult.user) {
       throw new Error(userError?.message ?? "OAuth user not found");
@@ -174,8 +191,11 @@ export const bootstrapOAuthUser = createServerFn({ method: "POST" })
   });
 
 export const getUserProfile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ userId: z.string() }).parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // A user may only fetch their own profile via this endpoint.
+    assertSelf(context.userId, data.userId);
     const { data: profile, error } = await supabaseAdmin
       .from("profiles")
       .select("*")

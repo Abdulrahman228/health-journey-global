@@ -13,7 +13,12 @@ import { supabase } from "@/integrations/supabase/client";
 const signupSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email(),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z
+    .string()
+    .min(10, "Password must be at least 10 characters")
+    .max(128)
+    .regex(/[A-Za-z]/, "Password must contain a letter")
+    .regex(/[0-9]/, "Password must contain a digit"),
   phone: z.string().optional(),
   city: z.string().optional(),
   role: z.enum(["doctor", "patient"]),

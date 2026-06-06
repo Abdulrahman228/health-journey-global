@@ -11,6 +11,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { assertSelf } from "./_authz";
 
 // --- Types --------------------------------------------------------------
 
@@ -73,10 +75,12 @@ function emptySeries(days: number): DoctorAnalyticsSeriesPoint[] {
 // --- Public RPC ---------------------------------------------------------
 
 export const getDoctorAnalytics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z.object({ userId: z.string().uuid() }).parse(x),
   )
-  .handler(async ({ data }): Promise<DoctorAnalytics | null> => {
+  .handler(async ({ data, context }): Promise<DoctorAnalytics | null> => {
+    assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return null;
 

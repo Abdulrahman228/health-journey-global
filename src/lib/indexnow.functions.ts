@@ -10,6 +10,14 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { submitDoctorUrls, submitArticleUrls, submitUrls } from "@/lib/indexnow";
 import { CITIES, cityMatchTerms } from "@/lib/cities";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { isAdmin } from "./_authz";
+
+async function assertAdmin(userId: string) {
+  if (!(await isAdmin(userId))) {
+    throw new Error("Unauthorized: admin only");
+  }
+}
 
 /**
  * Generic IndexNow ping — accepts an arbitrary URL list. Used by
@@ -17,6 +25,7 @@ import { CITIES, cityMatchTerms } from "@/lib/cities";
  * + /sitemap-doctors.xml.
  */
 export const pingIndexNow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data) =>
     z
       .object({
@@ -24,9 +33,13 @@ export const pingIndexNow = createServerFn({ method: "POST" })
       })
       .parse(data),
   )
-  .handler(async ({ data }) => submitUrls(data.urls));
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId);
+    return submitUrls(data.urls);
+  });
 
 export const pingIndexNowForDoctor = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data) =>
     z
       .object({
@@ -34,7 +47,8 @@ export const pingIndexNowForDoctor = createServerFn({ method: "POST" })
       })
       .parse(data),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId);
     const { data: d, error } = await supabaseAdmin
       .from("doctor_details")
       .select("id, specialty, profile_id")
@@ -70,6 +84,7 @@ export const pingIndexNowForDoctor = createServerFn({ method: "POST" })
   });
 
 export const pingIndexNowForArticle = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data) =>
     z
       .object({
@@ -78,7 +93,8 @@ export const pingIndexNowForArticle = createServerFn({ method: "POST" })
       })
       .parse(data),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId);
     return submitArticleUrls({
       slug: data.slug,
       specialtySlug: data.specialtySlug ?? null,

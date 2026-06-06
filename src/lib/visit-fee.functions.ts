@@ -15,6 +15,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { assertSelf } from "./_authz";
 
 export interface VisitFeeDecision {
   visitType: "first_visit" | "follow_up";
@@ -55,6 +57,7 @@ async function getDoctorFollowupSettings(
 }
 
 export const determineVisitFee = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -63,7 +66,18 @@ export const determineVisitFee = createServerFn({ method: "GET" })
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<VisitFeeDecision> => {
+  .handler(async ({ data, context }): Promise<VisitFeeDecision> => {
+    // The patient must own patientProfileId; we don't expose past-visit
+    // existence to anyone else.
+    const { data: callerProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!callerProfile || callerProfile.id !== data.patientProfileId) {
+      throw new Error("Unauthorized");
+    }
+
     // 1) Fetch doctor base fee + profile id
     const { data: dd } = await supabaseAdmin
       .from("doctor_details")
@@ -178,8 +192,10 @@ export const determineVisitFee = createServerFn({ method: "GET" })
 // Doctor settings CRUD
 // ============================================================
 export const getMyFollowupSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => z.object({ userId: z.string().uuid() }).parse(x))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const { data: prof } = await supabaseAdmin
       .from("profiles")
       .select("id")
@@ -207,6 +223,7 @@ export const getMyFollowupSettings = createServerFn({ method: "GET" })
   });
 
 export const updateMyFollowupSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) =>
     z
       .object({
@@ -217,7 +234,8 @@ export const updateMyFollowupSettings = createServerFn({ method: "POST" })
       })
       .parse(x),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
     const { data: prof } = await supabaseAdmin
       .from("profiles")
       .select("id")
