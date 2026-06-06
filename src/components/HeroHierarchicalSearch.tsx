@@ -419,11 +419,18 @@ export function HeroHierarchicalSearch({
     }
 
     const params = new URLSearchParams();
+    // Specialty stays as slug because /doctors resolves it via the specialties cache.
     if (specialty) params.set("specialty", specialty);
+    // For the geographic part, the /doctors page filters doctors by matching the
+    // free-text `city` string against `profiles.city` (Arabic names in the DB).
+    // Passing the slug ("nasr-city-d1") would never match, so we ship the
+    // most specific visible Arabic name AND the slug (the slug is kept for SEO/URL stability).
+    const mostSpecific = districtObj || cityObj || govObj || countryObj;
     if (districtObj) params.set("district", districtObj.slug);
     else if (cityObj) params.set("city", cityObj.slug);
     else if (govObj) params.set("gov", govObj.slug);
     else if (countryObj) params.set("country", countryObj.slug);
+    if (mostSpecific) params.set("q", mostSpecific.name_ar);
 
     const qs = params.toString();
     window.location.href = qs ? `/doctors?${qs}` : "/doctors";

@@ -119,10 +119,17 @@ function DoctorsPage() {
         setSpecialty(sp);
       }
     }
-    // Use any of the location slugs as a free-text city filter (matches
-    // against profiles.city / clinics.city via case-insensitive includes).
-    const locSlug = d || c || g || co;
-    if (locSlug) setCity(locSlug.replace(/-/g, " "));
+    // Prefer the human-readable Arabic name (`q`) that HeroHierarchicalSearch
+    // ships along with the slug — slugs like "nasr-city-d1" never match
+    // `profiles.city` which stores names like "مدينة نصر". Fall back to the
+    // most-specific slug (with hyphens turned into spaces) only when `q` is absent.
+    const q = params.get("q");
+    if (q) {
+      setCity(q);
+    } else {
+      const locSlug = d || c || g || co;
+      if (locSlug) setCity(locSlug.replace(/-/g, " "));
+    }
 
     if (lat && lng) {
       const latN = Number(lat);
