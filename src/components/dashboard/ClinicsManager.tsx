@@ -558,7 +558,13 @@ function ClinicCard({
       city?: string;
       country?: string;
     }) => {
-      const patch: Record<string, unknown> = { lat: p.lat, lng: p.lng };
+      const patch: {
+        lat: number;
+        lng: number;
+        address?: string;
+        city?: string;
+        country?: string;
+      } = { lat: p.lat, lng: p.lng };
       if (p.address) patch.address = p.address;
       if (p.city) patch.city = p.city;
       if (p.country) patch.country = p.country;

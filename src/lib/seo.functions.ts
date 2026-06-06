@@ -83,7 +83,8 @@ export const loadDoctorForSeo = createServerFn({ method: "GET" })
         .from("reviews")
         .select("id", { count: "exact", head: true })
         .eq("doctor_id", id)
-        .eq("status", "approved"),
+        .eq("status", "approved")
+        .eq("is_published_by_doctor", true),
       // Latest 10 reviews with comments — used for individual Review
       // schema items (rich star snippets in SERP).
       supabaseAdmin
@@ -91,6 +92,7 @@ export const loadDoctorForSeo = createServerFn({ method: "GET" })
         .select("id, rating, comment, patient_id, created_at")
         .eq("doctor_id", id)
         .eq("status", "approved")
+        .eq("is_published_by_doctor", true)
         .not("comment", "is", null)
         .order("created_at", { ascending: false })
         .limit(10),

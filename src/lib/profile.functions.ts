@@ -84,7 +84,8 @@ export const loadProfileBySlug = createServerFn({ method: "GET" })
             .from("reviews")
             .select("id", { count: "exact", head: true })
             .eq("doctor_id", d.id)
-            .eq("status", "approved"),
+            .eq("status", "approved")
+            .eq("is_published_by_doctor", true),
           supabaseAdmin
             .from("clinics")
             .select("id", { count: "exact", head: true })

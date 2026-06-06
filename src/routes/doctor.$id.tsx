@@ -182,6 +182,7 @@ function DoctorDetailPage() {
         .select("*")
         .eq("doctor_id", id)
         .eq("status", "approved")
+        .eq("is_published_by_doctor", true)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -544,6 +545,14 @@ function DoctorDetailPage() {
                         ))}
                       </div>
                       {r.comment && <p className="mt-2 text-sm text-foreground">{r.comment}</p>}
+                      {r.doctor_response && (
+                        <div className="mt-2 rounded-lg bg-muted/40 p-2.5">
+                          <p className="text-[11px] font-semibold text-primary mb-0.5">
+                            {t("Doctor's response", "رد الطبيب")}
+                          </p>
+                          <p className="text-sm text-foreground">{r.doctor_response}</p>
+                        </div>
+                      )}
                       <p className="mt-1 text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</p>
                     </div>
                   ))}

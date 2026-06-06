@@ -8,7 +8,7 @@ import { ClinicsManager } from "@/components/dashboard/ClinicsManager";
 import { DoctorLiveQueue } from "@/components/dashboard/DoctorLiveQueue";
 import { PublicPageManager } from "@/components/dashboard/PublicPageManager";
 import { ConsultationsInbox } from "@/components/ConsultationsInbox";
-import { Loader2, CheckCircle2, XCircle, Calendar, Clock, Users, DollarSign, Stethoscope, Save, Megaphone, Globe, Lock, Video, FilePlus, UserPlus, Zap, TrendingUp, TrendingDown, Crown, ArrowRight } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Calendar, Clock, Users, DollarSign, Stethoscope, Save, Megaphone, Globe, Lock, Video, FilePlus, UserPlus, Zap, TrendingUp, TrendingDown, Crown, ArrowRight, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard")({
@@ -277,8 +277,8 @@ function DashboardHomePage() {
         </div>
       </Link>
 
-      {/* Phase 3-5 cards: Solo Mode + Private Feedback */}
-      <div className="mb-10 grid gap-3 md:grid-cols-2">
+      {/* Phase 3-5 cards: Solo Mode + Private Feedback + Reviews curation */}
+      <div className="mb-10 grid gap-3 md:grid-cols-3">
         <Link
           to="/doctor/solo"
           className="block rounded-2xl border border-border bg-card p-5 transition hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -307,6 +307,24 @@ function DashboardHomePage() {
             {t(
               "Read encrypted notes from patients — visible only to you.",
               "اقرأ ملاحظات مشفّرة من المرضى — مرئية لك فقط.",
+            )}
+          </p>
+        </Link>
+
+        <Link
+          to="/dashboard/reviews"
+          className="block rounded-2xl border border-border bg-card p-5 transition hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
+            <h3 className="font-semibold">
+              {t("Reviews curation", "إدارة تقييماتك")}
+            </h3>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Choose which approved reviews appear on your public profile.",
+              "اختر أي التقييمات الموافق عليها تظهر على صفحتك العامة.",
             )}
           </p>
         </Link>

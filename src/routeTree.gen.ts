@@ -56,6 +56,7 @@ import { Route as DoctorSoloRouteImport } from './routes/doctor.solo'
 import { Route as DoctorFeedbackRouteImport } from './routes/doctor.feedback'
 import { Route as DoctorIdRouteImport } from './routes/doctor.$id'
 import { Route as DashboardSupportRouteImport } from './routes/dashboard.support'
+import { Route as DashboardReviewsRouteImport } from './routes/dashboard.reviews'
 import { Route as DashboardPatientsRouteImport } from './routes/dashboard.patients'
 import { Route as DashboardExpensesRouteImport } from './routes/dashboard.expenses'
 import { Route as DashboardEarningsRouteImport } from './routes/dashboard.earnings'
@@ -321,6 +322,11 @@ const DashboardSupportRoute = DashboardSupportRouteImport.update({
   path: '/support',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardReviewsRoute = DashboardReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardPatientsRoute = DashboardPatientsRouteImport.update({
   id: '/patients',
   path: '/patients',
@@ -512,6 +518,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/earnings': typeof DashboardEarningsRoute
   '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/reviews': typeof DashboardReviewsRoute
   '/dashboard/support': typeof DashboardSupportRoute
   '/doctor/$id': typeof DoctorIdRoute
   '/doctor/feedback': typeof DoctorFeedbackRoute
@@ -589,6 +596,7 @@ export interface FileRoutesByTo {
   '/dashboard/earnings': typeof DashboardEarningsRoute
   '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/reviews': typeof DashboardReviewsRoute
   '/dashboard/support': typeof DashboardSupportRoute
   '/doctor/$id': typeof DoctorIdRoute
   '/doctor/feedback': typeof DoctorFeedbackRoute
@@ -667,6 +675,7 @@ export interface FileRoutesById {
   '/dashboard/earnings': typeof DashboardEarningsRoute
   '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/reviews': typeof DashboardReviewsRoute
   '/dashboard/support': typeof DashboardSupportRoute
   '/doctor/$id': typeof DoctorIdRoute
   '/doctor/feedback': typeof DoctorFeedbackRoute
@@ -746,6 +755,7 @@ export interface FileRouteTypes {
     | '/dashboard/earnings'
     | '/dashboard/expenses'
     | '/dashboard/patients'
+    | '/dashboard/reviews'
     | '/dashboard/support'
     | '/doctor/$id'
     | '/doctor/feedback'
@@ -823,6 +833,7 @@ export interface FileRouteTypes {
     | '/dashboard/earnings'
     | '/dashboard/expenses'
     | '/dashboard/patients'
+    | '/dashboard/reviews'
     | '/dashboard/support'
     | '/doctor/$id'
     | '/doctor/feedback'
@@ -900,6 +911,7 @@ export interface FileRouteTypes {
     | '/dashboard/earnings'
     | '/dashboard/expenses'
     | '/dashboard/patients'
+    | '/dashboard/reviews'
     | '/dashboard/support'
     | '/doctor/$id'
     | '/doctor/feedback'
@@ -1325,6 +1337,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSupportRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/reviews': {
+      id: '/dashboard/reviews'
+      path: '/reviews'
+      fullPath: '/dashboard/reviews'
+      preLoaderRoute: typeof DashboardReviewsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/patients': {
       id: '/dashboard/patients'
       path: '/patients'
@@ -1529,6 +1548,7 @@ interface DashboardRouteChildren {
   DashboardEarningsRoute: typeof DashboardEarningsRoute
   DashboardExpensesRoute: typeof DashboardExpensesRoute
   DashboardPatientsRoute: typeof DashboardPatientsRoute
+  DashboardReviewsRoute: typeof DashboardReviewsRoute
   DashboardSupportRoute: typeof DashboardSupportRoute
   DashboardPatientIdRoute: typeof DashboardPatientIdRoute
   DashboardSettingsBillingRoute: typeof DashboardSettingsBillingRoute
@@ -1542,6 +1562,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardEarningsRoute: DashboardEarningsRoute,
   DashboardExpensesRoute: DashboardExpensesRoute,
   DashboardPatientsRoute: DashboardPatientsRoute,
+  DashboardReviewsRoute: DashboardReviewsRoute,
   DashboardSupportRoute: DashboardSupportRoute,
   DashboardPatientIdRoute: DashboardPatientIdRoute,
   DashboardSettingsBillingRoute: DashboardSettingsBillingRoute,

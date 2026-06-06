@@ -2611,8 +2611,11 @@ export type Database = {
           appointment_id: string | null
           comment: string | null
           created_at: string
+          doctor_decided_at: string | null
           doctor_id: string
+          doctor_response: string | null
           id: string
+          is_published_by_doctor: boolean
           moderated_at: string | null
           moderated_by: string | null
           moderation_notes: string | null
@@ -2624,8 +2627,11 @@ export type Database = {
           appointment_id?: string | null
           comment?: string | null
           created_at?: string
+          doctor_decided_at?: string | null
           doctor_id: string
+          doctor_response?: string | null
           id?: string
+          is_published_by_doctor?: boolean
           moderated_at?: string | null
           moderated_by?: string | null
           moderation_notes?: string | null
@@ -2637,8 +2643,11 @@ export type Database = {
           appointment_id?: string | null
           comment?: string | null
           created_at?: string
+          doctor_decided_at?: string | null
           doctor_id?: string
+          doctor_response?: string | null
           id?: string
+          is_published_by_doctor?: boolean
           moderated_at?: string | null
           moderated_by?: string | null
           moderation_notes?: string | null
