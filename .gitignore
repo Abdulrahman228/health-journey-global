@@ -64,3 +64,6 @@ response.html
 *.njsproj
 *.sln
 *.sw?
+
+tsc.out
+deploy.log
