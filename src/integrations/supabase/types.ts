@@ -808,6 +808,7 @@ export type Database = {
           pro_plus_active: boolean
           profile_id: string
           rating: number | null
+          reviews_count: number
           signature_url: string | null
           solo_brand_color: string | null
           solo_clinic_name: string | null
@@ -847,6 +848,7 @@ export type Database = {
           pro_plus_active?: boolean
           profile_id: string
           rating?: number | null
+          reviews_count?: number
           signature_url?: string | null
           solo_brand_color?: string | null
           solo_clinic_name?: string | null
@@ -886,6 +888,7 @@ export type Database = {
           pro_plus_active?: boolean
           profile_id?: string
           rating?: number | null
+          reviews_count?: number
           signature_url?: string | null
           solo_brand_color?: string | null
           solo_clinic_name?: string | null

@@ -17,6 +17,7 @@ import { physicianSchema, breadcrumbSchema, medicalClinicSchema, reviewSchema, j
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { loadDoctorForSeo, type DoctorSeoData } from "@/lib/seo.functions";
 import { determineVisitFee } from "@/lib/visit-fee.functions";
+import { listEligibleAppointments, submitReview, type EligibleAppointment } from "@/lib/reviews.functions";
 
 /**
  * Build the SEO title for a doctor page following Rank Math rules:
@@ -161,6 +162,7 @@ function DoctorDetailPage() {
   const { formatPrice } = useCurrency();
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
 
   const { data: doctor, isLoading } = useQuery({
     queryKey: ["doctor", id],
@@ -239,16 +241,49 @@ function DoctorDetailPage() {
     },
   });
 
+  const { data: eligibleAppointments = [] } = useQuery<EligibleAppointment[]>({
+    queryKey: ["eligible-appts", id, user?.id],
+    enabled: Boolean(user?.id && id),
+    queryFn: async () =>
+      listEligibleAppointments({
+        data: { userId: user!.id, doctorId: id },
+      }),
+  });
+
+  const reviewableAppointments = eligibleAppointments.filter(
+    (a) => !a.alreadyReviewed,
+  );
+  const activeAppointmentId =
+    selectedAppointmentId ?? reviewableAppointments[0]?.appointmentId ?? null;
+  const canReview = reviewableAppointments.length > 0;
+  const reviewBlockedReason = !user
+    ? t("Sign in to leave a review", "سجّل الدخول لكتابة تقييم")
+    : eligibleAppointments.length === 0
+      ? t(
+          "Only patients with a completed paid visit can review",
+          "يمكن للمرضى الذين أتمّوا زيارة مدفوعة فقط كتابة تقييم",
+        )
+      : !canReview
+        ? t(
+            "You already reviewed your visits with this doctor",
+            "لقد قيّمت زياراتك مع هذا الطبيب من قبل",
+          )
+        : null;
+
   const reviewMutation = useMutation({
     mutationFn: async () => {
-      if (!user || !profile) throw new Error("Login required");
-      const { error } = await supabase.from("reviews").insert({
-        doctor_id: id,
-        patient_id: profile.id,
-        rating: reviewRating,
-        comment: reviewText || null,
+      if (!user) throw new Error("login_required");
+      if (!activeAppointmentId) throw new Error("no_eligible_appointment");
+      const r = await submitReview({
+        data: {
+          userId: user.id,
+          appointmentId: activeAppointmentId,
+          rating: reviewRating,
+          comment: reviewText || undefined,
+        },
       });
-      if (error) throw error;
+      if (!r.ok) throw new Error(r.error);
+      return r;
     },
     onSuccess: () => {
       toast.success(
@@ -258,9 +293,33 @@ function DoctorDetailPage() {
         ),
       );
       setReviewText("");
+      setSelectedAppointmentId(null);
       queryClient.invalidateQueries({ queryKey: ["reviews", id] });
+      queryClient.invalidateQueries({ queryKey: ["eligible-appts", id, user?.id] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      const map: Record<string, string> = {
+        already_reviewed: t(
+          "You already reviewed this visit",
+          "لقد قيّمت هذه الزيارة من قبل",
+        ),
+        appointment_not_completed: t(
+          "Appointment must be completed first",
+          "يجب اكتمال الموعد أولاً",
+        ),
+        appointment_unpaid: t(
+          "Appointment must be paid to leave a review",
+          "يجب أن يكون الموعد مدفوعاً لكتابة تقييم",
+        ),
+        no_eligible_appointment: t(
+          "No eligible appointment found",
+          "لا توجد زيارة مؤهّلة للتقييم",
+        ),
+        forbidden: t("Forbidden", "غير مسموح"),
+        login_required: t("Sign in first", "سجّل الدخول أولاً"),
+      };
+      toast.error(map[e.message] ?? e.message);
+    },
   });
 
   if (isLoading) {
@@ -423,8 +482,28 @@ function DoctorDetailPage() {
                 <PrivateFeedbackButton doctorDetailsId={doctor.id} doctorName={doctor.profile?.full_name ?? undefined} />
               </div>
 
-              {user && profile && (
+              {canReview ? (
                 <div className="mb-6 p-4 bg-muted/30 rounded-lg">
+                  {reviewableAppointments.length > 1 && (
+                    <div className="mb-3">
+                      <label className="text-xs text-muted-foreground mb-1 block">
+                        {t("Choose visit to review", "اختر الزيارة المراد تقييمها")}
+                      </label>
+                      <select
+                        value={activeAppointmentId ?? ""}
+                        onChange={(e) => setSelectedAppointmentId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                      >
+                        {reviewableAppointments.map((a) => (
+                          <option key={a.appointmentId} value={a.appointmentId}>
+                            {a.appointmentDate
+                              ? new Date(a.appointmentDate).toLocaleDateString()
+                              : a.appointmentId.slice(0, 8)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="flex items-center gap-1 mb-2">
                     {[1, 2, 3, 4, 5].map((n) => (
                       <button key={n} type="button" onClick={() => setReviewRating(n)}>
@@ -441,13 +520,17 @@ function DoctorDetailPage() {
                   />
                   <button
                     onClick={() => reviewMutation.mutate()}
-                    disabled={reviewMutation.isPending}
+                    disabled={reviewMutation.isPending || !activeAppointmentId}
                     className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
                   >
                     {reviewMutation.isPending ? t("Sending...", "جارٍ الإرسال...") : t("Submit review", "إرسال التقييم")}
                   </button>
                 </div>
-              )}
+              ) : reviewBlockedReason ? (
+                <div className="mb-6 p-3 bg-muted/20 border border-dashed border-border rounded-lg text-xs text-muted-foreground">
+                  {reviewBlockedReason}
+                </div>
+              ) : null}
 
               {reviews.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("No reviews yet.", "لا توجد تقييمات بعد.")}</p>
