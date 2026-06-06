@@ -27,6 +27,12 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { CITIES } from "@/lib/cities";
+
+// Slugs that have a dedicated /specialty/$slug/$city SEO landing page.
+// Anything else (sub-cities like "heliopolis", districts, etc.) must fall
+// back to /doctors?... with a city filter — otherwise we land on a 404.
+const SEO_CITY_SLUGS = new Set(CITIES.map((c) => c.slug));
 
 interface RegionRow {
   id: string;
@@ -388,7 +394,19 @@ export function HeroHierarchicalSearch({
     const govObj = governorates.find((g) => g.id === governorateId);
     const countryObj = countries.find((c) => c.id === countryId);
 
-    if (specialty && cityObj) {
+    // Only redirect to the SEO landing page when:
+    //  - a specialty IS picked,
+    //  - a city IS picked,
+    //  - NO district is picked (district = more specific than city, deserves filter page),
+    //  - the city slug is in our hardcoded CITIES list (the only ones with SEO pages).
+    // Otherwise fall through to /doctors?... so the user actually sees results
+    // instead of a 404.
+    if (
+      specialty &&
+      cityObj &&
+      !districtObj &&
+      SEO_CITY_SLUGS.has(cityObj.slug)
+    ) {
       navigate({
         to: "/specialty/$slug/$city",
         params: { slug: specialty, city: cityObj.slug },
