@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { rateLimitMiddleware } from "./_rate-limit";
+import { signupRateLimit } from "./_rate-limit";
 import { assertSelf } from "./_authz";
 
 type BootstrapRole = "doctor" | "patient";
@@ -58,7 +58,7 @@ async function ensureRoleSpecificDetails(userId: string, role: BootstrapRole) {
 
 export const signUpUser = createServerFn({ method: "POST" })
   // 5 sign-ups per hour per IP keeps account-creation abuse / spam in check.
-  .middleware([rateLimitMiddleware("signup", 5, 60 * 60 * 1000)])
+  .middleware([signupRateLimit])
   .inputValidator((data) =>
     z
       .object({
