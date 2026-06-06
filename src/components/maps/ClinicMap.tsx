@@ -15,6 +15,12 @@ interface ClinicMapProps {
   zoom?: number;
   className?: string;
   onClick?: (lat: number, lng: number) => void;
+  /**
+   * When true and there is exactly one marker, the marker becomes draggable.
+   * `onMarkerDragEnd` fires with the new lat/lng once the user releases.
+   */
+  draggable?: boolean;
+  onMarkerDragEnd?: (lat: number, lng: number) => void;
 }
 
 // Listen for Google Maps "auth failure" so we can render a graceful fallback
@@ -33,7 +39,15 @@ if (typeof window !== "undefined" && !window.gm_authFailure) {
   };
 }
 
-export function ClinicMap({ markers, center, zoom = 13, className, onClick }: ClinicMapProps) {
+export function ClinicMap({
+  markers,
+  center,
+  zoom = 13,
+  className,
+  onClick,
+  draggable,
+  onMarkerDragEnd,
+}: ClinicMapProps) {
   const { ready, error } = useGoogleMaps();
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -76,19 +90,27 @@ export function ClinicMap({ markers, center, zoom = 13, className, onClick }: Cl
   useEffect(() => {
     if (!ready || authFailed || !mapRef.current) return;
     markerRefs.current.forEach((m) => m.setMap(null));
-    markerRefs.current = markers.map(
-      (m) =>
-        new google.maps.Marker({
-          position: { lat: m.lat, lng: m.lng },
-          map: mapRef.current!,
-          title: m.title,
-        }),
-    );
+    markerRefs.current = markers.map((m, i) => {
+      const isDraggable = !!draggable && markers.length === 1 && i === 0;
+      const marker = new google.maps.Marker({
+        position: { lat: m.lat, lng: m.lng },
+        map: mapRef.current!,
+        title: m.title,
+        draggable: isDraggable,
+      });
+      if (isDraggable && onMarkerDragEnd) {
+        marker.addListener("dragend", () => {
+          const pos = marker.getPosition();
+          if (pos) onMarkerDragEnd(pos.lat(), pos.lng());
+        });
+      }
+      return marker;
+    });
     if (markers.length > 0) {
       const c = center ?? markers[0];
       mapRef.current.setCenter(c);
     }
-  }, [ready, authFailed, markers, center]);
+  }, [ready, authFailed, markers, center, draggable, onMarkerDragEnd]);
 
   if (error || authFailed) {
     return (

@@ -4,8 +4,9 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
 import { PlacePicker } from "@/components/maps/PlacePicker";
 import { ClinicMap } from "@/components/maps/ClinicMap";
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 import { RegionPicker, type RegionSelection } from "@/components/regions/RegionPicker";
-import { Building2, Plus, Trash2, Save, Loader2, Clock, CalendarOff } from "lucide-react";
+import { Building2, Plus, Trash2, Save, Loader2, Clock, CalendarOff, Navigation, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
 interface Clinic {
@@ -164,6 +165,7 @@ function NewClinicForm({
   pending: boolean;
 }) {
   const { t } = useLanguage();
+  const { ready: mapsReady } = useGoogleMaps();
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<{
     address: string;
@@ -175,6 +177,75 @@ function NewClinicForm({
     governorate?: string;
     district?: string;
   } | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
+
+  // Reverse-geocode a (lat, lng) into our `picked` shape using Google Geocoder.
+  // Used by: map click, marker drag-end, "use my current location".
+  async function reverseGeocode(lat: number, lng: number) {
+    if (!mapsReady) {
+      setPicked({ address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng });
+      return;
+    }
+    try {
+      const geocoder = new google.maps.Geocoder();
+      const res = await geocoder.geocode({ location: { lat, lng } });
+      const r = res.results?.[0];
+      if (!r) {
+        setPicked({ address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng });
+        return;
+      }
+      const components = r.address_components ?? [];
+      const cityComp = components.find(
+        (c) => c.types.includes("locality") || c.types.includes("administrative_area_level_2"),
+      );
+      const countryComp = components.find((c) => c.types.includes("country"));
+      const govComp = components.find((c) => c.types.includes("administrative_area_level_1"));
+      const districtComp = components.find(
+        (c) =>
+          c.types.includes("sublocality_level_1") ||
+          c.types.includes("sublocality") ||
+          c.types.includes("neighborhood") ||
+          c.types.includes("administrative_area_level_3"),
+      );
+      setPicked({
+        address: r.formatted_address,
+        lat,
+        lng,
+        city: cityComp?.long_name,
+        country: countryComp?.long_name,
+        countryCode: countryComp?.short_name,
+        governorate: govComp?.long_name,
+        district: districtComp?.long_name,
+      });
+    } catch (e) {
+      console.error("reverse geocode failed", e);
+      setPicked({ address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng });
+    }
+  }
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      toast.error(t("Geolocation not supported", "خاصية الموقع غير مدعومة"));
+      return;
+    }
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+        setGeoLoading(false);
+      },
+      (err) => {
+        toast.error(
+          err.code === err.PERMISSION_DENIED
+            ? t("Permission denied", "تم رفض الإذن")
+            : t("Could not get location", "تعذر تحديد الموقع"),
+        );
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
+  }
+
   const [region, setRegion] = useState<RegionSelection>({
     countryId: null,
     governorateId: null,
@@ -273,10 +344,35 @@ function NewClinicForm({
           <label className="block text-sm font-medium text-foreground mb-1.5">
             {t("Address (search)", "العنوان (ابحث)")}
           </label>
-          <PlacePicker
-            placeholder={t("Type address...", "اكتب العنوان...")}
-            onPick={setPicked}
-          />
+          <div className="flex gap-2">
+            <PlacePicker
+              placeholder={t("Type address...", "اكتب العنوان...")}
+              onPick={setPicked}
+              className="flex-1"
+            />
+            <button
+              type="button"
+              onClick={useMyLocation}
+              disabled={geoLoading}
+              title={t("Use my current location", "استخدم موقعي الحالي")}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-border bg-background text-sm hover:bg-accent disabled:opacity-50"
+            >
+              {geoLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Navigation className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">
+                {t("My location", "موقعي")}
+              </span>
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {t(
+              "Tip: you can also click on the map below or drag the pin to fine-tune.",
+              "نصيحة: يمكنك أيضاً الضغط على الخريطة بالأسفل أو سحب الدبوس لضبط الموقع بدقة.",
+            )}
+          </p>
         </div>
       </div>
 
@@ -330,12 +426,40 @@ function NewClinicForm({
         </div>
       </div>
 
-      {picked && (
-        <div className="mt-3">
-          <ClinicMap markers={[{ lat: picked.lat, lng: picked.lng }]} className="h-40" />
-          <p className="mt-2 text-xs text-muted-foreground">{picked.address}</p>
+      {/*
+       * Interactive map: click anywhere to drop the pin or drag it to refine.
+       * If nothing is picked yet, show the map centered on a sensible default
+       * (Cairo) so the doctor can click directly to set the location.
+       */}
+      <div className="mt-3">
+        <div className="flex items-center gap-1 mb-1.5 text-xs text-muted-foreground">
+          <MapPin className="h-3 w-3" />
+          {picked
+            ? t("Drag the pin to fine-tune the location", "اسحب الدبوس لضبط الموقع بدقة")
+            : t(
+                "Click on the map to set your clinic location",
+                "اضغط على الخريطة لتحديد موقع العيادة",
+              )}
         </div>
-      )}
+        <ClinicMap
+          markers={picked ? [{ lat: picked.lat, lng: picked.lng }] : []}
+          center={picked ?? { lat: 30.0444, lng: 31.2357 }}
+          zoom={picked ? 15 : 11}
+          className="h-56"
+          draggable
+          onClick={(lat, lng) => reverseGeocode(lat, lng)}
+          onMarkerDragEnd={(lat, lng) => reverseGeocode(lat, lng)}
+        />
+        {picked && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            <span className="font-medium">{t("Selected:", "المحدد:")}</span>{" "}
+            {picked.address}{" "}
+            <span className="text-[10px] opacity-70">
+              ({picked.lat.toFixed(5)}, {picked.lng.toFixed(5)})
+            </span>
+          </p>
+        )}
+      </div>
       <div className="mt-3 flex gap-2">
         <button
           onClick={() =>
@@ -421,6 +545,55 @@ function ClinicCard({
   const [end, setEnd] = useState("17:00");
   const [maxPatients, setMaxPatients] = useState(20);
   const [avgMin, setAvgMin] = useState(15);
+  const [editingLocation, setEditingLocation] = useState(false);
+
+  // Update clinic location (lat/lng/address) — used by the inline edit map.
+  // We also clear the resolved city/country text fields if we cannot derive
+  // them, but otherwise leave the rest of the row unchanged.
+  const updateLocation = useMutation({
+    mutationFn: async (p: {
+      lat: number;
+      lng: number;
+      address?: string;
+      city?: string;
+      country?: string;
+    }) => {
+      const patch: Record<string, unknown> = { lat: p.lat, lng: p.lng };
+      if (p.address) patch.address = p.address;
+      if (p.city) patch.city = p.city;
+      if (p.country) patch.country = p.country;
+      const { error } = await supabase.from("clinics").update(patch).eq("id", clinic.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(t("Location updated", "تم تحديث الموقع"));
+      queryClient.invalidateQueries({ queryKey: ["clinics"] });
+      setEditingLocation(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  async function pickAndSave(lat: number, lng: number) {
+    // Best-effort reverse-geocode for human-readable address.
+    let address: string | undefined;
+    let city: string | undefined;
+    let country: string | undefined;
+    try {
+      if (typeof google !== "undefined" && google.maps?.Geocoder) {
+        const r = await new google.maps.Geocoder().geocode({ location: { lat, lng } });
+        const top = r.results?.[0];
+        if (top) {
+          address = top.formatted_address;
+          const cc = top.address_components ?? [];
+          city = cc.find((c) => c.types.includes("locality"))?.long_name;
+          country = cc.find((c) => c.types.includes("country"))?.long_name;
+        }
+      }
+    } catch {
+      // ignore — coords alone are still saved
+    }
+    updateLocation.mutate({ lat, lng, address, city, country });
+  }
 
   return (
     <div className="border border-border rounded-xl p-4">
@@ -439,10 +612,62 @@ function ClinicCard({
       </div>
 
       {clinic.lat != null && clinic.lng != null && (
-        <ClinicMap
-          markers={[{ lat: clinic.lat, lng: clinic.lng, title: clinic.name }]}
-          className="h-36 mt-3"
-        />
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {editingLocation
+                ? t("Drag the pin or click on the map to update", "اسحب الدبوس أو اضغط على الخريطة للتحديث")
+                : t("Clinic location", "موقع العيادة")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setEditingLocation((v) => !v)}
+              className="text-xs px-2 py-1 rounded-md border border-border hover:bg-accent"
+            >
+              {editingLocation ? t("Done", "تم") : t("Edit location", "تعديل الموقع")}
+            </button>
+          </div>
+          <ClinicMap
+            markers={[{ lat: clinic.lat, lng: clinic.lng, title: clinic.name }]}
+            className="h-36"
+            draggable={editingLocation}
+            onClick={editingLocation ? (lat, lng) => pickAndSave(lat, lng) : undefined}
+            onMarkerDragEnd={editingLocation ? (lat, lng) => pickAndSave(lat, lng) : undefined}
+          />
+          {updateLocation.isPending && (
+            <p className="mt-1 text-xs text-muted-foreground inline-flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {t("Saving location…", "جارٍ الحفظ…")}
+            </p>
+          )}
+        </div>
+      )}
+      {(clinic.lat == null || clinic.lng == null) && (
+        <div className="mt-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/40 p-3 text-xs text-amber-800">
+          {t(
+            "No location pinned yet. Edit and pin your clinic on the map.",
+            "لم يتم تحديد موقع على الخريطة بعد. اضغط الزر أدناه لتحديد الموقع.",
+          )}
+          <button
+            type="button"
+            onClick={() => setEditingLocation(true)}
+            className="ms-2 text-xs px-2 py-1 rounded-md border border-amber-300 bg-white hover:bg-amber-100"
+          >
+            {t("Pin location", "تحديد الموقع")}
+          </button>
+          {editingLocation && (
+            <div className="mt-2">
+              <ClinicMap
+                markers={[]}
+                center={{ lat: 30.0444, lng: 31.2357 }}
+                zoom={11}
+                className="h-40"
+                onClick={(lat, lng) => pickAndSave(lat, lng)}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       <div className="mt-4">
