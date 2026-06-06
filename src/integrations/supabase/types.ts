@@ -22,6 +22,8 @@ export type Database = {
           clinic_id: string | null
           commission_cents: number | null
           consultation_fee_cents: number | null
+          coupon_code: string | null
+          coupon_discount: number | null
           created_at: string
           currency: string
           doctor_id: string
@@ -53,6 +55,8 @@ export type Database = {
           clinic_id?: string | null
           commission_cents?: number | null
           consultation_fee_cents?: number | null
+          coupon_code?: string | null
+          coupon_discount?: number | null
           created_at?: string
           currency?: string
           doctor_id: string
@@ -84,6 +88,8 @@ export type Database = {
           clinic_id?: string | null
           commission_cents?: number | null
           consultation_fee_cents?: number | null
+          coupon_code?: string | null
+          coupon_discount?: number | null
           created_at?: string
           currency?: string
           doctor_id?: string
@@ -519,6 +525,130 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      coupon_redemptions: {
+        Row: {
+          appointment_id: string
+          coupon_id: string
+          currency: string
+          discount_amount: number
+          final_amount: number
+          id: string
+          original_amount: number
+          redeemed_at: string
+          user_id: string
+        }
+        Insert: {
+          appointment_id: string
+          coupon_id: string
+          currency: string
+          discount_amount: number
+          final_amount: number
+          id?: string
+          original_amount: number
+          redeemed_at?: string
+          user_id: string
+        }
+        Update: {
+          appointment_id?: string
+          coupon_id?: string
+          currency?: string
+          discount_amount?: number
+          final_amount?: number
+          id?: string
+          original_amount?: number
+          redeemed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coupon_redemptions_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coupon_redemptions_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "v_clinic_queue"
+            referencedColumns: ["appointment_id"]
+          },
+          {
+            foreignKeyName: "coupon_redemptions_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "coupons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coupons: {
+        Row: {
+          applies_to: string
+          code: string
+          created_at: string
+          created_by: string | null
+          currency: string | null
+          description: string | null
+          discount_type: string
+          discount_value: number
+          doctor_id: string | null
+          id: string
+          is_active: boolean
+          max_discount: number | null
+          min_amount: number | null
+          times_used: number
+          updated_at: string
+          usage_limit: number | null
+          usage_limit_per_user: number | null
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          applies_to?: string
+          code: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string | null
+          description?: string | null
+          discount_type: string
+          discount_value: number
+          doctor_id?: string | null
+          id?: string
+          is_active?: boolean
+          max_discount?: number | null
+          min_amount?: number | null
+          times_used?: number
+          updated_at?: string
+          usage_limit?: number | null
+          usage_limit_per_user?: number | null
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          applies_to?: string
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string | null
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          doctor_id?: string | null
+          id?: string
+          is_active?: boolean
+          max_discount?: number | null
+          min_amount?: number | null
+          times_used?: number
+          updated_at?: string
+          usage_limit?: number | null
+          usage_limit_per_user?: number | null
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: []
       }
       doctor_billing_settings: {
         Row: {
@@ -3106,6 +3236,8 @@ export type Database = {
           clinic_id: string | null
           commission_cents: number | null
           consultation_fee_cents: number | null
+          coupon_code: string | null
+          coupon_discount: number | null
           created_at: string
           currency: string
           doctor_id: string
@@ -3152,6 +3284,8 @@ export type Database = {
           clinic_id: string | null
           commission_cents: number | null
           consultation_fee_cents: number | null
+          coupon_code: string | null
+          coupon_discount: number | null
           created_at: string
           currency: string
           doctor_id: string
@@ -3192,6 +3326,8 @@ export type Database = {
           clinic_id: string | null
           commission_cents: number | null
           consultation_fee_cents: number | null
+          coupon_code: string | null
+          coupon_discount: number | null
           created_at: string
           currency: string
           doctor_id: string
@@ -3232,6 +3368,8 @@ export type Database = {
           clinic_id: string | null
           commission_cents: number | null
           consultation_fee_cents: number | null
+          coupon_code: string | null
+          coupon_discount: number | null
           created_at: string
           currency: string
           doctor_id: string
@@ -3372,6 +3510,10 @@ export type Database = {
           rating: number
         }[]
       }
+      record_coupon_redemption: {
+        Args: { p_appointment_id: string }
+        Returns: string
+      }
       search_doctors_nearby: {
         Args: {
           p_lat: number
@@ -3402,6 +3544,8 @@ export type Database = {
           clinic_id: string | null
           commission_cents: number | null
           consultation_fee_cents: number | null
+          coupon_code: string | null
+          coupon_discount: number | null
           created_at: string
           currency: string
           doctor_id: string

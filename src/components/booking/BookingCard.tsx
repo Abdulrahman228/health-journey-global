@@ -16,10 +16,13 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  Tag,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PatientConsentModal, CONSENT_TEXT_VERSION } from "@/components/PatientConsentModal";
 import { createAppointmentCheckout } from "@/lib/payments.functions";
+import { validateCoupon, type CouponValidationResult } from "@/lib/coupons.functions";
 
 type AvailableSlot = {
   clinic_id: string;
@@ -102,6 +105,11 @@ export function BookingCard({
 
   const [videoDate, setVideoDate] = useState("");
   const [videoTime, setVideoTime] = useState("");
+
+  // Coupon state
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<CouponValidationResult | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
 
   // === Fetch active clinics for this doctor ===
   const { data: clinics } = useQuery({
@@ -234,6 +242,12 @@ export function BookingCard({
               cancelUrl: window.location.href,
               customerEmail: user?.email ?? undefined,
               userId: user?.id,
+              ...(coupon?.valid && coupon.code
+                ? { couponCode: coupon.code }
+                : {}),
+              appointmentType:
+                appointmentType === "video" ? "video" : "in_person",
+              doctorId,
             },
           });
           if (url) {
@@ -520,6 +534,111 @@ export function BookingCard({
               className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
+
+          {/* Coupon code */}
+          {requiresPayment && (
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1 flex items-center gap-1">
+                <Tag className="h-3.5 w-3.5" />
+                {t("Coupon code (optional)", "كود خصم (اختياري)")}
+              </label>
+              {coupon?.valid ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm">
+                  <div className="flex items-center gap-2 text-emerald-900">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <div>
+                      <div className="font-semibold">{coupon.code}</div>
+                      <div className="text-xs">
+                        {t("Discount applied", "خصم مطبّق")} −{" "}
+                        {formatPrice(coupon.discountAmount, currency)}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCoupon(null);
+                      setCouponInput("");
+                    }}
+                    className="text-xs text-emerald-900 underline"
+                  >
+                    {t("Remove", "إلغاء")}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={(e) =>
+                      setCouponInput(e.target.value.toUpperCase())
+                    }
+                    placeholder={t("Enter code", "أدخل الكود")}
+                    className="flex-1 px-3 py-2 rounded-lg border border-input bg-background text-sm uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary"
+                    maxLength={64}
+                  />
+                  <button
+                    type="button"
+                    disabled={!couponInput.trim() || couponChecking}
+                    onClick={async () => {
+                      setCouponChecking(true);
+                      try {
+                        const r = await validateCoupon({
+                          data: {
+                            code: couponInput,
+                            amount: consultationFee,
+                            currency,
+                            appointmentType:
+                              appointmentType === "video"
+                                ? "video"
+                                : "in_person",
+                            doctorId,
+                            userId: user?.id ?? null,
+                          },
+                        });
+                        if (r.valid) {
+                          setCoupon(r);
+                          toast.success(
+                            t("Coupon applied", "تم تطبيق الكود"),
+                          );
+                        } else {
+                          setCoupon(null);
+                          toast.error(
+                            r.message ||
+                              t("Invalid coupon", "الكود غير صالح"),
+                          );
+                        }
+                      } catch (err) {
+                        console.error("validateCoupon", err);
+                        toast.error(
+                          t("Could not check coupon", "تعذّر التحقّق من الكود"),
+                        );
+                      } finally {
+                        setCouponChecking(false);
+                      }
+                    }}
+                    className="px-4 py-2 rounded-lg border border-primary text-primary text-sm font-medium hover:bg-primary hover:text-primary-foreground disabled:opacity-50"
+                  >
+                    {couponChecking ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      t("Apply", "تطبيق")
+                    )}
+                  </button>
+                </div>
+              )}
+              {coupon?.valid && (
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {t("Total after discount", "الإجمالي بعد الخصم")}
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {formatPrice(coupon.finalAmount, currency)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           <button
             onClick={handleBook}

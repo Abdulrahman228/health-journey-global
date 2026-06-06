@@ -236,9 +236,19 @@ function ReceiptPage() {
               <tr className="border-b border-slate-200">
                 <td className="py-2">رسوم الزيارة</td>
                 <td className="py-2 text-end font-semibold">
-                  {formatMoney(data.fee, data.currency)}
+                  {formatMoney(data.fee + data.couponDiscount, data.currency)}
                 </td>
               </tr>
+              {data.couponDiscount > 0 && (
+                <tr className="border-b border-slate-200 text-emerald-700">
+                  <td className="py-2">
+                    خصم كود {data.couponCode ?? ""}
+                  </td>
+                  <td className="py-2 text-end font-semibold">
+                    − {formatMoney(data.couponDiscount, data.currency)}
+                  </td>
+                </tr>
+              )}
               {data.refundedAmount > 0 && (
                 <tr className="border-b border-slate-200 text-rose-700">
                   <td className="py-2">

@@ -119,6 +119,7 @@ export const createPortalSession = createServerFn({ method: "POST" })
 // One-off appointment checkout (hosted redirect, ad-hoc price)
 // =============================================================================
 import { getStripeEnvironment } from "@/lib/stripe";
+import { applyCouponToAppointment } from "@/lib/coupons.functions";
 
 export const createAppointmentCheckout = createServerFn({ method: "POST" })
   .inputValidator((data: {
@@ -130,6 +131,9 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
     cancelUrl: string;
     customerEmail?: string;
     userId?: string;
+    couponCode?: string;
+    appointmentType?: "in_person" | "video" | "telehealth";
+    doctorId?: string;
   }) => {
     if (!/^[a-zA-Z0-9-]+$/.test(data.appointmentId)) throw new Error("Invalid appointmentId");
     if (!Number.isInteger(data.amount) || data.amount < 50) {
@@ -139,11 +143,44 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
     if (data.userId && !/^[a-zA-Z0-9_-]+$/.test(data.userId)) {
       throw new Error("Invalid userId");
     }
+    if (data.couponCode && data.couponCode.length > 64) {
+      throw new Error("Invalid couponCode");
+    }
     return data;
   })
   .handler(async ({ data }) => {
     const env: StripeEnv = getStripeEnvironment();
     const stripe = createStripeClient(env);
+
+    // Apply coupon (if supplied) BEFORE creating the Stripe session so the
+    // checkout reflects the discounted price. Falls back silently if the
+    // coupon is invalid — the patient sees the original price and a
+    // toast on the client.
+    let amountMinor = data.amount;
+    let appliedCoupon: { code: string; discount: number } | null = null;
+    if (data.couponCode) {
+      const amountMajor = data.amount / 100;
+      const result = await applyCouponToAppointment({
+        appointmentId: data.appointmentId,
+        code: data.couponCode,
+        amount: amountMajor,
+        currency: data.currency,
+        appointmentType: data.appointmentType,
+        doctorId: data.doctorId ?? null,
+        userId: data.userId ?? null,
+      });
+      if (result.valid && result.code) {
+        amountMinor = Math.round(result.finalAmount * 100);
+        appliedCoupon = { code: result.code, discount: result.discountAmount };
+      }
+    }
+
+    // Stripe rejects amounts below 50 in many currencies; if a coupon
+    // brings the bill to (or near) zero, refuse the checkout. The
+    // appointment row already carries the discounted fee.
+    if (amountMinor < 50) {
+      throw new Error("بعد خصم الكود أصبح المبلغ صغيراً جداً. تواصل مع الدعم.");
+    }
 
     const customerId = (data.customerEmail || data.userId)
       ? await resolveOrCreateCustomer(stripe, {
@@ -162,7 +199,7 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
           quantity: 1,
           price_data: {
             currency: data.currency,
-            unit_amount: data.amount,
+            unit_amount: amountMinor,
             product_data: {
               name: `كشف د. ${data.doctorName}`,
               description: `Tabibi appointment ${data.appointmentId}`,
@@ -175,11 +212,19 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
         metadata: {
           appointment_id: data.appointmentId,
           ...(data.userId && { userId: data.userId }),
+          ...(appliedCoupon && {
+            coupon_code: appliedCoupon.code,
+            coupon_discount: appliedCoupon.discount.toFixed(2),
+          }),
         },
       },
       metadata: {
         appointment_id: data.appointmentId,
         ...(data.userId && { userId: data.userId }),
+        ...(appliedCoupon && {
+          coupon_code: appliedCoupon.code,
+          coupon_discount: appliedCoupon.discount.toFixed(2),
+        }),
       },
     });
 
@@ -202,7 +247,7 @@ export interface AppointmentReceipt {
   refundedAt: string | null;
   scheduledAt: string;
   appointmentType: string;
-  fee: number;                  // Major currency units
+  fee: number;                  // Major currency units (after coupon)
   refundedAmount: number;       // Major currency units
   netPaid: number;              // fee - refundedAmount
   currency: string;
@@ -213,6 +258,8 @@ export interface AppointmentReceipt {
   paymentProvider: string | null;
   paymentReference: string | null;  // last 12 chars of provider_payment_id
   environment: "sandbox" | "live" | null;
+  couponCode: string | null;
+  couponDiscount: number;       // Major currency units
 }
 
 function generateReceiptNumber(appointmentId: string, paidAt: string | null): string {
@@ -244,7 +291,7 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
     const { data: appt } = await supabaseAdmin
       .from("appointments")
       .select(
-        "id, patient_id, doctor_id, scheduled_at, appointment_type, status, fee, currency, payment_status, paid_at, refunded_at, refunded_amount, payment_intent_id, payment_environment",
+        "id, patient_id, doctor_id, scheduled_at, appointment_type, status, fee, currency, payment_status, paid_at, refunded_at, refunded_amount, payment_intent_id, payment_environment, coupon_code, coupon_discount",
       )
       .eq("id", data.appointmentId)
       .maybeSingle();
@@ -361,5 +408,7 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
       environment: (payment?.environment as AppointmentReceipt["environment"]) ??
         (appt.payment_environment as AppointmentReceipt["environment"]) ??
         null,
+      couponCode: (appt.coupon_code as string | null) ?? null,
+      couponDiscount: Number(appt.coupon_discount ?? 0),
     };
   });

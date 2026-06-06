@@ -298,6 +298,17 @@ async function handlePaymentIntentSucceeded(pi: any, env: StripeEnv) {
 
   await sb.from("appointments").update(update as never).eq("id", appt.id);
 
+  // Record coupon redemption if this appointment had one applied at
+  // checkout. The SQL fn is idempotent (UNIQUE on coupon_id+appointment_id),
+  // so it is safe to call on every retry of the webhook.
+  try {
+    await sb.rpc("record_coupon_redemption" as never, {
+      p_appointment_id: appt.id,
+    } as never);
+  } catch (e) {
+    console.warn("record_coupon_redemption failed", appt.id, e);
+  }
+
   // If this appointment was created from a consultation request, mark it paid.
   const consultationRequestId = pi.metadata?.consultation_request_id;
   if (consultationRequestId) {
