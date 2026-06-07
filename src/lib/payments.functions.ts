@@ -427,3 +427,75 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
       couponDiscount: Number(appt.coupon_discount ?? 0),
     };
   });
+
+// =============================================================================
+// Email a receipt — sends the receipt to the authenticated user's email via
+// Resend (graceful no-op if RESEND_API_KEY not configured).
+//
+// Auth: requires the same patient/doctor/admin authorization as the receipt
+// page itself (we re-check by calling getAppointmentReceipt's underlying logic).
+// =============================================================================
+export const emailAppointmentReceipt = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((x: unknown) => {
+    const obj = x as { userId?: unknown; appointmentId?: unknown };
+    if (typeof obj.userId !== "string" || !/^[0-9a-f-]{36}$/i.test(obj.userId)) {
+      throw new Error("Invalid userId");
+    }
+    if (
+      typeof obj.appointmentId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(obj.appointmentId)
+    ) {
+      throw new Error("Invalid appointmentId");
+    }
+    return { userId: obj.userId, appointmentId: obj.appointmentId };
+  })
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
+
+    // 1. Resolve receipt via the same logic as the public endpoint.
+    //    We call getAppointmentReceipt's handler via a direct invocation.
+    const receipt = await getAppointmentReceipt({
+      data: { userId: data.userId, appointmentId: data.appointmentId },
+    });
+    if (!receipt) {
+      return { ok: false as const, reason: "not_found_or_unauthorized" };
+    }
+
+    // 2. Fetch the user's email from auth.users.
+    const { data: authUser, error: authErr } =
+      await supabaseAdmin.auth.admin.getUserById(data.userId);
+    if (authErr || !authUser?.user?.email) {
+      return { ok: false as const, reason: "no_email_on_account" };
+    }
+    const email = authUser.user.email;
+
+    // 3. Render template + send.
+    const { buildReceiptEmail } = await import("@/lib/email/templates/receipt");
+    const { sendEmail } = await import("@/lib/email/sender");
+
+    const { subject, html } = buildReceiptEmail({
+      receipt,
+      patientFallback: typeof authUser.user.user_metadata?.full_name === "string"
+        ? authUser.user.user_metadata.full_name
+        : undefined,
+    });
+
+    const result = await sendEmail({
+      to: email,
+      subject,
+      html,
+      tags: [
+        { name: "category", value: "receipt" },
+        { name: "appointment_id", value: receipt.appointmentId },
+      ],
+    });
+
+    if (result.ok) {
+      return { ok: true as const, id: result.id, sentTo: email };
+    }
+    if (result.skipped) {
+      return { ok: false as const, reason: "email_disabled" };
+    }
+    return { ok: false as const, reason: "send_failed", error: result.error };
+  });

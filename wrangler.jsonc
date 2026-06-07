@@ -8,6 +8,14 @@
     { "pattern": "mytabibi.com/*", "zone_name": "mytabibi.com" },
     { "pattern": "www.mytabibi.com/*", "zone_name": "mytabibi.com" }
   ],
+  // Public values only. Secrets are managed with `wrangler secret put <NAME>`.
+  // Required secrets:
+  //   SUPABASE_SERVICE_ROLE_KEY  – server-side admin client
+  //   STRIPE_SECRET_KEY          – payments
+  //   STRIPE_WEBHOOK_SECRET      – Stripe webhook signature
+  // Optional secrets:
+  //   RESEND_API_KEY             – enables receipt emails (graceful no-op if absent)
+  //   EMAIL_FROM                 – override default `Tabibi <noreply@mytabibi.com>`
   "vars": {
     "SUPABASE_URL": "https://wqrrwvaxovrjjiilqkmt.supabase.co",
     "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_yZch0ixRiNtHxjL0PFGXXg_RFdyLcWK",

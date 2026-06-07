@@ -9,10 +9,11 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import {
+  emailAppointmentReceipt,
   getAppointmentReceipt,
   type AppointmentReceipt,
 } from "@/lib/payments.functions";
-import { AlertTriangle, Loader2, Printer, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Loader2, Mail, Printer, ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/receipt/$appointmentId")({
   head: () => ({
@@ -79,6 +80,12 @@ function ReceiptPage() {
   const [data, setData] = useState<AppointmentReceipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [emailState, setEmailState] = useState<
+    | { status: "idle" }
+    | { status: "sending" }
+    | { status: "sent"; to: string }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
 
   useEffect(() => {
     if (authLoading) return;
@@ -149,6 +156,55 @@ function ReceiptPage() {
           </Link>
           <button
             type="button"
+            disabled={emailState.status === "sending" || emailState.status === "sent"}
+            onClick={async () => {
+              if (!user) return;
+              setEmailState({ status: "sending" });
+              try {
+                const res = await emailAppointmentReceipt({
+                  data: { userId: user.id, appointmentId },
+                });
+                if (res.ok) {
+                  setEmailState({ status: "sent", to: res.sentTo });
+                } else if (res.reason === "email_disabled") {
+                  setEmailState({
+                    status: "error",
+                    message: "خدمة البريد غير مفعّلة حالياً.",
+                  });
+                } else if (res.reason === "no_email_on_account") {
+                  setEmailState({
+                    status: "error",
+                    message: "لا يوجد بريد إلكتروني مسجّل في حسابك.",
+                  });
+                } else {
+                  setEmailState({
+                    status: "error",
+                    message: "تعذّر إرسال البريد. حاول مرة أخرى.",
+                  });
+                }
+              } catch {
+                setEmailState({
+                  status: "error",
+                  message: "حدث خطأ في الاتصال. حاول مرة أخرى.",
+                });
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed"
+            aria-live="polite"
+          >
+            {emailState.status === "sending" ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Mail className="h-4 w-4" aria-hidden="true" />
+            )}
+            {emailState.status === "sent"
+              ? "تم الإرسال ✓"
+              : emailState.status === "sending"
+                ? "جارِ الإرسال..."
+                : "أرسل لي الإيصال بالبريد"}
+          </button>
+          <button
+            type="button"
             onClick={() => window.print()}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
@@ -157,6 +213,23 @@ function ReceiptPage() {
           </button>
         </div>
       </div>
+
+      {emailState.status === "error" && (
+        <div
+          role="alert"
+          className="receipt-toolbar mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 print:hidden"
+        >
+          {emailState.message}
+        </div>
+      )}
+      {emailState.status === "sent" && (
+        <div
+          role="status"
+          className="receipt-toolbar mb-4 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-900 print:hidden"
+        >
+          تم إرسال الإيصال إلى {emailState.to}.
+        </div>
+      )}
 
       <article className="receipt-sheet rounded-xl border border-border bg-white p-8 text-slate-900 shadow-sm print:border-0 print:shadow-none">
         {/* Header */}

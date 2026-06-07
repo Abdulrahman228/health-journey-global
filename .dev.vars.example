@@ -1,0 +1,19 @@
+# Local-only secrets for `wrangler dev`. NEVER commit `.dev.vars`.
+# Copy this file to `.dev.vars` and fill in real values:
+#   cp .dev.vars.example .dev.vars
+#
+# Production secrets are set via `wrangler secret put <NAME>` and stored
+# encrypted by Cloudflare — they never live in git.
+
+# === Required (server) ===
+SUPABASE_SERVICE_ROLE_KEY=replace_me
+STRIPE_SECRET_KEY=sk_test_replace_me
+STRIPE_WEBHOOK_SECRET=whsec_replace_me
+
+# === Optional: Email (Resend) ===
+# Sign up at https://resend.com → API Keys → Create.
+# Without this key, the receipt-email endpoint returns { ok: false, reason: "email_disabled" }
+# and the UI shows "خدمة البريد غير مفعّلة حالياً." — no errors thrown.
+RESEND_API_KEY=
+# Override the From header (default: "Tabibi <noreply@mytabibi.com>")
+# EMAIL_FROM=Tabibi <noreply@mytabibi.com>
