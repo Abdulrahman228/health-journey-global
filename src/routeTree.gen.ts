@@ -18,6 +18,7 @@ import { Route as SitemapDoctorsDotxmlRouteImport } from './routes/sitemap-docto
 import { Route as SitemapArticlesDotxmlRouteImport } from './routes/sitemap-articles[.]xml'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
@@ -29,6 +30,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as JoinDoctorRouteImport } from './routes/join-doctor'
 import { Route as IndexnowKeyDottxtRouteImport } from './routes/indexnow-key[.]txt'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as FeedRouteImport } from './routes/feed'
 import { Route as DoctorsRouteImport } from './routes/doctors'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -132,6 +134,11 @@ const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
   path: '/robots.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -185,6 +192,11 @@ const IndexnowKeyDottxtRoute = IndexnowKeyDottxtRouteImport.update({
 const HowItWorksRoute = HowItWorksRouteImport.update({
   id: '/how-it-works',
   path: '/how-it-works',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FeedRoute = FeedRouteImport.update({
@@ -481,6 +493,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/doctors': typeof DoctorsRoute
   '/feed': typeof FeedRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/how-it-works': typeof HowItWorksRoute
   '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
@@ -492,6 +505,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap-articles.xml': typeof SitemapArticlesDotxmlRoute
@@ -559,6 +573,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRouteWithChildren
   '/doctors': typeof DoctorsRoute
   '/feed': typeof FeedRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/how-it-works': typeof HowItWorksRoute
   '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
@@ -570,6 +585,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap-articles.xml': typeof SitemapArticlesDotxmlRoute
@@ -638,6 +654,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/doctors': typeof DoctorsRoute
   '/feed': typeof FeedRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/how-it-works': typeof HowItWorksRoute
   '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
@@ -649,6 +666,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap-articles.xml': typeof SitemapArticlesDotxmlRoute
@@ -718,6 +736,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/doctors'
     | '/feed'
+    | '/forgot-password'
     | '/how-it-works'
     | '/indexnow-key.txt'
     | '/join-doctor'
@@ -729,6 +748,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/profile'
+    | '/reset-password'
     | '/robots.txt'
     | '/signup'
     | '/sitemap-articles.xml'
@@ -796,6 +816,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/doctors'
     | '/feed'
+    | '/forgot-password'
     | '/how-it-works'
     | '/indexnow-key.txt'
     | '/join-doctor'
@@ -807,6 +828,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/profile'
+    | '/reset-password'
     | '/robots.txt'
     | '/signup'
     | '/sitemap-articles.xml'
@@ -874,6 +896,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/doctors'
     | '/feed'
+    | '/forgot-password'
     | '/how-it-works'
     | '/indexnow-key.txt'
     | '/join-doctor'
@@ -885,6 +908,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/profile'
+    | '/reset-password'
     | '/robots.txt'
     | '/signup'
     | '/sitemap-articles.xml'
@@ -953,6 +977,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   DoctorsRoute: typeof DoctorsRoute
   FeedRoute: typeof FeedRouteWithChildren
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   HowItWorksRoute: typeof HowItWorksRoute
   IndexnowKeyDottxtRoute: typeof IndexnowKeyDottxtRoute
   JoinDoctorRoute: typeof JoinDoctorRoute
@@ -964,6 +989,7 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
   ProfileRoute: typeof ProfileRouteWithChildren
+  ResetPasswordRoute: typeof ResetPasswordRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SignupRoute: typeof SignupRoute
   SitemapArticlesDotxmlRoute: typeof SitemapArticlesDotxmlRoute
@@ -1071,6 +1097,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RobotsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -1146,6 +1179,13 @@ declare module '@tanstack/react-router' {
       path: '/how-it-works'
       fullPath: '/how-it-works'
       preLoaderRoute: typeof HowItWorksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/feed': {
@@ -1631,6 +1671,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   DoctorsRoute: DoctorsRoute,
   FeedRoute: FeedRouteWithChildren,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   HowItWorksRoute: HowItWorksRoute,
   IndexnowKeyDottxtRoute: IndexnowKeyDottxtRoute,
   JoinDoctorRoute: JoinDoctorRoute,
@@ -1642,6 +1683,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
   ProfileRoute: ProfileRouteWithChildren,
+  ResetPasswordRoute: ResetPasswordRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SignupRoute: SignupRoute,
   SitemapArticlesDotxmlRoute: SitemapArticlesDotxmlRoute,

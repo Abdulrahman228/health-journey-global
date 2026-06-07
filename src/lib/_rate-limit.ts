@@ -63,3 +63,11 @@ export const signupRateLimit = createMiddleware({ type: "function" }).server(
     return next();
   },
 );
+
+/** 3 password-reset requests per 15 min per IP — anti-enumeration + anti-spam. */
+export const passwordResetRateLimit = createMiddleware({ type: "function" }).server(
+  async ({ next }) => {
+    enforce("password_reset", 3, 15 * 60 * 1000);
+    return next();
+  },
+);

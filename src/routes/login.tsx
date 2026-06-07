@@ -166,6 +166,15 @@ function LoginPage() {
                 ? t("Signing in...", "جاري تسجيل الدخول...")
                 : t("Sign In", "تسجيل الدخول")}
             </button>
+
+            <div className="text-center">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-medium text-primary hover:text-primary/80"
+              >
+                {t("Forgot your password?", "نسيت كلمة المرور؟")}
+              </Link>
+            </div>
           </form>
 
           <div className="relative my-6">

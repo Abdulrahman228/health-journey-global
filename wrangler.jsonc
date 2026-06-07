@@ -24,5 +24,11 @@
     "VITE_SUPABASE_PROJECT_ID": "wqrrwvaxovrjjiilqkmt",
     "VITE_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_yZch0ixRiNtHxjL0PFGXXg_RFdyLcWK"
   },
+  // Hourly cron — appointment-reminders job sends emails ~24h before each
+  // confirmed/paid appointment. Implemented in src/server.ts > scheduled().
+  // Graceful no-op if RESEND_API_KEY isn't set.
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
   "observability": { "enabled": true }
 }

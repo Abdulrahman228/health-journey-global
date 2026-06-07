@@ -110,4 +110,34 @@ export default {
       return brandedErrorResponse();
     }
   },
+
+  /**
+   * Scheduled handler — runs on a Cloudflare cron trigger.
+   *
+   * Configured in wrangler.jsonc:
+   *   "triggers": { "crons": ["0 * * * *"] }   // hourly, on the hour
+   *
+   * Currently dispatches:
+   *   - Appointment reminders ~24h before the scheduled time.
+   *
+   * The handler is a no-op when RESEND_API_KEY isn't configured (sender.ts
+   * gracefully short-circuits), so enabling the cron without email keys is safe.
+   */
+  async scheduled(
+    event: { scheduledTime: number; cron: string },
+    _env: unknown,
+    ctx: { waitUntil: (promise: Promise<unknown>) => void },
+  ) {
+    const { runAppointmentReminders } = await import("./lib/cron/appointment-reminders");
+    ctx.waitUntil(
+      runAppointmentReminders({ scheduledTime: event.scheduledTime }).catch((err) => {
+        console.error("[cron] appointment-reminders failed:", err);
+        reportError(err, {
+          source: "server",
+          level: "error",
+          context: { kind: "cron_failure", job: "appointment-reminders" },
+        });
+      }),
+    );
+  },
 };

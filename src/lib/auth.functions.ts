@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { signupRateLimit } from "./_rate-limit";
+import { signupRateLimit, passwordResetRateLimit } from "./_rate-limit";
 import { assertSelf } from "./_authz";
 
 type BootstrapRole = "doctor" | "patient";
@@ -204,4 +204,85 @@ export const getUserProfile = createServerFn({ method: "POST" })
 
     if (error) throw new Error(error.message);
     return { profile };
+  });
+
+// =============================================================================
+// Password reset — generates a recovery link via Supabase Admin and sends it
+// to the user using our own branded Arabic email template (via Resend).
+//
+// Always returns { ok: true } regardless of whether the email exists, to
+// prevent user enumeration. Rate-limited to 3 requests per 15 min per IP.
+// =============================================================================
+export const requestPasswordReset = createServerFn({ method: "POST" })
+  .middleware([passwordResetRateLimit])
+  .inputValidator((data) =>
+    z
+      .object({
+        email: z.string().email("Invalid email"),
+        redirectTo: z.string().url().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const email = data.email.trim().toLowerCase();
+    const redirectTo = data.redirectTo ?? "https://mytabibi.com/reset-password";
+
+    // Constant-time success path — never disclose whether the email exists.
+    const okResponse = { ok: true as const };
+
+    try {
+      // 1. Generate a recovery link. This call returns 422 if the email
+      //    isn't registered — we swallow that to avoid enumeration.
+      const { data: linkData, error: linkErr } =
+        await supabaseAdmin.auth.admin.generateLink({
+          type: "recovery",
+          email,
+          options: { redirectTo },
+        });
+
+      if (linkErr || !linkData?.properties?.action_link) {
+        // Either the email doesn't exist or generation failed; either way,
+        // we return ok to avoid leaking which it was.
+        return okResponse;
+      }
+
+      const actionLink = linkData.properties.action_link;
+
+      // 2. Look up display name (best-effort).
+      let recipientName: string | null = null;
+      const userId = linkData.user?.id;
+      if (userId) {
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", userId)
+          .maybeSingle();
+        recipientName = (profile?.full_name as string | null) ?? null;
+      }
+
+      // 3. Render + send email.
+      const { buildPasswordResetEmail } = await import(
+        "@/lib/email/templates/password-reset"
+      );
+      const { sendEmail } = await import("@/lib/email/sender");
+
+      const { subject, html } = buildPasswordResetEmail({
+        resetUrl: actionLink,
+        recipientName,
+      });
+
+      await sendEmail({
+        to: email,
+        subject,
+        html,
+        tags: [{ name: "category", value: "password_reset" }],
+      });
+      // Note: we don't propagate sendEmail's result — same anti-enumeration
+      // reason. If RESEND_API_KEY is missing the request still "succeeds"
+      // from the user's POV; admins will see no email being delivered.
+    } catch {
+      // Swallow all errors — anti-enumeration.
+    }
+
+    return okResponse;
   });
