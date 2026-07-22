@@ -78,3 +78,64 @@ export const importSeededDoctors = createServerFn({ method: "POST" })
       skipped: data.rows.length - insertedCount,
     };
   });
+
+/** Mask a phone for display: keep the last 3 digits. */
+function maskPhone(phone: string | null): string | null {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.length < 4) return null;
+  return `••••${digits.slice(-3)}`;
+}
+
+/**
+ * Admin listing of the seeded directory — lets the admin see who was imported,
+ * who ACTIVATED (claimed 🎉), and who DECLINED (suppressed) + the reason.
+ * Admin-only; reads the RLS-locked table via supabaseAdmin. Phone is masked.
+ */
+export const adminListSeededDoctors = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((raw: unknown) =>
+    z
+      .object({
+        status: z.enum(["all", "unclaimed", "claimed", "suppressed"]).default("all"),
+        search: z.string().trim().max(120).optional(),
+        limit: z.number().int().min(1).max(500).default(200),
+      })
+      .parse(raw),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.userId);
+
+    let q = supabaseAdmin
+      .from("scraped_doctors")
+      .select(
+        "id, full_name, specialty, city, governorate, phone, source, listing_status, is_claimed, opted_out, opted_out_reason, imported_at, claimed_at, opted_out_at",
+      )
+      .order("imported_at", { ascending: false })
+      .limit(data.limit);
+
+    if (data.status === "claimed") q = q.eq("is_claimed", true);
+    else if (data.status === "suppressed") q = q.eq("opted_out", true);
+    else if (data.status === "unclaimed") q = q.eq("is_claimed", false).eq("opted_out", false);
+
+    if (data.search) q = q.ilike("full_name", `%${data.search}%`);
+
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+
+    return {
+      rows: (rows ?? []).map((r) => ({
+        id: r.id,
+        fullName: r.full_name,
+        specialty: r.specialty,
+        city: [r.city, r.governorate].filter(Boolean).join(" · ") || null,
+        phoneHint: maskPhone(r.phone),
+        source: r.source,
+        status: r.is_claimed ? "claimed" : r.opted_out ? "suppressed" : "unclaimed",
+        listingStatus: r.listing_status,
+        reason: r.opted_out_reason,
+        importedAt: r.imported_at,
+        claimedAt: r.claimed_at,
+        optedOutAt: r.opted_out_at,
+      })),
+    };
+  });

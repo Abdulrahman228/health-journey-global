@@ -1,12 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { AdminShell } from "@/components/admin/AdminNav";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { importSeededDoctors } from "@/lib/seed.functions";
-import { Loader2, ShieldAlert, UploadCloud, Info } from "lucide-react";
+import { importSeededDoctors, adminListSeededDoctors } from "@/lib/seed.functions";
+import { Ban, Loader2, RefreshCw, ShieldAlert, UploadCloud, UserCheck, Info } from "lucide-react";
 
 export const Route = createFileRoute("/admin/seed-directory")({
   head: () => ({
@@ -207,6 +207,178 @@ function SeedDirectoryPage() {
           </div>
         )}
       </div>
+
+      <SeededListing refreshKey={result?.inserted ?? 0} />
     </AdminShell>
+  );
+}
+
+type SeededRow = {
+  id: string;
+  fullName: string;
+  specialty: string | null;
+  city: string | null;
+  phoneHint: string | null;
+  source: string;
+  status: string;
+  reason: string | null;
+  importedAt: string;
+  claimedAt: string | null;
+  optedOutAt: string | null;
+};
+
+const STATUS_TABS: { key: "all" | "unclaimed" | "claimed" | "suppressed"; label: string }[] = [
+  { key: "all", label: "الكل" },
+  { key: "unclaimed", label: "غير مُفعّل" },
+  { key: "claimed", label: "مُفعّل ✓" },
+  { key: "suppressed", label: "مرفوض" },
+];
+
+const SOURCE_LABEL: Record<string, string> = {
+  syndicate: "نقابة",
+  referral: "إحالة",
+  public_listing: "قائمة عامة",
+  gmaps: "خرائط",
+};
+
+/** The current directory: who was imported, who activated, who declined + why. */
+function SeededListing({ refreshKey }: { refreshKey: number }) {
+  const list = useServerFn(adminListSeededDoctors);
+  const [status, setStatus] = useState<"all" | "unclaimed" | "claimed" | "suppressed">("all");
+  const [rows, setRows] = useState<SeededRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(
+    async (s: "all" | "unclaimed" | "claimed" | "suppressed") => {
+      setLoading(true);
+      try {
+        const res = await list({ data: { status: s } });
+        setRows(res.rows as SeededRow[]);
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [list],
+  );
+
+  useEffect(() => {
+    void load(status);
+  }, [load, status, refreshKey]);
+
+  const fmt = (d: string | null) => (d ? new Date(d).toLocaleDateString("ar-EG") : "—");
+
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-bold">الدليل الحالي ({rows.length})</h2>
+        <div className="flex items-center gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setStatus(tab.key)}
+                className={
+                  "rounded-full px-3 py-1 text-xs font-medium transition " +
+                  (status === tab.key
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border text-muted-foreground hover:bg-muted")
+                }
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => load(status)}
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> تحديث
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 text-right font-medium">الطبيب</th>
+              <th className="px-4 py-3 text-right font-medium">التخصص</th>
+              <th className="px-4 py-3 text-right font-medium">المدينة</th>
+              <th className="px-4 py-3 text-right font-medium">المصدر</th>
+              <th className="px-4 py-3 text-right font-medium">الحالة</th>
+              <th className="px-4 py-3 text-right font-medium">التفاصيل</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  لا توجد بيانات في هذا التصنيف بعد.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.id} className="border-b border-border/60 last:border-0">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-foreground">{r.fullName}</div>
+                    {r.phoneHint && <div className="text-xs text-muted-foreground" dir="ltr">{r.phoneHint}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.specialty ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.city ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{SOURCE_LABEL[r.source] ?? r.source}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={r.status} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {r.status === "claimed" ? (
+                      <span className="text-emerald-600">فُعّل في {fmt(r.claimedAt)}</span>
+                    ) : r.status === "suppressed" ? (
+                      <span className="text-destructive">
+                        رفض في {fmt(r.optedOutAt)}
+                        {r.reason ? ` — ${r.reason}` : ""}
+                      </span>
+                    ) : (
+                      <span>أُضيف في {fmt(r.importedAt)}</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "claimed") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        <UserCheck className="h-3 w-3" /> مُفعّل
+      </span>
+    );
+  }
+  if (status === "suppressed") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+        <Ban className="h-3 w-3" /> مرفوض
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      غير مُفعّل
+    </span>
   );
 }
