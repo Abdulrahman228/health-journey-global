@@ -11,7 +11,8 @@ const sb = supabase as unknown as {
 };
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminShell } from "@/components/admin/AdminNav";
+import { EmptyState } from "@/components/admin/EmptyState";
 import { pingIndexNowForArticle } from "@/lib/indexnow.functions";
 import { marked } from "marked";
 import { sanitizeHtml } from "@/lib/sanitize";
@@ -268,8 +269,7 @@ function AdminArticlesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:py-14" dir="rtl">
-      <AdminNav />
+    <AdminShell>
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
@@ -325,9 +325,7 @@ function AdminArticlesPage() {
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       ) : filtered.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border bg-card p-8 text-center text-muted-foreground">
-          لا توجد مقالات مطابقة.
-        </p>
+        <EmptyState icon={FileText} description="لا توجد مقالات مطابقة." />
       ) : (
         <ul className="grid gap-3">
           {filtered.map((r) => (
@@ -574,6 +572,6 @@ function AdminArticlesPage() {
           </button>
         </div>
       </section>
-    </div>
+    </AdminShell>
   );
 }

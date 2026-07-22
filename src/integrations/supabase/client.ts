@@ -23,6 +23,10 @@ function createSupabaseClient() {
       storage: typeof window !== 'undefined' ? localStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
+      // PKCE makes the OAuth code→session exchange deterministic (one code = one
+      // user), eliminating the stale-session race that logged users into the
+      // wrong account under the old implicit flow.
+      flowType: 'pkce',
     }
   });
 }

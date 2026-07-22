@@ -10,13 +10,14 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminShell } from "@/components/admin/AdminNav";
+import { EmptyState } from "@/components/admin/EmptyState";
 import {
   adminListWithdrawals,
   adminUpdateWithdrawal,
   type AdminWithdrawalRow,
 } from "@/lib/accounting.functions";
-import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldAlert, ShieldCheck, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/withdrawals")({
@@ -83,8 +84,7 @@ function AdminWithdrawalsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8" dir="rtl">
-      <AdminNav />
+    <AdminShell>
       <header className="mb-5 flex items-center gap-2">
         <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
         <h1 className="text-2xl font-bold text-foreground">إدارة طلبات السحب</h1>
@@ -128,9 +128,7 @@ function AdminWithdrawalsPage() {
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       ) : rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
-          لا توجد طلبات في هذه الحالة.
-        </p>
+        <EmptyState icon={Wallet} description="لا توجد طلبات سحب في هذه الحالة." />
       ) : (
         <div className="space-y-3">
           {rows.map((w) => (
@@ -138,7 +136,7 @@ function AdminWithdrawalsPage() {
           ))}
         </div>
       )}
-    </div>
+    </AdminShell>
   );
 }
 
@@ -261,6 +259,7 @@ function WithdrawalCard({
                 <ActionButton
                   onClick={() => handle("approved")}
                   busy={busy === "approved"}
+                  disabled={!!busy}
                   cls="bg-sky-600 hover:bg-sky-700"
                 >
                   اعتماد
@@ -268,6 +267,7 @@ function WithdrawalCard({
                 <ActionButton
                   onClick={() => handle("rejected")}
                   busy={busy === "rejected"}
+                  disabled={!!busy}
                   cls="bg-rose-600 hover:bg-rose-700"
                 >
                   رفض
@@ -278,6 +278,7 @@ function WithdrawalCard({
               <ActionButton
                 onClick={() => handle("processing")}
                 busy={busy === "processing"}
+                disabled={!!busy}
                 cls="bg-indigo-600 hover:bg-indigo-700"
               >
                 وضع قيد التحويل
@@ -286,6 +287,7 @@ function WithdrawalCard({
             <ActionButton
               onClick={() => handle("paid")}
               busy={busy === "paid"}
+              disabled={!!busy}
               cls="bg-emerald-600 hover:bg-emerald-700"
             >
               تأكيد الدفع
@@ -314,18 +316,20 @@ function ActionButton({
   children,
   onClick,
   busy,
+  disabled,
   cls,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   busy: boolean;
+  disabled?: boolean;
   cls: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={busy}
+      disabled={disabled ?? busy}
       className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${cls}`}
     >
       {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}

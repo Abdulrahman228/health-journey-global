@@ -2,11 +2,14 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminShell } from "@/components/admin/AdminNav";
+import { EmptyState } from "@/components/admin/EmptyState";
 import {
   adminListReviews,
   adminModerateReview,
 } from "@/lib/reviews.functions";
+import { adminDeleteContent } from "@/lib/admin/content";
+import { AdminDeleteContentSchema } from "@/lib/admin/_schemas";
 import {
   Loader2,
   Star,
@@ -14,6 +17,9 @@ import {
   XCircle,
   Clock,
   MessageSquare,
+  Trash2,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -43,6 +49,12 @@ function AdminReviewsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+
+  // Optimistic removal after a successful delete.
+  const removeRow = useCallback((id: string) => {
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  }, []);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -101,8 +113,7 @@ function AdminReviewsPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8" dir="rtl">
-      <AdminNav />
+    <AdminShell>
       <header className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <MessageSquare className="h-6 w-6 text-primary" aria-hidden="true" />
@@ -150,15 +161,7 @@ function AdminReviewsPage() {
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
         </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-card py-16 text-center">
-          <MessageSquare
-            className="mx-auto h-10 w-10 text-muted-foreground/60"
-            aria-hidden="true"
-          />
-          <p className="mt-3 font-medium text-foreground">
-            لا توجد تقييمات في هذا القسم
-          </p>
-        </div>
+        <EmptyState icon={MessageSquare} description="لا توجد تقييمات في هذا القسم." />
       ) : (
         <ul role="list" className="space-y-3">
           {rows.map((r) => (
@@ -168,11 +171,23 @@ function AdminReviewsPage() {
               acting={actingId === r.id}
               onApprove={() => moderate(r.id, "approved")}
               onReject={() => moderate(r.id, "rejected")}
+              onDelete={() => setDeleteTarget(r)}
             />
           ))}
         </ul>
       )}
-    </div>
+
+      {deleteTarget && (
+        <DeleteReviewModal
+          review={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDone={() => {
+            removeRow(deleteTarget.id);
+            setDeleteTarget(null);
+          }}
+        />
+      )}
+    </AdminShell>
   );
 }
 
@@ -181,11 +196,13 @@ function ReviewCard({
   acting,
   onApprove,
   onReject,
+  onDelete,
 }: {
   r: Row;
   acting: boolean;
   onApprove: () => void;
   onReject: () => void;
+  onDelete: () => void;
 }) {
   const dateAr = new Date(r.createdAt).toLocaleDateString("ar-EG");
   const badge =
@@ -234,32 +251,43 @@ function ReviewCard({
           </div>
         </div>
 
-        {r.status === "pending" && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onApprove}
-              disabled={acting}
-              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-            >
-              {acting ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              )}
-              اعتماد
-            </button>
-            <button
-              type="button"
-              onClick={onReject}
-              disabled={acting}
-              className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
-            >
-              <XCircle className="h-4 w-4" aria-hidden="true" />
-              رفض
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {r.status === "pending" && (
+            <>
+              <button
+                type="button"
+                onClick={onApprove}
+                disabled={acting}
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {acting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                )}
+                اعتماد
+              </button>
+              <button
+                type="button"
+                onClick={onReject}
+                disabled={acting}
+                className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
+              >
+                <XCircle className="h-4 w-4" aria-hidden="true" />
+                رفض
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="حذف التقييم"
+            className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-sm font-semibold text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            حذف
+          </button>
+        </div>
       </div>
 
       {r.comment && (
@@ -273,5 +301,110 @@ function ReviewCard({
         </p>
       )}
     </li>
+  );
+}
+
+// =====================================================================
+// Delete confirmation modal — validates with AdminDeleteContentSchema and
+// calls the adminDeleteContent server function (contentType: "review").
+// =====================================================================
+function DeleteReviewModal({
+  review,
+  onClose,
+  onDone,
+}: {
+  review: Row;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setError(null);
+    const input = {
+      contentType: "review" as const,
+      contentId: review.id,
+      reason: reason.trim(),
+    };
+    const parsed = AdminDeleteContentSchema.safeParse(input);
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? "بيانات غير صالحة");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await adminDeleteContent({ data: parsed.data });
+      toast.success("تم حذف التقييم");
+      onDone();
+    } catch (e) {
+      toast.error("فشل الحذف: " + (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="حذف تقييم"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div className="w-full max-w-md overflow-hidden rounded-xl bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <header className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-lg font-bold">حذف التقييم</h2>
+          <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-md p-1 hover:bg-muted">
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+
+        <div className="space-y-4 p-5">
+          <div className="flex gap-2 rounded-lg bg-muted/50 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <p className="text-muted-foreground">
+              سيتم حذف تقييم <span className="font-semibold text-foreground">{review.patientName}</span> للطبيب{" "}
+              <span className="font-semibold text-foreground">د. {review.doctorName}</span> نهائياً. لا يمكن التراجع.
+            </p>
+          </div>
+
+          <label className="block text-sm">
+            <span className="font-medium text-foreground">سبب الحذف *</span>
+            <textarea
+              rows={2}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="سبب الحذف (3 أحرف على الأقل)"
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+          </label>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+
+        <footer className="flex justify-end gap-2 border-t border-border px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+          >
+            إلغاء
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy || reason.trim().length < 3}
+            className="inline-flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-white hover:bg-destructive/90 disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            تأكيد الحذف
+          </button>
+        </footer>
+      </div>
+    </div>
   );
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
-type UserRole = "admin" | "doctor" | "patient" | "pharmacy";
+type UserRole = "super_admin" | "admin" | "doctor" | "patient" | "pharmacy";
 
 interface ProfileLite {
   id: string;
@@ -28,8 +28,8 @@ async function fetchRole(userId: string): Promise<UserRole | null> {
       .eq("user_id", userId);
     if (error || !data || data.length === 0) return null;
     const roles = data.map((r) => r.role as UserRole);
-    // Priority: admin > doctor > pharmacy > patient
-    const priority: UserRole[] = ["admin", "doctor", "pharmacy", "patient"];
+    // Priority: super_admin > admin > doctor > pharmacy > patient
+    const priority: UserRole[] = ["super_admin", "admin", "doctor", "pharmacy", "patient"];
     for (const p of priority) {
       if (roles.includes(p)) return p;
     }
@@ -90,6 +90,9 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+    // Belt-and-suspenders: wipe any lingering auth token / stale state so a
+    // subsequent login can never inherit the previous account's session.
+    if (typeof window !== "undefined") localStorage.clear();
     setState({ user: null, role: null, profile: null, isLoading: false, isAuthenticated: false });
   }, []);
 

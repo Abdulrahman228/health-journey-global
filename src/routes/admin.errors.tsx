@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminShell } from "@/components/admin/AdminNav";
 import {
   adminListErrorGroups,
   adminGetErrorLog,
@@ -69,6 +69,12 @@ function AdminErrorsPage() {
     load();
   }, [authLoading, roleLoading, user, isAdmin, navigate, load]);
 
+  // Prevent body scroll when detail modal is open
+  useEffect(() => {
+    document.body.style.overflow = detailOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [detailOpen]);
+
   const openDetail = async (sampleId: string) => {
     if (!user) return;
     try {
@@ -91,8 +97,7 @@ function AdminErrorsPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8" dir="rtl">
-      <AdminNav />
+    <AdminShell>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
@@ -170,7 +175,7 @@ function AdminErrorsPage() {
           <p className="mt-3 font-medium text-foreground">لا توجد أخطاء في هذه الفترة 🎉</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <table className="w-full table-auto text-sm">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
@@ -203,7 +208,7 @@ function AdminErrorsPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{g.source}</td>
-                  <td className="max-w-105 truncate px-3 py-2 text-foreground" title={g.message}>
+                  <td className="max-w-xs truncate px-3 py-2 text-foreground" title={g.message}>
                     {g.message}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
@@ -228,6 +233,9 @@ function AdminErrorsPage() {
 
       {detailOpen && detail ? (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="تفاصيل الخطأ"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={() => setDetailOpen(false)}
         >
@@ -313,6 +321,6 @@ function AdminErrorsPage() {
           </div>
         </div>
       ) : null}
-    </div>
+    </AdminShell>
   );
 }

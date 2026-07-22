@@ -12,7 +12,8 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminShell } from "@/components/admin/AdminNav";
+import { EmptyState } from "@/components/admin/EmptyState";
 import {
   adminListPendingDocuments,
   adminReviewDocument,
@@ -151,8 +152,7 @@ function AdminDocumentsPage() {
   const filtered = filter === "pending" ? docs.filter((d) => d.status === "pending") : docs;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6" dir="rtl">
-      <AdminNav />
+    <AdminShell>
       <div className="flex items-center gap-2">
         <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
         <h1 className="text-2xl font-bold">مراجعة المستندات</h1>
@@ -181,7 +181,7 @@ function AdminDocumentsPage() {
           <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
         </div>
       ) : filtered.length === 0 ? (
-        <p className="mt-10 text-center text-muted-foreground">لا توجد مستندات.</p>
+        <EmptyState icon={FileText} description="لا توجد مستندات في هذه الحالة." />
       ) : (
         <ul className="mt-6 space-y-4">
           {filtered.map((doc) => {
@@ -287,6 +287,6 @@ function AdminDocumentsPage() {
           })}
         </ul>
       )}
-    </div>
+    </AdminShell>
   );
 }

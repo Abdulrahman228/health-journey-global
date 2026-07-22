@@ -9,7 +9,8 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminShell } from "@/components/admin/AdminNav";
+import { EmptyState } from "@/components/admin/EmptyState";
 import {
   listAllTickets,
   respondToTicket,
@@ -73,8 +74,7 @@ function AdminSupportPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8" dir="rtl">
-      <AdminNav />
+    <AdminShell>
       <h1 className="text-2xl font-bold mb-4">تذاكر الدعم</h1>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -96,9 +96,7 @@ function AdminSupportPage() {
       {isLoading ? (
         <div className="text-sm text-muted-foreground">…</div>
       ) : tickets.length === 0 ? (
-        <div className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-6 text-center">
-          لا توجد تذاكر في هذه الحالة
-        </div>
+        <EmptyState description="لا توجد تذاكر دعم في هذه الحالة." />
       ) : (
         <div className="space-y-3">
           {tickets.map((t) => (
@@ -112,7 +110,7 @@ function AdminSupportPage() {
           ))}
         </div>
       )}
-    </main>
+    </AdminShell>
   );
 }
 

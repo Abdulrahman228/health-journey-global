@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertSelf } from "./_authz";
 import { type StripeEnv, createStripeClient } from "@/lib/stripe.server";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 async function resolveOrCreateCustomer(
   stripe: ReturnType<typeof createStripeClient>,
@@ -89,6 +90,10 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
         metadata: { userId, ...(data.planCode && { planCode: data.planCode }) },
         ...(isRecurring && {
           subscription_data: {
+            // 30-day free trial for new Gold subscribers. Stripe won't charge
+            // until the trial ends; the amount is derived from the resolved
+            // Price (Monthly 999 / Yearly 9999) — never hard-coded here.
+            trial_period_days: 30,
             metadata: { userId, ...(data.planCode && { planCode: data.planCode }) },
           },
         }),
@@ -128,6 +133,45 @@ export const createPortalSession = createServerFn({ method: "POST" })
 import { getStripeEnvironment } from "@/lib/stripe";
 import { applyCouponToAppointment } from "@/lib/coupons.functions";
 
+/**
+ * Server-authoritative visit fee (major currency units) for an appointment,
+ * derived from its classified visit_type:
+ *   - follow_up   → doctor_followup_settings.followup_fee (a "consultation")
+ *   - first_visit → doctor_details.consultation_fee       (a full "كشف أول")
+ *
+ * Robustness (protect revenue): if the follow-up fee is missing or invalid,
+ * fall back to the full consultation fee. Returns null only if the
+ * appointment/doctor can't be resolved (caller then keeps its own fallback).
+ */
+export async function resolveVisitFeeMajor(appointmentId: string): Promise<number | null> {
+  const { data: appt } = await supabaseAdmin
+    .from("appointments")
+    .select("visit_type, doctor_id")
+    .eq("id", appointmentId)
+    .maybeSingle();
+  if (!appt?.doctor_id) return null;
+
+  const { data: dd } = await supabaseAdmin
+    .from("doctor_details")
+    .select("consultation_fee")
+    .eq("id", appt.doctor_id)
+    .maybeSingle();
+  const consultationFee = Number(dd?.consultation_fee ?? NaN);
+  const consultationValid = Number.isFinite(consultationFee) && consultationFee >= 0;
+  const fallback = consultationValid ? consultationFee : null;
+
+  if (appt.visit_type === "follow_up") {
+    const { data: fs } = await supabaseAdmin
+      .from("doctor_followup_settings")
+      .select("followup_fee")
+      .eq("doctor_details_id", appt.doctor_id)
+      .maybeSingle();
+    const followupFee = fs ? Number(fs.followup_fee) : NaN;
+    return Number.isFinite(followupFee) && followupFee >= 0 ? followupFee : fallback;
+  }
+  return fallback;
+}
+
 export const createAppointmentCheckout = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: {
@@ -165,14 +209,29 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
     const env: StripeEnv = getStripeEnvironment();
     const stripe = createStripeClient(env);
 
+    // Server-authoritative pricing: charge the fee for the appointment's
+    // classified visit_type — NEVER the client-supplied amount (which is always
+    // the full consultation fee and would overcharge follow-ups). Falls back to
+    // the client amount only if the fee can't be resolved server-side.
+    const serverFeeMajor = await resolveVisitFeeMajor(data.appointmentId);
+    let amountMinor = serverFeeMajor != null ? Math.round(serverFeeMajor * 100) : data.amount;
+
+    // Keep the appointment record consistent with what we actually charge
+    // (receipts/refunds read appointments.fee).
+    if (serverFeeMajor != null) {
+      await supabaseAdmin
+        .from("appointments")
+        .update({ fee: serverFeeMajor, consultation_fee_cents: amountMinor })
+        .eq("id", data.appointmentId);
+    }
+
     // Apply coupon (if supplied) BEFORE creating the Stripe session so the
     // checkout reflects the discounted price. Falls back silently if the
     // coupon is invalid — the patient sees the original price and a
     // toast on the client.
-    let amountMinor = data.amount;
     let appliedCoupon: { code: string; discount: number } | null = null;
     if (data.couponCode) {
-      const amountMajor = data.amount / 100;
+      const amountMajor = amountMinor / 100;
       const result = await applyCouponToAppointment({
         appointmentId: data.appointmentId,
         code: data.couponCode,
@@ -250,7 +309,6 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
 // Caller must be the patient on the appointment, the doctor on it, or admin.
 // Returns null if not authorized or not yet paid.
 // =============================================================================
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export interface AppointmentReceipt {
   receiptNumber: string;        // R-{YYYYMMDD}-{shortId}

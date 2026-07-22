@@ -110,6 +110,59 @@ function PatientDetailPage() {
     load();
   }, [authLoading, user, navigate, load]);
 
+  // Realtime: keep this patient's EMR live for the doctor.
+  //  - `medical_records` is scoped by `patient_profile_id`; any new/edited visit
+  //    reloads the timeline (and clears the per-visit rx cache so prescriptions
+  //    written in the same flow re-fetch).
+  //  - `prescriptions` has no patient column, so it can't be server-filtered;
+  //    we subscribe unfiltered and react only when the changed row's
+  //    `medical_record_id` belongs to one of THIS patient's visits, then
+  //    re-fetch just that visit's prescriptions so an open card updates in place.
+  useEffect(() => {
+    if (!patientProfileId) return;
+    const visitIds = new Set(visits.map((v) => v.id));
+
+    const channel = supabase
+      .channel(`patient-emr-${patientProfileId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "medical_records",
+          filter: `patient_profile_id=eq.${patientProfileId}`,
+        },
+        () => {
+          setRxByVisit({});
+          load();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "prescriptions" },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as
+            | { medical_record_id?: string }
+            | null;
+          const recordId = row?.medical_record_id;
+          if (!recordId || !visitIds.has(recordId)) return;
+          getPrescriptionsForRecord({
+            data: { medicalRecordId: recordId },
+          }).then((items) => {
+            setRxByVisit((prev) => ({
+              ...prev,
+              [recordId]: items as Prescription[],
+            }));
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [patientProfileId, visits, load]);
+
   const loadRxFor = useCallback(
     async (recordId: string) => {
       if (rxByVisit[recordId]) return;

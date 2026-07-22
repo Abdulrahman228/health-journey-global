@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { bootstrapOAuthUser } from "@/lib/auth.functions";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -25,21 +26,31 @@ function AuthCallbackPage() {
 
     const run = async () => {
       try {
+        // Provider errors can arrive in the query (PKCE) or the hash.
+        const query = new URLSearchParams(window.location.search);
         const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-        if (hash.get("error_description")) {
-          throw new Error(hash.get("error_description") ?? "OAuth failed");
-        }
+        const providerError = query.get("error_description") ?? hash.get("error_description");
+        if (providerError) throw new Error(providerError);
 
-        let session = (await supabase.auth.getSession()).data.session;
-        for (let i = 0; i < 10 && !session; i += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 250));
+        // PKCE: exchange THIS request's code for a session — deterministic, so a
+        // pre-existing/stale session can never win. If the client's
+        // detectSessionInUrl already consumed the code, the explicit exchange
+        // errors and we fall back to the session it just established. Either way
+        // we end up with the freshly-authenticated user, never a stale one.
+        const code = query.get("code");
+        let session: Session | null = null;
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error) session = data.session;
+        }
+        if (!session) {
           session = (await supabase.auth.getSession()).data.session;
         }
-
         if (!session?.user) {
           throw new Error("Unable to complete OAuth session");
         }
 
+        // First-time OAuth users need their profile/role/details bootstrapped.
         const rawRole = localStorage.getItem(OAUTH_ROLE_KEY);
         localStorage.removeItem(OAUTH_ROLE_KEY);
         const role = rawRole === "doctor" || rawRole === "patient" ? rawRole : undefined;
@@ -61,11 +72,12 @@ function AuthCallbackPage() {
         });
 
         if (!cancelled) {
-          window.location.replace("/");
+          window.location.replace("/dashboard");
         }
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : "OAuth failed");
+        window.location.replace("/login");
       }
     };
 

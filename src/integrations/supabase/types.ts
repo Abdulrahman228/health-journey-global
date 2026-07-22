@@ -47,6 +47,8 @@ export type Database = {
           started_at: string | null
           status: string
           updated_at: string
+          is_emergency: boolean
+          visit_type: string
         }
         Insert: {
           appointment_date?: string | null
@@ -80,6 +82,8 @@ export type Database = {
           started_at?: string | null
           status?: string
           updated_at?: string
+          is_emergency?: boolean
+          visit_type?: string
         }
         Update: {
           appointment_date?: string | null
@@ -113,6 +117,8 @@ export type Database = {
           started_at?: string | null
           status?: string
           updated_at?: string
+          is_emergency?: boolean
+          visit_type?: string
         }
         Relationships: [
           {
@@ -326,6 +332,7 @@ export type Database = {
           governorate_id: string | null
           id: string
           is_primary: boolean | null
+          services: string[]
           landmark: string | null
           lat: number | null
           lng: number | null
@@ -351,6 +358,7 @@ export type Database = {
           governorate_id?: string | null
           id?: string
           is_primary?: boolean | null
+          services?: string[]
           landmark?: string | null
           lat?: number | null
           lng?: number | null
@@ -376,6 +384,7 @@ export type Database = {
           governorate_id?: string | null
           id?: string
           is_primary?: boolean | null
+          services?: string[]
           landmark?: string | null
           lat?: number | null
           lng?: number | null
@@ -792,6 +801,7 @@ export type Database = {
           about_en: string | null
           bio: string | null
           certifications: string[] | null
+          claimed_at: string | null
           clinic_address: string | null
           clinic_name: string | null
           consultation_fee: number | null
@@ -800,10 +810,13 @@ export type Database = {
           credentials_review_started_at: string | null
           currency: string | null
           education: string | null
+          followup_period_days: number
           id: string
+          is_claimed: boolean
           is_pro: boolean
           is_verified: boolean | null
           languages: string[] | null
+          license_document_url: string | null
           national_id_last4: string | null
           pro_plus_active: boolean
           profile_id: string
@@ -814,6 +827,7 @@ export type Database = {
           solo_clinic_name: string | null
           solo_logo_url: string | null
           solo_mode_enabled: boolean
+          source: string
           specialty: string | null
           stamp_url: string | null
           syndicate_number: string | null
@@ -832,6 +846,7 @@ export type Database = {
           about_en?: string | null
           bio?: string | null
           certifications?: string[] | null
+          claimed_at?: string | null
           clinic_address?: string | null
           clinic_name?: string | null
           consultation_fee?: number | null
@@ -840,10 +855,13 @@ export type Database = {
           credentials_review_started_at?: string | null
           currency?: string | null
           education?: string | null
+          followup_period_days?: number
           id?: string
+          is_claimed?: boolean
           is_pro?: boolean
           is_verified?: boolean | null
           languages?: string[] | null
+          license_document_url?: string | null
           national_id_last4?: string | null
           pro_plus_active?: boolean
           profile_id: string
@@ -854,6 +872,7 @@ export type Database = {
           solo_clinic_name?: string | null
           solo_logo_url?: string | null
           solo_mode_enabled?: boolean
+          source?: string
           specialty?: string | null
           stamp_url?: string | null
           syndicate_number?: string | null
@@ -872,6 +891,7 @@ export type Database = {
           about_en?: string | null
           bio?: string | null
           certifications?: string[] | null
+          claimed_at?: string | null
           clinic_address?: string | null
           clinic_name?: string | null
           consultation_fee?: number | null
@@ -880,10 +900,13 @@ export type Database = {
           credentials_review_started_at?: string | null
           currency?: string | null
           education?: string | null
+          followup_period_days?: number
           id?: string
+          is_claimed?: boolean
           is_pro?: boolean
           is_verified?: boolean | null
           languages?: string[] | null
+          license_document_url?: string | null
           national_id_last4?: string | null
           pro_plus_active?: boolean
           profile_id?: string
@@ -894,6 +917,7 @@ export type Database = {
           solo_clinic_name?: string | null
           solo_logo_url?: string | null
           solo_mode_enabled?: boolean
+          source?: string
           specialty?: string | null
           stamp_url?: string | null
           syndicate_number?: string | null
@@ -1771,7 +1795,6 @@ export type Database = {
           blood_type: string | null
           created_at: string
           date_of_birth: string | null
-          emergency_contact: string | null
           id: string
           profile_id: string
           updated_at: string
@@ -1781,7 +1804,6 @@ export type Database = {
           blood_type?: string | null
           created_at?: string
           date_of_birth?: string | null
-          emergency_contact?: string | null
           id?: string
           profile_id: string
           updated_at?: string
@@ -1791,7 +1813,6 @@ export type Database = {
           blood_type?: string | null
           created_at?: string
           date_of_birth?: string | null
-          emergency_contact?: string | null
           id?: string
           profile_id?: string
           updated_at?: string
@@ -2507,6 +2528,7 @@ export type Database = {
           medical_card: Json
           profile_views_count: number
           profile_visibility: string
+          status: string
           public_banner_url: string | null
           public_bio: string | null
           slug: string | null
@@ -2524,6 +2546,7 @@ export type Database = {
           medical_card?: Json
           profile_views_count?: number
           profile_visibility?: string
+          status?: string
           public_banner_url?: string | null
           public_bio?: string | null
           slug?: string | null
@@ -2541,6 +2564,7 @@ export type Database = {
           medical_card?: Json
           profile_views_count?: number
           profile_visibility?: string
+          status?: string
           public_banner_url?: string | null
           public_bio?: string | null
           slug?: string | null
@@ -2661,6 +2685,133 @@ export type Database = {
             columns: ["moderated_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doctor_outreach: {
+        Row: {
+          attempt: number
+          channel: string
+          created_at: string
+          error: string | null
+          id: string
+          provider_message_id: string | null
+          scraped_doctor_id: string
+          sent_at: string | null
+          status: string
+          template: string
+        }
+        Insert: {
+          attempt?: number
+          channel?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          provider_message_id?: string | null
+          scraped_doctor_id: string
+          sent_at?: string | null
+          status?: string
+          template: string
+        }
+        Update: {
+          attempt?: number
+          channel?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          provider_message_id?: string | null
+          scraped_doctor_id?: string
+          sent_at?: string | null
+          status?: string
+          template?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doctor_outreach_scraped_doctor_id_fkey"
+            columns: ["scraped_doctor_id"]
+            isOneToOne: false
+            referencedRelation: "scraped_doctors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scraped_doctors: {
+        Row: {
+          address: string | null
+          city: string | null
+          claim_token: string
+          claimed_at: string | null
+          claimed_doctor_id: string | null
+          external_rating: number | null
+          external_review_cnt: number | null
+          full_name: string
+          governorate: string | null
+          id: string
+          imported_at: string
+          is_claimed: boolean
+          lat: number | null
+          listing_status: string
+          lng: number | null
+          opted_out: boolean
+          opted_out_at: string | null
+          phone: string | null
+          source: string
+          source_ref: string | null
+          specialty: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          claim_token?: string
+          claimed_at?: string | null
+          claimed_doctor_id?: string | null
+          external_rating?: number | null
+          external_review_cnt?: number | null
+          full_name: string
+          governorate?: string | null
+          id?: string
+          imported_at?: string
+          is_claimed?: boolean
+          lat?: number | null
+          listing_status?: string
+          lng?: number | null
+          opted_out?: boolean
+          opted_out_at?: string | null
+          phone?: string | null
+          source?: string
+          source_ref?: string | null
+          specialty?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          claim_token?: string
+          claimed_at?: string | null
+          claimed_doctor_id?: string | null
+          external_rating?: number | null
+          external_review_cnt?: number | null
+          full_name?: string
+          governorate?: string | null
+          id?: string
+          imported_at?: string
+          is_claimed?: boolean
+          lat?: number | null
+          listing_status?: string
+          lng?: number | null
+          opted_out?: boolean
+          opted_out_at?: string | null
+          phone?: string | null
+          source?: string
+          source_ref?: string | null
+          specialty?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scraped_doctors_claimed_doctor_id_fkey"
+            columns: ["claimed_doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctor_details"
             referencedColumns: ["id"]
           },
         ]
@@ -2887,15 +3038,19 @@ export type Database = {
       }
       subscriptions: {
         Row: {
+          access_granted_at: string | null
+          access_status: string
           cancel_at_period_end: boolean | null
           created_at: string
           current_period_end: string | null
           current_period_start: string | null
           environment: string
           id: string
+          is_manual: boolean
           plan_code: string | null
           price_id: string
           product_id: string | null
+          receipt_url: string | null
           status: string
           stripe_customer_id: string
           stripe_subscription_id: string
@@ -2903,15 +3058,19 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          access_granted_at?: string | null
+          access_status?: string
           cancel_at_period_end?: boolean | null
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
           environment?: string
           id?: string
+          is_manual?: boolean
           plan_code?: string | null
           price_id: string
           product_id?: string | null
+          receipt_url?: string | null
           status?: string
           stripe_customer_id: string
           stripe_subscription_id: string
@@ -2919,15 +3078,19 @@ export type Database = {
           user_id: string
         }
         Update: {
+          access_granted_at?: string | null
+          access_status?: string
           cancel_at_period_end?: boolean | null
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
           environment?: string
           id?: string
+          is_manual?: boolean
           plan_code?: string | null
           price_id?: string
           product_id?: string | null
+          receipt_url?: string | null
           status?: string
           stripe_customer_id?: string
           stripe_subscription_id?: string
@@ -3456,6 +3619,44 @@ export type Database = {
           specialty: string
         }[]
       }
+      get_due_followup_reminders: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          appointment_id: string
+          patient_user_id: string
+          doctor_id: string
+          doctor_name: string | null
+        }[]
+      }
+      list_seeded_doctors: {
+        Args: { p_limit?: number }
+        Returns: {
+          id: string
+          full_name: string
+          specialty: string
+          phone: string
+          address: string
+          city: string
+          governorate: string
+          external_rating: number
+          external_review_cnt: number
+        }[]
+      }
+      get_outreach_candidates: {
+        Args: { p_limit?: number }
+        Returns: {
+          id: string
+          full_name: string
+          phone: string
+          specialty: string
+          city: string
+          claim_token: string
+        }[]
+      }
+      opt_out_scraped_by_phone: {
+        Args: { p_phone: string }
+        Returns: { id: string }[]
+      }
       get_next_available_slot: {
         Args: {
           p_clinic_id?: string
@@ -3636,7 +3837,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "doctor" | "patient" | "pharmacy"
+      app_role: "admin" | "doctor" | "patient" | "pharmacy" | "super_admin"
       call_status:
         | "queued"
         | "ringing"
@@ -3781,7 +3982,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "doctor", "patient", "pharmacy"],
+      app_role: ["admin", "doctor", "patient", "pharmacy", "super_admin"],
       call_status: [
         "queued",
         "ringing",

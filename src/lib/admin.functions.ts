@@ -1,20 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+// Authorization gates live in the Admin Kit (single source of truth).
+import { assertAdmin } from "./admin/_kit";
 
-// -----------------------------------------------------------------------------
-// Helper: assert the calling user has role 'admin' in user_roles.
-// -----------------------------------------------------------------------------
-async function assertAdmin(userId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden: admin role required");
-}
+// Re-export the Admin Kit surface so existing `admin.functions` import sites can
+// reach the new actions/schemas too (adminBanUser, AdminBanUserSchema, ...).
+export * from "./admin";
 
 // -----------------------------------------------------------------------------
 // Create a doctor account end-to-end (auth user + profile + doctor_details + role)
@@ -195,7 +187,11 @@ export const adminGetDoctorQueue = createServerFn({ method: "GET" })
          patient:profiles!appointments_patient_id_fkey(full_name, phone)`,
       )
       .eq("doctor_id", data.doctorId)
-      .eq("appointment_date", date)
+      // Range over `scheduled_at` (always set) instead of the nullable,
+      // denormalized `appointment_date`, so appointments created without an
+      // appointment_date (e.g. via other clients) are not silently hidden.
+      .gte("scheduled_at", `${date}T00:00:00Z`)
+      .lt("scheduled_at", new Date(new Date(`${date}T00:00:00Z`).getTime() + 86_400_000).toISOString())
       .order("queue_number", { ascending: true });
     if (error) throw new Error(error.message);
     return { date, rows: rows ?? [] };

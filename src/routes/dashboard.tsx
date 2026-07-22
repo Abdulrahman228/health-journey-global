@@ -3,9 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
+import { TelemedicineToggle } from "@/components/doctor/TelemedicineToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { ClinicsManager } from "@/components/dashboard/ClinicsManager";
 import { DoctorLiveQueue } from "@/components/dashboard/DoctorLiveQueue";
+import { EmergencyShiftButton } from "@/components/dashboard/EmergencyShiftButton";
 import { PublicPageManager } from "@/components/dashboard/PublicPageManager";
 import { ConsultationsInbox } from "@/components/ConsultationsInbox";
 import { Loader2, CheckCircle2, XCircle, Calendar, Clock, Users, DollarSign, Stethoscope, Save, Megaphone, Globe, Lock, Video, FilePlus, UserPlus, Zap, TrendingUp, TrendingDown, Crown, ArrowRight, MessageSquare } from "lucide-react";
@@ -88,18 +90,43 @@ function DashboardHomePage() {
   });
 
   const { data: appointments = [], isLoading: aptLoading } = useQuery({
-    queryKey: ["doctor_appointments", profile?.id],
-    enabled: !!profile?.id,
+    queryKey: ["doctor_appointments", details?.id],
+    enabled: !!details?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("appointments")
         .select("*")
-        .eq("doctor_id", profile!.id)
+        .eq("doctor_id", details!.id)
         .order("scheduled_at", { ascending: false });
       if (error) throw error;
       return data;
     },
   });
+
+  useEffect(() => {
+    if (!details?.id) return;
+
+    const channel = supabase
+      .channel(`dashboard-appointments-${details.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "appointments",
+          filter: `doctor_id=eq.${details.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["doctor_appointments", details.id] });
+          queryClient.invalidateQueries({ queryKey: ["appointments"] });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [details?.id, queryClient]);
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -246,6 +273,7 @@ function DashboardHomePage() {
           appts={stats.todayAppts}
           onConfirm={(id) => updateStatus.mutate({ id, status: "confirmed" })}
           onReject={(id) => updateStatus.mutate({ id, status: "cancelled" })}
+          mutationPending={updateStatus.isPending}
           t={t}
         />
         <QuickActions t={t} isVerified={!!details?.is_verified} tier={activeTier ?? "free"} />
@@ -334,6 +362,11 @@ function DashboardHomePage() {
       <DoctorProfileEditor details={details} profileId={profile?.id ?? null} />
 
       {/* Live queue (today) */}
+      {details?.id && (
+        <div className="mt-6 flex justify-end">
+          <EmergencyShiftButton doctorId={details.id} />
+        </div>
+      )}
       {details?.id && <DoctorLiveQueue doctorDetailsId={details.id} />}
 
       {/* Online consultation requests inbox */}
@@ -412,6 +445,14 @@ function DashboardHomePage() {
             </p>
           </Link>
         </div>
+      </section>
+
+      {/* Online consultations (telemedicine) feature gate */}
+      <section className="mt-10">
+        <h2 className="text-xl font-semibold text-foreground mb-4">
+          {t("Online Consultations", "الاستشارات عن بُعد")}
+        </h2>
+        <TelemedicineToggle />
       </section>
 
       {/* Finance quick-links */}
@@ -498,6 +539,7 @@ function DashboardHomePage() {
                   appt={a}
                   onConfirm={() => updateStatus.mutate({ id: a.id, status: "confirmed" })}
                   onReject={() => updateStatus.mutate({ id: a.id, status: "cancelled" })}
+                  mutationPending={updateStatus.isPending}
                   t={t}
                 />
               ))}
@@ -524,6 +566,7 @@ function DashboardHomePage() {
                   appt={a}
                   onComplete={() => updateStatus.mutate({ id: a.id, status: "completed" })}
                   onReject={() => updateStatus.mutate({ id: a.id, status: "cancelled" })}
+                  mutationPending={updateStatus.isPending}
                   t={t}
                 />
               ))}
@@ -575,12 +618,14 @@ function AppointmentRow({
   onConfirm,
   onComplete,
   onReject,
+  mutationPending,
   t,
 }: {
   appt: { id: string; scheduled_at: string; fee: number; status: string; notes: string | null };
   onConfirm?: () => void;
   onComplete?: () => void;
   onReject?: () => void;
+  mutationPending?: boolean;
   t: (en: string, ar: string) => string;
 }) {
   const date = new Date(appt.scheduled_at);
@@ -596,7 +641,7 @@ function AppointmentRow({
             {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {appt.fee} {t("EGP", "ج.م")}
+            {appt.fee ?? 0} {t("EGP", "ج.م")}
             {appt.notes && ` · ${appt.notes}`}
           </p>
         </div>
@@ -605,25 +650,28 @@ function AppointmentRow({
         {onConfirm && (
           <button
             onClick={onConfirm}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
+            disabled={mutationPending}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <CheckCircle2 className="h-3.5 w-3.5" />
+            {mutationPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
             {t("Confirm", "تأكيد")}
           </button>
         )}
         {onComplete && (
           <button
             onClick={onComplete}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal/10 text-teal text-xs font-medium hover:bg-teal/20"
+            disabled={mutationPending}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal/10 text-teal text-xs font-medium hover:bg-teal/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <CheckCircle2 className="h-3.5 w-3.5" />
+            {mutationPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
             {t("Complete", "إكمال")}
           </button>
         )}
         {onReject && (
           <button
             onClick={onReject}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-destructive text-xs font-medium hover:bg-destructive/10"
+            disabled={mutationPending}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-destructive text-xs font-medium hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <XCircle className="h-3.5 w-3.5" />
             {t("Cancel", "إلغاء")}
@@ -851,11 +899,13 @@ function TodayAgenda({
   appts,
   onConfirm,
   onReject,
+  mutationPending,
   t,
 }: {
   appts: Array<{ id: string; scheduled_at: string; status: string; fee: number; notes: string | null }>;
   onConfirm: (id: string) => void;
   onReject: (id: string) => void;
+  mutationPending?: boolean;
   t: (en: string, ar: string) => string;
 }) {
   const today = new Date();
@@ -909,7 +959,7 @@ function TodayAgenda({
                       {statusBadge.l}
                     </span>
                     <span className="text-sm font-medium text-foreground">
-                      {a.fee} {t("EGP", "ج.م")}
+                      {a.fee ?? 0} {t("EGP", "ج.م")}
                     </span>
                   </div>
                   {a.notes && (
@@ -921,14 +971,17 @@ function TodayAgenda({
                     <>
                       <button
                         onClick={() => onConfirm(a.id)}
-                        className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:opacity-90"
+                        disabled={mutationPending}
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
+                        {mutationPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                         {t("Accept", "قبول")}
                       </button>
                       <button
                         onClick={() => onReject(a.id)}
+                        disabled={mutationPending}
                         aria-label={t("Reject", "رفض")}
-                        className="rounded-lg p-1.5 text-destructive hover:bg-destructive/10"
+                        className="rounded-lg p-1.5 text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <XCircle className="h-4 w-4" />
                       </button>

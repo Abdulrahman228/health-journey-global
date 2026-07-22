@@ -100,11 +100,16 @@ function MyQueuePage() {
     queryKey: ["queue", appt?.clinic_id, appt?.appointment_date],
     enabled: Boolean(appt?.clinic_id && appt?.appointment_date),
     queryFn: async (): Promise<QueueRow[]> => {
+      // Guard instead of forced unwraps (`appt!.clinic_id!`). The clinic queue is
+      // keyed by clinic + day, so appointment_date is the correct key here.
+      const clinicId = appt?.clinic_id;
+      const apptDate = appt?.appointment_date;
+      if (!clinicId || !apptDate) return [];
       const { data, error } = await supabase
         .from("v_clinic_queue")
         .select("*")
-        .eq("clinic_id", appt!.clinic_id!)
-        .eq("appointment_date", appt!.appointment_date!)
+        .eq("clinic_id", clinicId)
+        .eq("appointment_date", apptDate)
         .order("queue_number");
       if (error) throw error;
       return (data ?? []) as QueueRow[];

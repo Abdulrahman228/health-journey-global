@@ -23,6 +23,8 @@ import { toast } from "sonner";
 import { PatientConsentModal, CONSENT_TEXT_VERSION } from "@/components/PatientConsentModal";
 import { createAppointmentCheckout } from "@/lib/payments.functions";
 import { validateCoupon, type CouponValidationResult } from "@/lib/coupons.functions";
+import { syncVisitType, previewVisitPricing } from "@/lib/clinical.classification";
+import { handleEmergencyBooking } from "@/lib/emergency.booking";
 
 type AvailableSlot = {
   clinic_id: string;
@@ -45,6 +47,8 @@ type ClinicOption = {
   name: string;
   city: string | null;
 };
+
+type AppointmentType = "clinic" | "online";
 
 const ARABIC_WEEKDAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -96,15 +100,13 @@ export function BookingCard({
   const queryClient = useQueryClient();
   const { formatPrice } = useCurrency();
 
-  const [appointmentType, setAppointmentType] = useState<"in_person" | "video">("in_person");
+  const [appointmentType, setAppointmentType] = useState<AppointmentType>("clinic");
   const [notes, setNotes] = useState("");
+  const [isEmergency, setIsEmergency] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const [selectedClinicId, setSelectedClinicId] = useState<string | null>(null);
   const [showClinicList, setShowClinicList] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
-
-  const [videoDate, setVideoDate] = useState("");
-  const [videoTime, setVideoTime] = useState("");
 
   // Coupon state
   const [couponInput, setCouponInput] = useState("");
@@ -132,15 +134,16 @@ export function BookingCard({
     },
   });
 
-  // === Queue slot lookup ===
+  // === Unified queue slot lookup — runs for both clinic and online ===
   const { data: slot, isLoading: slotLoading, refetch: refetchSlot } = useQuery({
-    queryKey: ["next-slot", doctorId, selectedClinicId],
-    enabled: appointmentType === "in_person",
+    queryKey: ["next-slot", doctorId, selectedClinicId, appointmentType],
+    // For online we never filter by a specific clinic — find any available slot.
+    enabled: appointmentType === "clinic" || (isVerified && telemedicineEnabled),
     refetchInterval: 30_000,
     queryFn: async (): Promise<AvailableSlot | null> => {
       const { data, error } = await supabase.rpc("get_next_available_slot", {
         p_doctor_id: doctorId,
-        p_clinic_id: selectedClinicId ?? undefined,
+        p_clinic_id: appointmentType === "clinic" ? (selectedClinicId ?? undefined) : undefined,
         p_days_ahead: 30,
       });
       if (error) throw error;
@@ -158,6 +161,15 @@ export function BookingCard({
   const multipleClinic = (clinics?.length ?? 0) > 1;
   const requiresPayment = consultationFee > 0;
 
+  // Predicted visit type + fee for the pre-payment label (consultation vs first
+  // visit). createAppointmentCheckout recomputes the fee authoritatively.
+  const { data: pricing } = useQuery({
+    queryKey: ["visit-pricing", doctorId, user?.id, slot?.schedule_date],
+    enabled: Boolean(user && requiresPayment && slot?.schedule_date),
+    queryFn: () =>
+      previewVisitPricing({ data: { doctorId, scheduledAt: slot?.schedule_date } }),
+  });
+
   const bookMutation = useMutation({
     mutationFn: async (consents?: {
       telemedicine_consent: boolean;
@@ -165,61 +177,64 @@ export function BookingCard({
       recording_consent: boolean;
     }) => {
       if (!user || !profile) throw new Error("Login required");
+      if (!slot) throw new Error("لا توجد مواعيد متاحة");
 
-      if (appointmentType === "in_person") {
-        if (!slot) throw new Error("لا توجد مواعيد متاحة");
-        const { data, error } = await supabase.rpc("book_queue_appointment", {
-          p_doctor_id: doctorId,
-          p_clinic_id: slot.clinic_id,
-          p_appointment_date: slot.schedule_date,
-          p_appointment_type: "in_person",
-          p_notes: notes || undefined,
-        });
-        if (error) throw error;
-        return data as { id: string; queue_number: number };
+      if (appointmentType === "online") {
+        if (!isVerified || !telemedicineEnabled) {
+          throw new Error("هذا الطبيب لم يفعّل الكشف أون لاين");
+        }
+        if (!consents?.telemedicine_consent || !consents?.data_processing_consent) {
+          throw new Error("الموافقة مطلوبة لإتمام الحجز");
+        }
       }
 
-      if (!doctorId) throw new Error("Doctor missing");
-      if (!videoDate || !videoTime) throw new Error("اختر تاريخ ووقت الكشف");
-      if (!isVerified || !telemedicineEnabled) {
-        throw new Error("هذا الطبيب لم يفعّل الكشف أون لاين");
-      }
-      if (!consents?.telemedicine_consent || !consents?.data_processing_consent) {
-        throw new Error("الموافقة مطلوبة لإتمام الحجز");
-      }
-      const scheduled = new Date(`${videoDate}T${videoTime}`).toISOString();
-      const { data: appt, error } = await supabase
-        .from("appointments")
-        .insert({
-          patient_id: profile.id,
-          doctor_id: doctorId,
-          scheduled_at: scheduled,
-          appointment_date: videoDate,
-          appointment_type: "video",
-          fee: consultationFee,
-          notes: notes || null,
-          patient_consent_accepted: true,
-        })
-        .select("id")
-        .single();
+      // Both clinic and online go through the identical queue booking RPC.
+      const { data, error } = await supabase.rpc("book_queue_appointment", {
+        p_doctor_id: doctorId,
+        p_clinic_id: slot.clinic_id,
+        p_appointment_date: slot.schedule_date,
+        p_appointment_type: appointmentType,
+        p_notes: notes || undefined,
+      });
       if (error) throw error;
 
-      await supabase.from("patient_appointment_consent").insert({
-        appointment_id: appt.id,
-        patient_id: profile.id,
-        doctor_id: doctorId,
-        telemedicine_consent: consents.telemedicine_consent,
-        data_processing_consent: consents.data_processing_consent,
-        recording_consent: consents.recording_consent,
-        consent_text_version: CONSENT_TEXT_VERSION,
-        user_agent: navigator.userAgent,
-      });
-      return { id: appt.id };
+      const result = data as { id: string; queue_number: number };
+
+      // Non-blocking: classify the visit (consultation vs initial checkup) and
+      // notify the doctor on a follow-up. Wrapped so classification failures can
+      // never break the booking flow.
+      try {
+        await syncVisitType({ data: { appointmentId: result.id } });
+      } catch (e) {
+        console.warn("[booking] visit-type classification failed", e);
+      }
+
+      // Non-blocking: emergency triage — flag the booking + red-alert the doctor.
+      try {
+        await handleEmergencyBooking({ data: { appointmentId: result.id, isEmergency } });
+      } catch (e) {
+        console.warn("[booking] emergency triage failed", e);
+      }
+
+      // Record telemedicine consent for online appointments.
+      if (appointmentType === "online" && consents) {
+        await supabase.from("patient_appointment_consent").insert({
+          appointment_id: result.id,
+          patient_id: profile.id,
+          doctor_id: doctorId,
+          telemedicine_consent: consents.telemedicine_consent,
+          data_processing_consent: consents.data_processing_consent,
+          recording_consent: consents.recording_consent,
+          consent_text_version: CONSENT_TEXT_VERSION,
+          user_agent: navigator.userAgent,
+        });
+      }
+
+      return result;
     },
     onSuccess: async (result) => {
       setNotes("");
-      setVideoDate("");
-      setVideoTime("");
+      setIsEmergency(false);
       setConsentOpen(false);
       queryClient.invalidateQueries({ queryKey: ["next-slot", doctorId] });
       queryClient.invalidateQueries({ queryKey: ["my-appointments"] });
@@ -228,10 +243,7 @@ export function BookingCard({
         try {
           setIsRedirecting(true);
           toast.success(t("Reserved. Redirecting to payment…", "تم الحجز. جارٍ تحويلك للدفع…"));
-          const returnUrl =
-            appointmentType === "in_person"
-              ? `${window.location.origin}/my-queue/${result.id}?paid=1`
-              : `${window.location.origin}/appointments?paid=1`;
+          const returnUrl = `${window.location.origin}/my-queue/${result.id}?paid=1`;
           const url = await createAppointmentCheckout({
             data: {
               appointmentId: result.id,
@@ -242,11 +254,8 @@ export function BookingCard({
               cancelUrl: window.location.href,
               customerEmail: user?.email ?? undefined,
               userId: user?.id,
-              ...(coupon?.valid && coupon.code
-                ? { couponCode: coupon.code }
-                : {}),
-              appointmentType:
-                appointmentType === "video" ? "video" : "in_person",
+              ...(coupon?.valid && coupon.code ? { couponCode: coupon.code } : {}),
+              appointmentType: appointmentType === "online" ? "video" : "in_person",
               doctorId,
             },
           });
@@ -269,17 +278,13 @@ export function BookingCard({
         toast.success(t("Appointment booked", "تم الحجز بنجاح"));
       }
 
-      if (result?.id && appointmentType === "in_person") {
-        navigate({ to: "/my-queue/$appointmentId", params: { appointmentId: result.id } });
-      } else {
-        navigate({ to: "/appointments" });
-      }
+      navigate({ to: "/my-queue/$appointmentId", params: { appointmentId: result.id } });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const handleBook = () => {
-    if (appointmentType === "video") {
+    if (appointmentType === "online") {
       setConsentOpen(true);
       return;
     }
@@ -293,6 +298,12 @@ export function BookingCard({
 
   const waitMinutes = slot ? slot.booked_count * slot.avg_minutes : 0;
 
+  const isBookDisabled =
+    bookMutation.isPending ||
+    isRedirecting ||
+    !slot ||
+    (appointmentType === "online" && (!isVerified || !telemedicineEnabled));
+
   return (
     <div className="bg-card border border-border rounded-2xl p-6 sticky top-4">
       <div className="text-center pb-4 border-b border-border">
@@ -305,6 +316,19 @@ export function BookingCard({
         {requiresPayment && (
           <p className="text-[11px] text-muted-foreground mt-1">
             {t("Pay online to confirm your spot", "ادفع أونلاين لتأكيد دورك")}
+          </p>
+        )}
+        {pricing && requiresPayment && (
+          <p className="mt-2 text-sm">
+            <span className="font-semibold text-foreground">
+              {t("Booking type", "نوع الحجز")}:{" "}
+            </span>
+            <span className={pricing.visitType === "follow_up" ? "text-emerald-600" : "text-primary"}>
+              {pricing.visitType === "follow_up"
+                ? t("Consultation", "استشارة")
+                : t("First visit", "كشف أول")}
+            </span>
+            <span className="text-muted-foreground"> — {formatPrice(pricing.fee, currency)}</span>
           </p>
         )}
       </div>
@@ -323,6 +347,7 @@ export function BookingCard({
         </div>
       ) : (
         <div className="mt-4 space-y-3">
+          {/* ── Type selector ── */}
           <div>
             <label className="text-sm font-medium text-foreground mb-1.5 block">
               {t("Consultation type", "نوع الاستشارة")}
@@ -330,9 +355,9 @@ export function BookingCard({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setAppointmentType("in_person")}
+                onClick={() => setAppointmentType("clinic")}
                 className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition ${
-                  appointmentType === "in_person"
+                  appointmentType === "clinic"
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border bg-background text-muted-foreground hover:bg-accent"
                 }`}
@@ -342,187 +367,184 @@ export function BookingCard({
               </button>
               <button
                 type="button"
-                onClick={() => setAppointmentType("video")}
+                onClick={() => setAppointmentType("online")}
                 disabled={!isVerified || !telemedicineEnabled}
                 className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                  appointmentType === "video"
+                  appointmentType === "online"
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border bg-background text-muted-foreground hover:bg-accent"
                 }`}
               >
                 <Video className="h-4 w-4" />
-                {t("Video", "فيديو")}
+                {t("Online", "أونلاين")}
               </button>
             </div>
           </div>
 
-          {appointmentType === "in_person" && (
-            <>
-              {multipleClinic && (
-                <div>
+          {/* ── Online unavailable notice ── */}
+          {appointmentType === "online" && (!isVerified || !telemedicineEnabled) && (
+            <p className="text-xs text-amber-600">
+              {t(
+                "This doctor hasn't enabled video consults yet.",
+                "هذا الطبيب لم يفعّل الكشف أون لاين بعد.",
+              )}
+            </p>
+          )}
+
+          {/* ── Clinic picker — only for clinic type with multiple clinics ── */}
+          {appointmentType === "clinic" && multipleClinic && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowClinicList((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-background text-sm hover:bg-accent"
+              >
+                <span className="flex items-center gap-1.5 text-foreground">
+                  <Building2 className="h-4 w-4" />
+                  {selectedClinic ? selectedClinic.name : t("Any clinic", "أي عيادة")}
+                </span>
+                {showClinicList ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+              {showClinicList && (
+                <div className="mt-1 border border-border rounded-lg overflow-hidden">
                   <button
                     type="button"
-                    onClick={() => setShowClinicList((v) => !v)}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-background text-sm hover:bg-accent"
+                    onClick={() => {
+                      setSelectedClinicId(null);
+                      setShowClinicList(false);
+                    }}
+                    className={`w-full text-right px-3 py-2 text-sm hover:bg-accent ${
+                      selectedClinicId === null ? "bg-primary/10 text-primary" : ""
+                    }`}
                   >
-                    <span className="flex items-center gap-1.5 text-foreground">
-                      <Building2 className="h-4 w-4" />
-                      {selectedClinic ? selectedClinic.name : t("Any clinic", "أي عيادة")}
-                    </span>
-                    {showClinicList ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
+                    {t("Any clinic (auto-pick)", "أقرب موعد في أي عيادة")}
+                  </button>
+                  {clinics?.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedClinicId(c.id);
+                        setShowClinicList(false);
+                      }}
+                      className={`w-full text-right px-3 py-2 text-sm border-t border-border hover:bg-accent ${
+                        selectedClinicId === c.id ? "bg-primary/10 text-primary" : ""
+                      }`}
+                    >
+                      <div className="font-medium">{c.name}</div>
+                      {c.city && (
+                        <div className="text-xs text-muted-foreground">{c.city}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Unified slot card ── */}
+          {slotLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : !slot ? (
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
+              <AlertCircle className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                {clinics && clinics.length === 0
+                  ? t(
+                      "No clinic schedule configured yet.",
+                      "لم يحدد الطبيب جدول عياداته بعد، تواصل معه مباشرة.",
+                    )
+                  : t(
+                      "No available slots in the next 30 days.",
+                      "لا توجد مواعيد متاحة خلال 30 يوماً.",
                     )}
-                  </button>
-                  {showClinicList && (
-                    <div className="mt-1 border border-border rounded-lg overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedClinicId(null);
-                          setShowClinicList(false);
-                        }}
-                        className={`w-full text-right px-3 py-2 text-sm hover:bg-accent ${
-                          selectedClinicId === null ? "bg-primary/10 text-primary" : ""
-                        }`}
-                      >
-                        {t("Any clinic (auto-pick)", "أقرب موعد في أي عيادة")}
-                      </button>
-                      {clinics?.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedClinicId(c.id);
-                            setShowClinicList(false);
-                          }}
-                          className={`w-full text-right px-3 py-2 text-sm border-t border-border hover:bg-accent ${
-                            selectedClinicId === c.id ? "bg-primary/10 text-primary" : ""
-                          }`}
-                        >
-                          <div className="font-medium">{c.name}</div>
-                          {c.city && (
-                            <div className="text-xs text-muted-foreground">{c.city}</div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2 text-sm">
+              {/* Visual badge — the only UI difference between clinic and online */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-semibold text-primary">
+                  {appointmentType === "clinic" ? (
+                    <>
+                      <Building2 className="h-4 w-4" />
+                      <span>{slot.clinic_name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Video className="h-4 w-4" />
+                      <span>{t("Online consultation", "كشف أونلاين")}</span>
+                    </>
                   )}
+                </div>
+                <span
+                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                    appointmentType === "online"
+                      ? "bg-violet-100 text-violet-700"
+                      : "bg-primary/10 text-primary"
+                  }`}
+                >
+                  {appointmentType === "online"
+                    ? t("Online", "أونلاين")
+                    : t("Clinic", "عيادة")}
+                </span>
+              </div>
+
+              {appointmentType === "clinic" && slot.clinic_city && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5" />
+                  <span>{slot.clinic_city}</span>
                 </div>
               )}
 
-              {slotLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : !slot ? (
-                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
-                  <AlertCircle className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    {clinics && clinics.length === 0
-                      ? t(
-                          "No clinic schedule configured yet.",
-                          "لم يحدد الطبيب جدول عياداته بعد، تواصل معه مباشرة.",
-                        )
-                      : t(
-                          "No available slots in the next 30 days.",
-                          "لا توجد مواعيد متاحة خلال 30 يوماً.",
-                        )}
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2 text-sm">
-                  <div className="flex items-center gap-2 font-semibold text-primary">
-                    <Building2 className="h-4 w-4" />
-                    <span>{slot.clinic_name}</span>
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span className="font-medium">{formatArabicDate(slot.schedule_date)}</span>
+                <span className="text-muted-foreground">
+                  ({formatTime(slot.start_time)} - {formatTime(slot.end_time)})
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-primary/20">
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">دورك</div>
+                  <div className="text-lg font-bold text-primary">
+                    #{slot.queue_position_if_book_now}
                   </div>
-                  {slot.clinic_city && (
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <MapPin className="h-3.5 w-3.5" />
-                      <span>{slot.clinic_city}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-4 w-4 text-primary" />
-                    <span className="font-medium">{formatArabicDate(slot.schedule_date)}</span>
-                    <span className="text-muted-foreground">
-                      ({formatTime(slot.start_time)} - {formatTime(slot.end_time)})
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-primary/20">
-                    <div className="text-center">
-                      <div className="text-xs text-muted-foreground">دورك</div>
-                      <div className="text-lg font-bold text-primary">
-                        #{slot.queue_position_if_book_now}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-xs text-muted-foreground">انتظار تقريبي</div>
-                      <div className="text-lg font-bold text-foreground flex items-center justify-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        {formatWait(waitMinutes)}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-xs text-muted-foreground">متبقي</div>
-                      <div className="text-lg font-bold text-emerald-600 flex items-center justify-center gap-1">
-                        <Users className="h-4 w-4" />
-                        {slot.slots_remaining}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => refetchSlot()}
-                    className="w-full text-xs text-muted-foreground hover:text-primary pt-1"
-                  >
-                    {t("Refresh", "تحديث الحالة")}
-                  </button>
                 </div>
-              )}
-            </>
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">انتظار تقريبي</div>
+                  <div className="text-lg font-bold text-foreground flex items-center justify-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    {formatWait(waitMinutes)}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">متبقي</div>
+                  <div className="text-lg font-bold text-emerald-600 flex items-center justify-center gap-1">
+                    <Users className="h-4 w-4" />
+                    {slot.slots_remaining}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => refetchSlot()}
+                className="w-full text-xs text-muted-foreground hover:text-primary pt-1"
+              >
+                {t("Refresh", "تحديث الحالة")}
+              </button>
+            </div>
           )}
 
-          {appointmentType === "video" && (
-            <>
-              {!isVerified || !telemedicineEnabled ? (
-                <p className="text-xs text-amber-600">
-                  {t(
-                    "This doctor hasn't enabled video consults yet.",
-                    "هذا الطبيب لم يفعّل الكشف أون لاين بعد.",
-                  )}
-                </p>
-              ) : (
-                <>
-                  <div>
-                    <label className="text-sm font-medium text-foreground flex items-center gap-1 mb-1">
-                      <Calendar className="h-4 w-4" /> {t("Date", "التاريخ")}
-                    </label>
-                    <input
-                      type="date"
-                      value={videoDate}
-                      min={new Date().toISOString().split("T")[0]}
-                      onChange={(e) => setVideoDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-foreground flex items-center gap-1 mb-1">
-                      <Clock className="h-4 w-4" /> {t("Time", "الوقت")}
-                    </label>
-                    <input
-                      type="time"
-                      value={videoTime}
-                      onChange={(e) => setVideoTime(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                </>
-              )}
-            </>
-          )}
-
+          {/* ── Notes ── */}
           <div>
             <label className="text-sm font-medium text-foreground mb-1 block">
               {t("Notes (optional)", "ملاحظات (اختياري)")}
@@ -535,7 +557,28 @@ export function BookingCard({
             />
           </div>
 
-          {/* Coupon code */}
+          {/* ── Emergency triage ── */}
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+            <input
+              type="checkbox"
+              checked={isEmergency}
+              onChange={(e) => setIsEmergency(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-destructive"
+            />
+            <span className="text-sm">
+              <span className="font-semibold text-destructive">
+                {t("Emergency?", "حالة طارئة؟")}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {t(
+                  "Flag this booking as urgent — the doctor is alerted immediately.",
+                  "صنّف هذا الحجز كحالة عاجلة — يتم تنبيه الطبيب فوراً.",
+                )}
+              </span>
+            </span>
+          </label>
+
+          {/* ── Coupon ── */}
           {requiresPayment && (
             <div>
               <label className="text-sm font-medium text-foreground mb-1 flex items-center gap-1">
@@ -570,9 +613,7 @@ export function BookingCard({
                   <input
                     type="text"
                     value={couponInput}
-                    onChange={(e) =>
-                      setCouponInput(e.target.value.toUpperCase())
-                    }
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                     placeholder={t("Enter code", "أدخل الكود")}
                     className="flex-1 px-3 py-2 rounded-lg border border-input bg-background text-sm uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary"
                     maxLength={64}
@@ -588,31 +629,21 @@ export function BookingCard({
                             code: couponInput,
                             amount: consultationFee,
                             currency,
-                            appointmentType:
-                              appointmentType === "video"
-                                ? "video"
-                                : "in_person",
+                            appointmentType,
                             doctorId,
                             userId: user?.id ?? null,
                           },
                         });
                         if (r.valid) {
                           setCoupon(r);
-                          toast.success(
-                            t("Coupon applied", "تم تطبيق الكود"),
-                          );
+                          toast.success(t("Coupon applied", "تم تطبيق الكود"));
                         } else {
                           setCoupon(null);
-                          toast.error(
-                            r.message ||
-                              t("Invalid coupon", "الكود غير صالح"),
-                          );
+                          toast.error(r.message || t("Invalid coupon", "الكود غير صالح"));
                         }
                       } catch (err) {
                         console.error("validateCoupon", err);
-                        toast.error(
-                          t("Could not check coupon", "تعذّر التحقّق من الكود"),
-                        );
+                        toast.error(t("Could not check coupon", "تعذّر التحقّق من الكود"));
                       } finally {
                         setCouponChecking(false);
                       }
@@ -640,15 +671,10 @@ export function BookingCard({
             </div>
           )}
 
+          {/* ── Book button ── */}
           <button
             onClick={handleBook}
-            disabled={
-              bookMutation.isPending ||
-              isRedirecting ||
-              (appointmentType === "in_person" && !slot) ||
-              (appointmentType === "video" &&
-                (!isVerified || !telemedicineEnabled || !videoDate || !videoTime))
-            }
+            disabled={isBookDisabled}
             className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
           >
             {bookMutation.isPending || isRedirecting ? (
@@ -658,12 +684,10 @@ export function BookingCard({
                   ? t("Redirecting…", "جارٍ التحويل…")
                   : t("Booking…", "جارٍ الحجز…")}
               </span>
-            ) : appointmentType === "in_person" && slot ? (
-              requiresPayment ? (
-                t("Reserve & pay", `احجز وادفع (دورك #${slot.queue_position_if_book_now})`)
-              ) : (
-                t("Reserve my spot", `احجز دوري (#${slot.queue_position_if_book_now})`)
-              )
+            ) : slot ? (
+              requiresPayment
+                ? t("Reserve & pay", `احجز وادفع (دورك #${slot.queue_position_if_book_now})`)
+                : t("Reserve my spot", `احجز دوري (#${slot.queue_position_if_book_now})`)
             ) : (
               t("Book appointment", "احجز موعداً")
             )}

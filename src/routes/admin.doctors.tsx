@@ -19,13 +19,14 @@ import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminShell } from "@/components/admin/AdminNav";
 import { pingIndexNow } from "@/lib/indexnow.functions";
 import { siteConfig } from "@/lib/seo";
 import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Crown,
   ExternalLink,
   Loader2,
   Plus,
@@ -44,6 +45,7 @@ import {
   adminDeleteDoctor,
   adminGetDoctorQueue,
 } from "@/lib/admin.functions";
+import { adminGrantSubscription } from "@/lib/admin/financial";
 
 export const Route = createFileRoute("/admin/doctors")({
   head: () => ({
@@ -102,6 +104,8 @@ function AdminDoctorsPage() {
     doctorId: string;
     doctorName: string;
   } | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [grantTarget, setGrantTarget] = useState<{ profileId: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,20 +178,21 @@ function AdminDoctorsPage() {
 
   const toggleVerify = useCallback(
     async (row: DoctorRow) => {
+      setVerifyingId(row.id);
       const next = !row.is_verified;
       const { error } = await supabase
         .from("doctor_details")
         .update({
           is_verified: next,
-          verification_status: next ? "verified" : "pending",
+          verification_status: next ? "approved" : "pending",
         })
         .eq("id", row.id);
       if (error) {
         toast.error("فشل التحديث: " + error.message);
+        setVerifyingId(null);
         return;
       }
       toast.success(next ? "تم توثيق الطبيب" : "تم إلغاء التوثيق");
-      // When verifying, ping IndexNow so Google/Bing crawl the new doctor URL
       if (next) {
         try {
           await pingIndexNow({
@@ -203,6 +208,7 @@ function AdminDoctorsPage() {
           /* non-fatal */
         }
       }
+      setVerifyingId(null);
       load();
     },
     [load],
@@ -244,6 +250,13 @@ function AdminDoctorsPage() {
     load();
   }, [edit, load]);
 
+  // Prevent body scroll behind any open modal
+  useEffect(() => {
+    const anyOpen = !!edit || showCreate || !!queueModal;
+    document.body.style.overflow = anyOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [edit, showCreate, queueModal]);
+
   // Gate
   if (authLoading || roleLoading) {
     return (
@@ -266,8 +279,7 @@ function AdminDoctorsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10" dir="rtl">
-      <AdminNav />
+    <AdminShell>
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">إدارة الأطباء</h1>
@@ -378,11 +390,11 @@ function AdminDoctorsPage() {
                     {r.is_verified ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                         <CheckCircle2 className="h-3 w-3" />
-                        موثّق
+                        معتمد
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                        بانتظار
+                        {r.verification_status === "rejected" ? "مرفوض" : "بانتظار"}
                       </span>
                     )}
                   </td>
@@ -391,14 +403,16 @@ function AdminDoctorsPage() {
                       <button
                         type="button"
                         onClick={() => toggleVerify(r)}
+                        disabled={!!verifyingId}
                         className={
-                          "rounded-md border px-2.5 py-1 text-xs font-medium transition " +
+                          "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition disabled:opacity-60 " +
                           (r.is_verified
                             ? "border-border text-foreground hover:bg-muted"
                             : "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700")
                         }
                       >
-                        {r.is_verified ? "إلغاء التوثيق" : "توثيق"}
+                        {verifyingId === r.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {r.is_verified ? "إيقاف الاعتماد" : "اعتماد"}
                       </button>
                       <button
                         type="button"
@@ -432,6 +446,18 @@ function AdminDoctorsPage() {
                         className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
                       >
                         <Users className="h-3 w-3" /> الطابور
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setGrantTarget({
+                            profileId: r.profile_id,
+                            name: r.profile?.full_name ?? r.id,
+                          })
+                        }
+                        className="inline-flex items-center gap-1 rounded-md border border-amber-500 bg-amber-500 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-amber-600"
+                      >
+                        <Crown className="h-3 w-3" /> منح Gold
                       </button>
                       <a
                         href={`/doctor/${r.id}`}
@@ -488,8 +514,9 @@ function AdminDoctorsPage() {
           aria-modal="true"
           aria-label="تحرير بيانات الطبيب"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setEdit(null)}
         >
-          <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl">
+          <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
             <header className="flex items-center justify-between border-b border-border px-5 py-3">
               <h2 className="text-lg font-bold">تحرير بيانات الطبيب</h2>
               <button
@@ -615,6 +642,14 @@ function AdminDoctorsPage() {
         />
       )}
 
+      {grantTarget && (
+        <GrantGoldModal
+          profileId={grantTarget.profileId}
+          doctorName={grantTarget.name}
+          onClose={() => setGrantTarget(null)}
+        />
+      )}
+
       {queueModal && (
         <QueueModal
           doctorId={queueModal.doctorId}
@@ -622,7 +657,7 @@ function AdminDoctorsPage() {
           onClose={() => setQueueModal(null)}
         />
       )}
-    </div>
+    </AdminShell>
   );
 }
 
@@ -650,8 +685,17 @@ function CreateDoctorModal({
     isVerified: true,
   });
   const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const submit = async () => {
+    const errs: Record<string, string> = {};
+    if (!form.fullName.trim()) errs.fullName = "مطلوب";
+    if (!form.email.trim()) errs.email = "مطلوب";
+    else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = "بريد إلكتروني غير صحيح";
+    if (form.password.length < 8) errs.password = "8 أحرف على الأقل";
+    if (!form.specialty.trim()) errs.specialty = "مطلوب";
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setErrors({});
     setBusy(true);
     try {
       await adminCreateDoctor({ data: form });
@@ -670,8 +714,9 @@ function CreateDoctorModal({
       aria-modal="true"
       aria-label="إضافة طبيب"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
     >
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl">
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-lg font-bold">إضافة طبيب جديد</h2>
           <button
@@ -689,18 +734,21 @@ function CreateDoctorModal({
               label="الاسم الكامل *"
               value={form.fullName}
               onChange={(v) => setForm({ ...form, fullName: v })}
+              error={errors.fullName}
             />
             <Field
               label="البريد الإلكتروني *"
               type="email"
               value={form.email}
               onChange={(v) => setForm({ ...form, email: v })}
+              error={errors.email}
             />
             <Field
               label="كلمة المرور المؤقتة (8+ حروف) *"
               type="text"
               value={form.password}
               onChange={(v) => setForm({ ...form, password: v })}
+              error={errors.password}
             />
             <Field
               label="رقم الهاتف"
@@ -716,6 +764,7 @@ function CreateDoctorModal({
               label="التخصص *"
               value={form.specialty}
               onChange={(v) => setForm({ ...form, specialty: v })}
+              error={errors.specialty}
             />
             <Field
               label="سعر الكشف"
@@ -802,11 +851,13 @@ function Field({
   value,
   onChange,
   type = "text",
+  error,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
+  error?: string;
 }) {
   return (
     <label className="block">
@@ -815,8 +866,11 @@ function Field({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+        className={`mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm ${
+          error ? "border-destructive ring-1 ring-destructive/30" : "border-border"
+        }`}
       />
+      {error && <p className="mt-0.5 text-xs text-destructive">{error}</p>}
     </label>
   );
 }
@@ -902,6 +956,7 @@ function QueueModal({
               لا توجد حجوزات في هذا اليوم.
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs uppercase text-muted-foreground">
                 <tr className="border-b border-border">
@@ -941,8 +996,98 @@ function QueueModal({
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Grant Gold modal — comps a doctor N months (or lifetime) of Gold.
+// ─────────────────────────────────────────────────────────────────────────────
+function GrantGoldModal({
+  profileId,
+  doctorName,
+  onClose,
+}: {
+  profileId: string;
+  doctorName: string;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState<number | "life" | null>(null);
+
+  const OPTIONS: { label: string; months: number | null; key: number | "life" }[] = [
+    { label: "شهر واحد", months: 1, key: 1 },
+    { label: "شهرين", months: 2, key: 2 },
+    { label: "3 أشهر", months: 3, key: 3 },
+    { label: "6 أشهر", months: 6, key: 6 },
+    { label: "12 شهرًا", months: 12, key: 12 },
+    { label: "مدى الحياة", months: null, key: "life" },
+  ];
+
+  async function grant(months: number | null, key: number | "life") {
+    setBusy(key);
+    try {
+      await adminGrantSubscription({
+        data: { profileId, planCode: "doctor_gold_monthly", months },
+      });
+      toast.success(
+        months == null
+          ? `تم منح ${doctorName} اشتراك Gold مدى الحياة`
+          : `تم منح ${doctorName} اشتراك Gold لمدة ${months} شهر`,
+      );
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "تعذّر منح الاشتراك");
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-xl bg-card p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 flex items-center gap-2 text-lg font-bold text-foreground">
+          <Crown className="h-5 w-5 text-amber-500" /> منح Gold مجانًا
+        </div>
+        <p className="mb-4 text-sm text-muted-foreground">
+          اختر مدة منح باقة Gold للطبيب <span className="font-semibold text-foreground">{doctorName}</span>.
+          تُفعّل فورًا ويظهر أثرها في التطبيق والويب.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {OPTIONS.map((o) => (
+            <button
+              key={String(o.key)}
+              type="button"
+              disabled={busy !== null}
+              onClick={() => grant(o.months, o.key)}
+              className={
+                "inline-flex items-center justify-center gap-1 rounded-md border px-3 py-2.5 text-sm font-medium transition disabled:opacity-60 " +
+                (o.months == null
+                  ? "border-amber-500 bg-amber-500 text-white hover:bg-amber-600"
+                  : "border-border text-foreground hover:bg-muted")
+              }
+            >
+              {busy === o.key && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={busy !== null}
+          className="mt-4 w-full rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted disabled:opacity-60"
+        >
+          إلغاء
+        </button>
       </div>
     </div>
   );

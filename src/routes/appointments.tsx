@@ -130,6 +130,55 @@ function AppointmentsPage() {
     },
   });
 
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const channels = [
+      supabase
+        .channel(`appointments-patient-${profile.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "appointments",
+            filter: `patient_id=eq.${profile.id}`,
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ["appointments"] });
+          },
+        )
+        .subscribe(),
+    ];
+
+    if (doctorDetailsId) {
+      channels.push(
+        supabase
+          .channel(`appointments-doctor-${doctorDetailsId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "appointments",
+              filter: `doctor_id=eq.${doctorDetailsId}`,
+            },
+            () => {
+              queryClient.invalidateQueries({ queryKey: ["appointments"] });
+              queryClient.invalidateQueries({ queryKey: ["doctor_appointments", doctorDetailsId] });
+            },
+          )
+          .subscribe(),
+      );
+    }
+
+    return () => {
+      channels.forEach((channel) => {
+        supabase.removeChannel(channel);
+      });
+    };
+  }, [profile?.id, doctorDetailsId, queryClient]);
+
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const { error } = await supabase.from("appointments").update({ status }).eq("id", id);

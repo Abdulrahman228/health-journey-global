@@ -1,169 +1,193 @@
-/**
- * /admin — Admin landing page.
- *
- * Central dashboard that surfaces all 5 admin sections as clickable cards
- * with live pending-item counts pulled in parallel from Supabase.
- *
- * Private (noindex, nofollow). Guarded client-side via useIsAdmin.
- */
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminShell } from "@/components/admin/AdminNav";
 import {
-  ShieldCheck,
-  Users,
-  Wallet,
-  Star,
-  FileText,
-  ArrowLeft,
+  Activity,
+  CalendarDays,
+  CheckCircle2,
+  CreditCard,
   Loader2,
   ShieldAlert,
-  LayoutDashboard,
+  ShieldCheck,
+  Stethoscope,
+  UserRound,
+  Users,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({
     meta: [
-      { title: "لوحة الأدمن — طبيبي" },
-      { name: "description", content: "لوحة تحكم المشرف في منصة طبيبي." },
+      { title: "Super Admin Dashboard — Tabibi" },
+      { name: "description", content: "Central platform administration dashboard for Tabibi." },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
   component: AdminHomePage,
 });
 
-interface SectionDef {
-  to: string;
-  title: string;
-  description: string;
-  icon: typeof ShieldCheck;
-  accent: string;
-  iconBg: string;
-  iconColor: string;
-  countLabel: string;
-  countKey: keyof Counts;
-}
+type Stats = {
+  doctors: number;
+  patients: number;
+  todayAppointments: number;
+  activeSubscriptions: number;
+  pendingDoctors: number;
+  activeRevenueEgp: number;
+};
 
-interface Counts {
-  verifications: number | null;
-  withdrawals: number | null;
-  reviews: number | null;
-  articles: number | null;
-  doctors: number | null;
-}
+type GrowthPoint = {
+  label: string;
+  doctors: number;
+  patients: number;
+};
 
-const SECTIONS: SectionDef[] = [
-  {
-    to: "/admin/verifications",
-    title: "توثيق الأطباء",
-    description: "مراجعة طلبات توثيق الأطباء واعتمادهم.",
-    icon: ShieldCheck,
-    accent: "border-sky-500/40 hover:border-sky-500",
-    iconBg: "bg-sky-500/10",
-    iconColor: "text-sky-600 dark:text-sky-400",
-    countLabel: "قيد المراجعة",
-    countKey: "verifications",
-  },
-  {
-    to: "/admin/doctors",
-    title: "إدارة الأطباء",
-    description: "تحرير ملفات الأطباء وإدارة بياناتهم.",
-    icon: Users,
-    accent: "border-violet-500/40 hover:border-violet-500",
-    iconBg: "bg-violet-500/10",
-    iconColor: "text-violet-600 dark:text-violet-400",
-    countLabel: "إجمالي الأطباء",
-    countKey: "doctors",
-  },
-  {
-    to: "/admin/withdrawals",
-    title: "طلبات السحب",
-    description: "اعتماد طلبات سحب أرباح الأطباء.",
-    icon: Wallet,
-    accent: "border-emerald-500/40 hover:border-emerald-500",
-    iconBg: "bg-emerald-500/10",
-    iconColor: "text-emerald-600 dark:text-emerald-400",
-    countLabel: "طلبات جديدة",
-    countKey: "withdrawals",
-  },
-  {
-    to: "/admin/reviews",
-    title: "إدارة التقييمات",
-    description: "مراجعة تقييمات المرضى قبل النشر.",
-    icon: Star,
-    accent: "border-amber-500/40 hover:border-amber-500",
-    iconBg: "bg-amber-500/10",
-    iconColor: "text-amber-600 dark:text-amber-400",
-    countLabel: "بانتظار الموافقة",
-    countKey: "reviews",
-  },
-  {
-    to: "/admin/articles",
-    title: "إدارة المقالات",
-    description: "كتابة ونشر مقالات SEO لجلب الزيارات.",
-    icon: FileText,
-    accent: "border-teal-500/40 hover:border-teal-500",
-    iconBg: "bg-teal-500/10",
-    iconColor: "text-teal-600 dark:text-teal-400",
-    countLabel: "مقال منشور",
-    countKey: "articles",
-  },
-];
+type RecentDoctor = {
+  id: string;
+  profile_id: string;
+  specialty: string | null;
+  is_verified: boolean | null;
+  verification_status: string | null;
+  updated_at: string;
+  profile?: { full_name: string | null; city: string | null } | null;
+};
+
+const emptyStats: Stats = {
+  doctors: 0,
+  patients: 0,
+  todayAppointments: 0,
+  activeSubscriptions: 0,
+  pendingDoctors: 0,
+  activeRevenueEgp: 0,
+};
 
 function AdminHomePage() {
   const { user, profile, isLoading: authLoading } = useAuth();
   const { isAdmin, isLoading: roleLoading } = useIsAdmin();
   const navigate = useNavigate();
-  const [counts, setCounts] = useState<Counts>({
-    verifications: null,
-    withdrawals: null,
-    reviews: null,
-    articles: null,
-    doctors: null,
-  });
+  const [stats, setStats] = useState<Stats>(emptyStats);
+  const [growth, setGrowth] = useState<GrowthPoint[]>([]);
+  const [recentDoctors, setRecentDoctors] = useState<RecentDoctor[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (authLoading || roleLoading) return;
-    if (!user) {
-      navigate({ to: "/login" });
-      return;
-    }
+    if (!user) navigate({ to: "/login" });
   }, [authLoading, roleLoading, user, navigate]);
 
   useEffect(() => {
     if (!isAdmin) return;
     let cancelled = false;
 
-    async function loadCounts() {
+    async function loadDashboard() {
+      setLoading(true);
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 86_400_000);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const head = { count: "exact" as const, head: true };
-      const [verif, withdraw, rev, art, docs] = await Promise.all([
+
+      const [
+        doctors,
+        patients,
+        todayAppointments,
+        activeSubscriptions,
+        pendingDoctors,
+        activeSubscriptionRows,
+        planRows,
+        profileRows,
+        doctorRows,
+        recentRows,
+      ] = await Promise.all([
+        supabase.from("doctor_details").select("id", head),
+        supabase.from("user_roles").select("id", head).eq("role", "patient"),
+        supabase
+          .from("appointments")
+          .select("id", head)
+          .gte("scheduled_at", todayStart.toISOString())
+          .lt("scheduled_at", todayEnd.toISOString()),
+        supabase.from("subscriptions").select("id", head).in("status", ["active", "trialing"]),
         supabase
           .from("doctor_details")
           .select("id", head)
-          .eq("verification_status", "pending"),
+          .or("is_verified.is.false,verification_status.eq.pending"),
         supabase
-          .from("doctor_withdrawals")
-          .select("id", head)
-          .eq("status", "requested"),
-        supabase.from("reviews").select("id", head).eq("status", "pending"),
-        supabase.from("articles").select("id", head).eq("is_published", true),
-        supabase.from("doctor_details").select("id", head),
+          .from("subscriptions")
+          .select("plan_code,status")
+          .in("status", ["active", "trialing"]),
+        supabase.from("subscription_plans").select("code, price_cents, currency"),
+        supabase
+          .from("profiles")
+          .select("id, created_at")
+          .gte("created_at", monthStart.toISOString()),
+        supabase.from("doctor_details").select("id, profile_id, created_at"),
+        supabase
+          .from("doctor_details")
+          .select("id, profile_id, specialty, is_verified, verification_status, updated_at")
+          .order("updated_at", { ascending: false })
+          .limit(6),
       ]);
 
+      const recentProfileIds = (recentRows.data ?? []).map((row) => row.profile_id);
+      const { data: recentProfiles } = recentProfileIds.length
+        ? await supabase.from("profiles").select("id, full_name, city").in("id", recentProfileIds)
+        : { data: [] };
+
       if (cancelled) return;
-      setCounts({
-        verifications: verif.count ?? 0,
-        withdrawals: withdraw.count ?? 0,
-        reviews: rev.count ?? 0,
-        articles: art.count ?? 0,
-        doctors: docs.count ?? 0,
+
+      const planByCode = new Map(
+        (planRows.data ?? []).map((plan) => [
+          plan.code,
+          { priceCents: Number(plan.price_cents ?? 0), currency: plan.currency ?? "EGP" },
+        ]),
+      );
+      const activeRevenueEgp = (activeSubscriptionRows.data ?? []).reduce((sum, row) => {
+        const plan = row.plan_code ? planByCode.get(row.plan_code) : null;
+        return sum + (plan?.currency === "EGP" ? plan.priceCents / 100 : 0);
+      }, 0);
+
+      const doctorProfileIds = new Set((doctorRows.data ?? []).map((row) => row.profile_id));
+      const dailyGrowth = buildGrowthSeries(
+        monthStart,
+        now,
+        (profileRows.data ?? []).map((row) => ({
+          id: row.id,
+          created_at: row.created_at,
+          isDoctor: doctorProfileIds.has(row.id),
+        })),
+      );
+
+      const profileById = new Map((recentProfiles ?? []).map((p) => [p.id, p]));
+
+      setStats({
+        doctors: doctors.count ?? 0,
+        patients: patients.count ?? 0,
+        todayAppointments: todayAppointments.count ?? 0,
+        activeSubscriptions: activeSubscriptions.count ?? 0,
+        pendingDoctors: pendingDoctors.count ?? 0,
+        activeRevenueEgp,
       });
+      setGrowth(dailyGrowth);
+      setRecentDoctors(
+        ((recentRows.data ?? []) as RecentDoctor[]).map((doctor) => ({
+          ...doctor,
+          profile: profileById.get(doctor.profile_id) ?? null,
+        })),
+      );
+      setLoading(false);
     }
 
-    void loadCounts();
+    void loadDashboard();
     return () => {
       cancelled = true;
     };
@@ -171,10 +195,10 @@ function AdminHomePage() {
 
   const greeting = useMemo(() => {
     const name = profile?.full_name?.trim();
-    return name ? `أهلاً ${name}` : "أهلاً بك";
+    return name ? `أهلاً ${name}` : "أهلاً بمالك النظام";
   }, [profile]);
 
-  if (authLoading || roleLoading) {
+  if (authLoading || roleLoading || (isAdmin && loading)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
@@ -185,10 +209,7 @@ function AdminHomePage() {
   if (!isAdmin) {
     return (
       <div className="mx-auto max-w-md px-4 py-24 text-center" dir="rtl">
-        <ShieldAlert
-          className="mx-auto h-12 w-12 text-destructive"
-          aria-hidden="true"
-        />
+        <ShieldAlert className="mx-auto h-12 w-12 text-destructive" aria-hidden="true" />
         <h1 className="mt-3 text-xl font-bold">صلاحيات غير كافية</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           هذه الصفحة مخصصة لمشرفي المنصة فقط.
@@ -198,85 +219,177 @@ function AdminHomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8 sm:py-12" dir="rtl">
-      <AdminNav />
-
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <AdminShell>
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-            <LayoutDashboard className="h-3.5 w-3.5" aria-hidden="true" />
-            لوحة المشرف
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            <Activity className="h-3.5 w-3.5" aria-hidden="true" />
+            مركز قيادة المنصة
           </div>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            {greeting}
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{greeting}</h1>
           <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-            من هنا تدير كل أقسام المنصة من مكان واحد.
+            متابعة التشغيل، التوثيق، الاشتراكات، ونمو المستخدمين من شاشة واحدة.
           </p>
         </div>
+        <Link
+          to="/admin/doctors"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          مراجعة الأطباء
+        </Link>
       </header>
 
-      <section
-        aria-label="أقسام لوحة الأدمن"
-        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-      >
-        {SECTIONS.map((s) => {
-          const Icon = s.icon;
-          const count = counts[s.countKey];
-          return (
-            <Link
-              key={s.to}
-              to={s.to}
-              aria-label={`${s.title}: ${s.description}`}
-              className={
-                "group relative flex min-h-[180px] flex-col justify-between rounded-2xl border-2 bg-card p-5 transition-all duration-200 " +
-                "hover:-translate-y-0.5 hover:shadow-lg focus-visible:-translate-y-0.5 focus-visible:shadow-lg " +
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 " +
-                s.accent
-              }
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div
-                  className={`flex h-12 w-12 items-center justify-center rounded-xl ${s.iconBg}`}
-                  aria-hidden="true"
-                >
-                  <Icon className={`h-6 w-6 ${s.iconColor}`} />
-                </div>
-                <ArrowLeft
-                  className="h-5 w-5 text-muted-foreground transition-transform group-hover:-translate-x-1 group-hover:text-foreground"
-                  aria-hidden="true"
-                />
-              </div>
-
-              <div className="mt-4">
-                <h2 className="text-lg font-bold text-foreground">{s.title}</h2>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  {s.description}
-                </p>
-              </div>
-
-              <div className="mt-4 flex items-baseline gap-2 border-t border-border pt-3">
-                <span
-                  className="text-2xl font-bold tabular-nums text-foreground"
-                  aria-live="polite"
-                >
-                  {count === null ? (
-                    <span
-                      className="inline-block h-6 w-10 animate-pulse rounded bg-muted"
-                      aria-label="جاري التحميل"
-                    />
-                  ) : (
-                    count.toLocaleString("ar-EG")
-                  )}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {s.countLabel}
-                </span>
-              </div>
-            </Link>
-          );
-        })}
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="إحصائيات المنصة">
+        <StatCard icon={Stethoscope} label="إجمالي الأطباء" value={stats.doctors} helper={`${stats.pendingDoctors} بانتظار الاعتماد`} tone="primary" />
+        <StatCard icon={UserRound} label="إجمالي المرضى" value={stats.patients} helper="حسب user_roles" tone="blue" />
+        <StatCard icon={CalendarDays} label="حجوزات اليوم" value={stats.todayAppointments} helper="من جدول appointments" tone="emerald" />
+        <StatCard icon={CreditCard} label="اشتراكات نشطة" value={stats.activeSubscriptions} helper={`${Math.round(stats.activeRevenueEgp).toLocaleString("ar-EG")} ج.م شهرياً`} tone="amber" />
       </section>
-    </main>
+
+      <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(22rem,1fr)]">
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">نمو المستخدمين هذا الشهر</h2>
+              <p className="text-sm text-muted-foreground">تراكم المرضى والأطباء يومياً</p>
+            </div>
+            <Users className="h-5 w-5 text-primary" aria-hidden="true" />
+          </div>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={growth} margin={{ left: 4, right: 8, top: 8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="patientsGrowth" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="doctorsGrowth" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.32} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip />
+                <Area type="monotone" dataKey="patients" name="المرضى" stroke="hsl(var(--primary))" fill="url(#patientsGrowth)" strokeWidth={2} />
+                <Area type="monotone" dataKey="doctors" name="الأطباء" stroke="#10b981" fill="url(#doctorsGrowth)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold">آخر تحديثات الأطباء</h2>
+              <p className="text-sm text-muted-foreground">مراجعة سريعة لحالة التوثيق</p>
+            </div>
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+          </div>
+          <div className="space-y-3">
+            {recentDoctors.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+                لا توجد بيانات أطباء بعد.
+              </p>
+            ) : (
+              recentDoctors.map((doctor) => (
+                <Link
+                  key={doctor.id}
+                  to="/admin/doctors"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 hover:bg-muted/50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {doctor.profile?.full_name ?? "طبيب بدون اسم"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {doctor.specialty ?? "تخصص غير محدد"}
+                      {doctor.profile?.city ? ` · ${doctor.profile.city}` : ""}
+                    </p>
+                  </div>
+                  <StatusBadge verified={!!doctor.is_verified} status={doctor.verification_status} />
+                </Link>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+    </AdminShell>
+  );
+}
+
+function buildGrowthSeries(
+  monthStart: Date,
+  now: Date,
+  rows: Array<{ id: string; created_at: string; isDoctor: boolean }>,
+): GrowthPoint[] {
+  const result: GrowthPoint[] = [];
+  const days = now.getDate();
+  let doctors = 0;
+  let patients = 0;
+
+  for (let day = 1; day <= days; day += 1) {
+    const cursorStart = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+    const cursorEnd = new Date(monthStart.getFullYear(), monthStart.getMonth(), day + 1);
+    for (const row of rows) {
+      const createdAt = new Date(row.created_at);
+      if (createdAt >= cursorStart && createdAt < cursorEnd) {
+        if (row.isDoctor) doctors += 1;
+        else patients += 1;
+      }
+    }
+    result.push({ label: day.toString(), doctors, patients });
+  }
+
+  return result;
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  tone,
+}: {
+  icon: typeof Users;
+  label: string;
+  value: number;
+  helper: string;
+  tone: "primary" | "blue" | "emerald" | "amber";
+}) {
+  const toneClass = {
+    primary: "bg-primary/10 text-primary",
+    blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  }[tone];
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClass}`}>
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </div>
+      </div>
+      <p className="mt-4 text-2xl font-bold tabular-nums">{value.toLocaleString("ar-EG")}</p>
+      <p className="mt-1 text-sm font-medium text-foreground">{label}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
+    </div>
+  );
+}
+
+function StatusBadge({ verified, status }: { verified: boolean; status: string | null }) {
+  if (verified || status === "approved" || status === "verified") {
+    return (
+      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+        معتمد
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+      مراجعة
+    </span>
   );
 }

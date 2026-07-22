@@ -126,12 +126,15 @@ export const getDoctorAnalytics = createServerFn({ method: "GET" })
         .lte("viewed_on", toStr),
       supabaseAdmin
         .from("appointments")
+        // Bucket by `scheduled_at` (always set), NOT the nullable
+        // `appointment_date` — otherwise rows without an appointment_date are
+        // dropped from the revenue/booking series.
         .select(
-          "fee, appointment_type, status, appointment_date, patient_id",
+          "fee, appointment_type, status, scheduled_at, patient_id",
         )
         .eq("doctor_id", ddId)
-        .gte("appointment_date", fromStr)
-        .lte("appointment_date", toStr),
+        .gte("scheduled_at", `${fromStr}T00:00:00Z`)
+        .lte("scheduled_at", `${toStr}T23:59:59.999Z`),
     ]);
 
     // Build series skeleton, then merge.
@@ -153,14 +156,14 @@ export const getDoctorAnalytics = createServerFn({ method: "GET" })
       fee: number | null;
       appointment_type: string | null;
       status: string | null;
-      appointment_date: string;
+      scheduled_at: string;
       patient_id: string;
     }>) {
       // Count only confirmed/completed/in-progress as booked.
       const st = (a.status ?? "").toLowerCase();
       if (st === "cancelled" || st === "no_show") continue;
 
-      const i = idxByDate.get(String(a.appointment_date).slice(0, 10));
+      const i = idxByDate.get(String(a.scheduled_at).slice(0, 10));
       if (i === undefined) continue;
 
       const fee = Number(a.fee ?? 0);

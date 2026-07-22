@@ -5,12 +5,16 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
 import { haversineKm } from "@/lib/distance";
-import { Search, MapPin, Star, Stethoscope, BadgeCheck, Loader2, SlidersHorizontal, Navigation } from "lucide-react";
+import { normalizeArabicText } from "@/lib/arabic";
+import { Search, MapPin, Star, Stethoscope, BadgeCheck, Loader2, SlidersHorizontal, Navigation, Phone } from "lucide-react";
 import { buildMeta, buildSeoLinks } from "@/lib/seo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SponsoredDoctorsRow } from "@/components/doctors/SponsoredDoctorsRow";
 import { TierBadge, type DoctorTier } from "@/components/TierBadge";
 import { HeroHierarchicalSearch } from "@/components/HeroHierarchicalSearch";
+
+/** Seeded/demo doctors that must never appear in the public patient-facing list. */
+const DEMO_DOCTOR_NAMES = new Set(["Dr. Test", "د. تجربة الطبيب"]);
 
 export const Route = createFileRoute("/doctors")({
   head: () => ({
@@ -61,6 +65,19 @@ type DoctorRow = {
   profile_id: string;
   profiles: { id: string; full_name: string | null; city: string | null; avatar_url: string | null } | null;
   clinics?: Clinic[];
+};
+
+/** Seeded (unclaimed) directory listing — NOT bookable, "Call / Claim" only. */
+type SeededDoctor = {
+  id: string;
+  full_name: string;
+  specialty: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  governorate: string | null;
+  external_rating: number | null;
+  external_review_cnt: number | null;
 };
 
 type SortKey = "rating" | "price_asc" | "distance";
@@ -145,6 +162,12 @@ function DoctorsPage() {
   const { data: doctors = [], isLoading } = useQuery({
     queryKey: ["doctors-with-clinics"],
     queryFn: async () => {
+      // Hide seeded/demo doctors from the public patient-facing list so patients
+      // can only book real, claimed doctors.
+      const isDemoDoctor = (d: { id?: string; profiles?: { full_name?: string | null } | null }) =>
+        (d.id ?? "").toLowerCase().startsWith("bbbb") ||
+        DEMO_DOCTOR_NAMES.has((d.profiles?.full_name ?? "").trim());
+
       const { data, error } = await supabase
         .from("doctor_details")
         .select(
@@ -160,13 +183,15 @@ function DoctorsPage() {
           .from("profiles")
           .select("id, full_name, city, avatar_url")
           .in("id", ids);
-        return (d2 || []).map((d) => ({
-          ...d,
-          profiles: profs?.find((p) => p.id === d.profile_id) ?? null,
-          clinics: [],
-        })) as DoctorRow[];
+        return (d2 || [])
+          .map((d) => ({
+            ...d,
+            profiles: profs?.find((p) => p.id === d.profile_id) ?? null,
+            clinics: [],
+          }))
+          .filter((d) => !isDemoDoctor(d)) as DoctorRow[];
       }
-      return data as unknown as DoctorRow[];
+      return (data as unknown as DoctorRow[]).filter((d) => !isDemoDoctor(d));
     },
   });
 
@@ -185,6 +210,18 @@ function DoctorsPage() {
         }
       }
       return map;
+    },
+  });
+
+  // Seeded (unclaimed) directory listings — shown as non-bookable Call/Claim
+  // cards below the real, bookable doctors. Physically separate from
+  // doctor_details, so they can never be booked online.
+  const { data: seeded = [] } = useQuery({
+    queryKey: ["seeded-doctors"],
+    queryFn: async (): Promise<SeededDoctor[]> => {
+      const { data, error } = await supabase.rpc("list_seeded_doctors", { p_limit: 200 });
+      if (error) return [];
+      return (data ?? []) as SeededDoctor[];
     },
   });
 
@@ -229,12 +266,15 @@ function DoctorsPage() {
     const maxDist = maxDistanceKm ? Number(maxDistanceKm) : null;
     const dayN = dayFilter === "" ? null : Number(dayFilter);
 
+    // Arabic-forgiving search: normalize the query once, and each doctor's
+    // name/specialty at compare time, so Hamza/Alif/Taa-Marbuta variants match.
+    const q = normalizeArabicText(search);
     const out = enriched.filter((d) => {
-      const name = d.profiles?.full_name?.toLowerCase() ?? "";
+      const name = normalizeArabicText(d.profiles?.full_name ?? "");
       const matchesSearch =
-        !search ||
-        name.includes(search.toLowerCase()) ||
-        (d.specialty ?? "").toLowerCase().includes(search.toLowerCase());
+        !q ||
+        name.includes(q) ||
+        normalizeArabicText(d.specialty ?? "").includes(q);
       const matchesSpec = !specialty || d.specialty === specialty;
       const matchesCity =
         !city ||
@@ -260,6 +300,25 @@ function DoctorsPage() {
     });
     return out;
   }, [enriched, search, specialty, city, minFee, maxFee, dayFilter, sort, maxDistanceKm]);
+
+  // Same search/specialty/city filters applied to seeded listings (fee/day/
+  // distance don't apply — seeded rows have no schedule/clinic geometry here).
+  const seededFiltered = useMemo(() => {
+    const q = normalizeArabicText(search);
+    const spQ = normalizeArabicText(specialty);
+    const cityQ = city.trim().toLowerCase();
+    return seeded.filter((d) => {
+      const name = normalizeArabicText(d.full_name ?? "");
+      const spec = normalizeArabicText(d.specialty ?? "");
+      const matchesSearch = !q || name.includes(q) || spec.includes(q);
+      const matchesSpec = !spQ || spec.includes(spQ);
+      const matchesCity =
+        !cityQ ||
+        (d.city ?? "").toLowerCase().includes(cityQ) ||
+        (d.address ?? "").toLowerCase().includes(cityQ);
+      return matchesSearch && matchesSpec && matchesCity;
+    });
+  }, [seeded, search, specialty, city]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -473,7 +532,7 @@ function DoctorsPage() {
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filtered.length === 0 && seededFiltered.length === 0 ? (
           <div className="text-center py-20 border border-dashed border-border rounded-xl">
             <Stethoscope className="mx-auto h-12 w-12 text-muted-foreground" />
             <p className="mt-4 text-muted-foreground">
@@ -481,12 +540,90 @@ function DoctorsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((d) => (
-              <DoctorCard key={d.id} doctor={d} tier={tierMap[d.id]} />
-            ))}
-          </div>
+          <>
+            {filtered.length > 0 && (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filtered.map((d) => (
+                  <DoctorCard key={d.id} doctor={d} tier={tierMap[d.id]} />
+                ))}
+              </div>
+            )}
+
+            {seededFiltered.length > 0 && (
+              <section className={filtered.length > 0 ? "mt-12" : ""}>
+                <h2 className="text-lg font-bold text-foreground">
+                  {t("More doctors near you", "أطباء آخرون في منطقتك")}
+                </h2>
+                <p className="mt-1 mb-4 text-sm text-muted-foreground">
+                  {t(
+                    "These are directory listings whose owners haven't enabled online booking yet — you can call them directly.",
+                    "قوائم من دليلنا العام لم يُفعّل أصحابها الحجز الإلكتروني بعد — يمكنك الاتصال بهم مباشرةً.",
+                  )}
+                </p>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {seededFiltered.map((s) => (
+                    <SeededDoctorCard key={s.id} doctor={s} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SeededDoctorCard({ doctor }: { doctor: SeededDoctor }) {
+  const { t } = useLanguage();
+  const name = doctor.full_name;
+  const initial = name.charAt(0).toUpperCase();
+  return (
+    <div className="flex h-full flex-col rounded-2xl border border-dashed border-border bg-muted/20 p-5">
+      <div className="flex items-start gap-4">
+        <div className="h-14 w-14 shrink-0 rounded-full bg-muted flex items-center justify-center text-xl font-semibold text-muted-foreground">
+          {initial}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="truncate font-semibold text-foreground">{name}</h3>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+              {t("Not on Tabibi yet", "غير مُفعّل")}
+            </span>
+          </div>
+          {doctor.specialty && <p className="truncate text-sm text-muted-foreground">{doctor.specialty}</p>}
+          {(doctor.city || doctor.address) && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3" /> {[doctor.city, doctor.address].filter(Boolean).join(" · ")}
+            </p>
+          )}
+          {doctor.external_rating != null && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <Star className="h-3 w-3 fill-current text-amber-400" />
+              {Number(doctor.external_rating).toFixed(1)} · {t("Google", "تقييم جوجل")}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-2 pt-1">
+        {doctor.phone ? (
+          <a
+            href={`tel:${doctor.phone}`}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+          >
+            <Phone className="h-4 w-4" /> {t("Call to book", "اتصل للحجز")}
+          </a>
+        ) : (
+          <span className="flex-1 text-center text-xs text-muted-foreground">
+            {t("No phone listed", "لا يوجد رقم")}
+          </span>
+        )}
+        <Link
+          to="/join-doctor"
+          className="inline-flex items-center justify-center rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition hover:border-primary/50 hover:text-primary"
+        >
+          {t("Is this you?", "هل هذا أنت؟")}
+        </Link>
       </div>
     </div>
   );

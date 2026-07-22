@@ -139,5 +139,29 @@ export default {
         });
       }),
     );
+
+    const { runFollowupReminders } = await import("./lib/cron/followup-reminders");
+    ctx.waitUntil(
+      runFollowupReminders({ scheduledTime: event.scheduledTime }).catch((err) => {
+        console.error("[cron] followup-reminders failed:", err);
+        reportError(err, {
+          source: "server",
+          level: "error",
+          context: { kind: "cron_failure", job: "followup-reminders" },
+        });
+      }),
+    );
+
+    const { runOutreachSender } = await import("./lib/cron/outreach-sender");
+    ctx.waitUntil(
+      runOutreachSender({ scheduledTime: event.scheduledTime }).catch((err) => {
+        console.error("[cron] outreach-sender failed:", err);
+        reportError(err, {
+          source: "server",
+          level: "error",
+          context: { kind: "cron_failure", job: "outreach-sender" },
+        });
+      }),
+    );
   },
 };

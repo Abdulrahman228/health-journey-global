@@ -31,6 +31,7 @@ export const Route = createFileRoute("/dashboard/settings/followup")({
 });
 
 interface FormState {
+  followupPeriodDays: number;
   freeFollowupDays: number;
   followupFee: number;
   maxFreeFollowups: number;
@@ -44,6 +45,7 @@ function FollowupSettingsPage() {
   const [isDoctor, setIsDoctor] = useState(true);
   const [consultationFee, setConsultationFee] = useState(0);
   const [form, setForm] = useState<FormState>({
+    followupPeriodDays: 30,
     freeFollowupDays: 14,
     followupFee: 0,
     maxFreeFollowups: 2,
@@ -58,12 +60,14 @@ function FollowupSettingsPage() {
     } else {
       const sx = s as {
         consultationFee: number;
+        followupPeriodDays: number;
         freeFollowupDays: number;
         followupFee: number;
         maxFreeFollowups: number;
       };
       setConsultationFee(sx.consultationFee);
       setForm({
+        followupPeriodDays: sx.followupPeriodDays,
         freeFollowupDays: sx.freeFollowupDays,
         followupFee: sx.followupFee,
         maxFreeFollowups: sx.maxFreeFollowups,
@@ -142,6 +146,36 @@ function FollowupSettingsPage() {
         </div>
 
         <div className="space-y-5">
+          <label className="block rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <span className="text-sm font-semibold text-foreground">
+              فترة تصنيف المتابعة (يوم)
+            </span>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              إذا حجز المريض خلال هذه المدة من آخر زيارة مكتملة معك، يُصنَّف الحجز
+              تلقائياً كـ«متابعة» بدلاً من «كشف جديد». (منفصلة عن المتابعة المجانية أدناه.)
+            </p>
+            <input
+              type="range"
+              min={15}
+              max={60}
+              value={form.followupPeriodDays}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, followupPeriodDays: Number(e.target.value) }))
+              }
+              className="mt-2 w-full accent-primary"
+              aria-valuemin={15}
+              aria-valuemax={60}
+              aria-valuenow={form.followupPeriodDays}
+            />
+            <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>15 يوم</span>
+              <span className="text-base font-bold text-primary">
+                {form.followupPeriodDays} يوم
+              </span>
+              <span>60 يوم</span>
+            </div>
+          </label>
+
           <label className="block">
             <span className="text-sm font-medium text-foreground">
               مدة المتابعة المجانية (يوم)

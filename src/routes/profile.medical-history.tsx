@@ -131,6 +131,46 @@ function PatientMedicalHistoryPage() {
     load();
   }, [authLoading, user, navigate, load]);
 
+  // Realtime: keep the medical history live as doctors add visits or upload
+  // documents for this patient — no manual refresh. Both tables are scoped to
+  // this patient by `patient_profile_id`. Mirrors the mobile `observeRecordChanges`
+  // (Android `MedicalRecordsRepository` / iOS `MedicalRecordsViewModel`), which
+  // merge these same two tables on one channel.
+  useEffect(() => {
+    if (!myProfileId) return;
+    const channel = supabase
+      .channel(`patient-records-${myProfileId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "medical_records",
+          filter: `patient_profile_id=eq.${myProfileId}`,
+        },
+        () => {
+          load();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "medical_attachments",
+          filter: `patient_profile_id=eq.${myProfileId}`,
+        },
+        () => {
+          load();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [myProfileId, load]);
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;

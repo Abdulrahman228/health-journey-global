@@ -65,17 +65,26 @@ import { Route as DashboardEarningsRouteImport } from './routes/dashboard.earnin
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard.analytics'
 import { Route as DSlugRouteImport } from './routes/d.$slug'
 import { Route as ConsultationIdRouteImport } from './routes/consultation.$id'
+import { Route as ClaimTokenRouteImport } from './routes/claim.$token'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
 import { Route as AdminWithdrawalsRouteImport } from './routes/admin.withdrawals'
 import { Route as AdminVerificationsRouteImport } from './routes/admin.verifications'
 import { Route as AdminSupportTicketsRouteImport } from './routes/admin.support-tickets'
+import { Route as AdminSubscriptionsRouteImport } from './routes/admin.subscriptions'
+import { Route as AdminSubscriptionRequestsRouteImport } from './routes/admin.subscription-requests'
+import { Route as AdminSeedDirectoryRouteImport } from './routes/admin.seed-directory'
 import { Route as AdminReviewsRouteImport } from './routes/admin.reviews'
+import { Route as AdminPatientsRouteImport } from './routes/admin.patients'
+import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminErrorsRouteImport } from './routes/admin.errors'
+import { Route as AdminEmrRouteImport } from './routes/admin.emr'
 import { Route as AdminDocumentsRouteImport } from './routes/admin.documents'
 import { Route as AdminDoctorsRouteImport } from './routes/admin.doctors'
+import { Route as AdminBillingRouteImport } from './routes/admin.billing'
 import { Route as AdminArticlesRouteImport } from './routes/admin.articles'
+import { Route as AdminAdmissionsRouteImport } from './routes/admin.admissions'
 import { Route as SpecialtySlugCityRouteImport } from './routes/specialty.$slug.$city'
 import { Route as RxVerifyNumberRouteImport } from './routes/rx.verify.$number'
 import { Route as FeedPostIdRouteImport } from './routes/feed.post.$id'
@@ -86,6 +95,7 @@ import { Route as DashboardSettingsBillingRouteImport } from './routes/dashboard
 import { Route as DashboardPatientIdRouteImport } from './routes/dashboard.patient.$id'
 import { Route as DSlugContactDotvcfRouteImport } from './routes/d.$slug.contact[.]vcf'
 import { Route as ApiPublicWebVitalsRouteImport } from './routes/api/public/web-vitals'
+import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 
 const TermsRoute = TermsRouteImport.update({
@@ -369,6 +379,11 @@ const ConsultationIdRoute = ConsultationIdRouteImport.update({
   path: '/consultation/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClaimTokenRoute = ClaimTokenRouteImport.update({
+  id: '/claim/$token',
+  path: '/claim/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
   id: '/checkout/return',
   path: '/checkout/return',
@@ -399,14 +414,45 @@ const AdminSupportTicketsRoute = AdminSupportTicketsRouteImport.update({
   path: '/admin/support-tickets',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminSubscriptionsRoute = AdminSubscriptionsRouteImport.update({
+  id: '/admin/subscriptions',
+  path: '/admin/subscriptions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSubscriptionRequestsRoute =
+  AdminSubscriptionRequestsRouteImport.update({
+    id: '/admin/subscription-requests',
+    path: '/admin/subscription-requests',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdminSeedDirectoryRoute = AdminSeedDirectoryRouteImport.update({
+  id: '/admin/seed-directory',
+  path: '/admin/seed-directory',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminReviewsRoute = AdminReviewsRouteImport.update({
   id: '/admin/reviews',
   path: '/admin/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPatientsRoute = AdminPatientsRouteImport.update({
+  id: '/admin/patients',
+  path: '/admin/patients',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminInventoryRoute = AdminInventoryRouteImport.update({
+  id: '/admin/inventory',
+  path: '/admin/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminErrorsRoute = AdminErrorsRouteImport.update({
   id: '/admin/errors',
   path: '/admin/errors',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminEmrRoute = AdminEmrRouteImport.update({
+  id: '/admin/emr',
+  path: '/admin/emr',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminDocumentsRoute = AdminDocumentsRouteImport.update({
@@ -419,9 +465,19 @@ const AdminDoctorsRoute = AdminDoctorsRouteImport.update({
   path: '/admin/doctors',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminBillingRoute = AdminBillingRouteImport.update({
+  id: '/admin/billing',
+  path: '/admin/billing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminArticlesRoute = AdminArticlesRouteImport.update({
   id: '/admin/articles',
   path: '/admin/articles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAdmissionsRoute = AdminAdmissionsRouteImport.update({
+  id: '/admin/admissions',
+  path: '/admin/admissions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SpecialtySlugCityRoute = SpecialtySlugCityRouteImport.update({
@@ -477,6 +533,12 @@ const ApiPublicWebVitalsRoute = ApiPublicWebVitalsRouteImport.update({
   path: '/api/public/web-vitals',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicWhatsappWebhookRoute =
+  ApiPublicWhatsappWebhookRouteImport.update({
+    id: '/api/public/whatsapp/webhook',
+    path: '/api/public/whatsapp/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicPaymentsWebhookRoute =
   ApiPublicPaymentsWebhookRouteImport.update({
     id: '/api/public/payments/webhook',
@@ -515,17 +577,26 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
+  '/admin/admissions': typeof AdminAdmissionsRoute
   '/admin/articles': typeof AdminArticlesRoute
+  '/admin/billing': typeof AdminBillingRoute
   '/admin/doctors': typeof AdminDoctorsRoute
   '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/emr': typeof AdminEmrRoute
   '/admin/errors': typeof AdminErrorsRoute
+  '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/patients': typeof AdminPatientsRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/seed-directory': typeof AdminSeedDirectoryRoute
+  '/admin/subscription-requests': typeof AdminSubscriptionRequestsRoute
+  '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/support-tickets': typeof AdminSupportTicketsRoute
   '/admin/verifications': typeof AdminVerificationsRoute
   '/admin/withdrawals': typeof AdminWithdrawalsRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/claim/$token': typeof ClaimTokenRoute
   '/consultation/$id': typeof ConsultationIdRoute
   '/d/$slug': typeof DSlugRouteWithChildren
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
@@ -563,6 +634,7 @@ export interface FileRoutesByFullPath {
   '/rx/verify/$number': typeof RxVerifyNumberRoute
   '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -595,17 +667,26 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
+  '/admin/admissions': typeof AdminAdmissionsRoute
   '/admin/articles': typeof AdminArticlesRoute
+  '/admin/billing': typeof AdminBillingRoute
   '/admin/doctors': typeof AdminDoctorsRoute
   '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/emr': typeof AdminEmrRoute
   '/admin/errors': typeof AdminErrorsRoute
+  '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/patients': typeof AdminPatientsRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/seed-directory': typeof AdminSeedDirectoryRoute
+  '/admin/subscription-requests': typeof AdminSubscriptionRequestsRoute
+  '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/support-tickets': typeof AdminSupportTicketsRoute
   '/admin/verifications': typeof AdminVerificationsRoute
   '/admin/withdrawals': typeof AdminWithdrawalsRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/claim/$token': typeof ClaimTokenRoute
   '/consultation/$id': typeof ConsultationIdRoute
   '/d/$slug': typeof DSlugRouteWithChildren
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
@@ -643,6 +724,7 @@ export interface FileRoutesByTo {
   '/rx/verify/$number': typeof RxVerifyNumberRoute
   '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -676,17 +758,26 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
+  '/admin/admissions': typeof AdminAdmissionsRoute
   '/admin/articles': typeof AdminArticlesRoute
+  '/admin/billing': typeof AdminBillingRoute
   '/admin/doctors': typeof AdminDoctorsRoute
   '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/emr': typeof AdminEmrRoute
   '/admin/errors': typeof AdminErrorsRoute
+  '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/patients': typeof AdminPatientsRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/seed-directory': typeof AdminSeedDirectoryRoute
+  '/admin/subscription-requests': typeof AdminSubscriptionRequestsRoute
+  '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/support-tickets': typeof AdminSupportTicketsRoute
   '/admin/verifications': typeof AdminVerificationsRoute
   '/admin/withdrawals': typeof AdminWithdrawalsRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/claim/$token': typeof ClaimTokenRoute
   '/consultation/$id': typeof ConsultationIdRoute
   '/d/$slug': typeof DSlugRouteWithChildren
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
@@ -724,6 +815,7 @@ export interface FileRoutesById {
   '/rx/verify/$number': typeof RxVerifyNumberRoute
   '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -758,17 +850,26 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/sw.js'
     | '/terms'
+    | '/admin/admissions'
     | '/admin/articles'
+    | '/admin/billing'
     | '/admin/doctors'
     | '/admin/documents'
+    | '/admin/emr'
     | '/admin/errors'
+    | '/admin/inventory'
+    | '/admin/patients'
     | '/admin/reviews'
+    | '/admin/seed-directory'
+    | '/admin/subscription-requests'
+    | '/admin/subscriptions'
     | '/admin/support-tickets'
     | '/admin/verifications'
     | '/admin/withdrawals'
     | '/articles/$slug'
     | '/auth/callback'
     | '/checkout/return'
+    | '/claim/$token'
     | '/consultation/$id'
     | '/d/$slug'
     | '/dashboard/analytics'
@@ -806,6 +907,7 @@ export interface FileRouteTypes {
     | '/rx/verify/$number'
     | '/specialty/$slug/$city'
     | '/api/public/payments/webhook'
+    | '/api/public/whatsapp/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -838,17 +940,26 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/sw.js'
     | '/terms'
+    | '/admin/admissions'
     | '/admin/articles'
+    | '/admin/billing'
     | '/admin/doctors'
     | '/admin/documents'
+    | '/admin/emr'
     | '/admin/errors'
+    | '/admin/inventory'
+    | '/admin/patients'
     | '/admin/reviews'
+    | '/admin/seed-directory'
+    | '/admin/subscription-requests'
+    | '/admin/subscriptions'
     | '/admin/support-tickets'
     | '/admin/verifications'
     | '/admin/withdrawals'
     | '/articles/$slug'
     | '/auth/callback'
     | '/checkout/return'
+    | '/claim/$token'
     | '/consultation/$id'
     | '/d/$slug'
     | '/dashboard/analytics'
@@ -886,6 +997,7 @@ export interface FileRouteTypes {
     | '/rx/verify/$number'
     | '/specialty/$slug/$city'
     | '/api/public/payments/webhook'
+    | '/api/public/whatsapp/webhook'
   id:
     | '__root__'
     | '/'
@@ -918,17 +1030,26 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/sw.js'
     | '/terms'
+    | '/admin/admissions'
     | '/admin/articles'
+    | '/admin/billing'
     | '/admin/doctors'
     | '/admin/documents'
+    | '/admin/emr'
     | '/admin/errors'
+    | '/admin/inventory'
+    | '/admin/patients'
     | '/admin/reviews'
+    | '/admin/seed-directory'
+    | '/admin/subscription-requests'
+    | '/admin/subscriptions'
     | '/admin/support-tickets'
     | '/admin/verifications'
     | '/admin/withdrawals'
     | '/articles/$slug'
     | '/auth/callback'
     | '/checkout/return'
+    | '/claim/$token'
     | '/consultation/$id'
     | '/d/$slug'
     | '/dashboard/analytics'
@@ -966,6 +1087,7 @@ export interface FileRouteTypes {
     | '/rx/verify/$number'
     | '/specialty/$slug/$city'
     | '/api/public/payments/webhook'
+    | '/api/public/whatsapp/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -999,17 +1121,26 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   SwDotjsRoute: typeof SwDotjsRoute
   TermsRoute: typeof TermsRoute
+  AdminAdmissionsRoute: typeof AdminAdmissionsRoute
   AdminArticlesRoute: typeof AdminArticlesRoute
+  AdminBillingRoute: typeof AdminBillingRoute
   AdminDoctorsRoute: typeof AdminDoctorsRoute
   AdminDocumentsRoute: typeof AdminDocumentsRoute
+  AdminEmrRoute: typeof AdminEmrRoute
   AdminErrorsRoute: typeof AdminErrorsRoute
+  AdminInventoryRoute: typeof AdminInventoryRoute
+  AdminPatientsRoute: typeof AdminPatientsRoute
   AdminReviewsRoute: typeof AdminReviewsRoute
+  AdminSeedDirectoryRoute: typeof AdminSeedDirectoryRoute
+  AdminSubscriptionRequestsRoute: typeof AdminSubscriptionRequestsRoute
+  AdminSubscriptionsRoute: typeof AdminSubscriptionsRoute
   AdminSupportTicketsRoute: typeof AdminSupportTicketsRoute
   AdminVerificationsRoute: typeof AdminVerificationsRoute
   AdminWithdrawalsRoute: typeof AdminWithdrawalsRoute
   ArticlesSlugRoute: typeof ArticlesSlugRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
+  ClaimTokenRoute: typeof ClaimTokenRoute
   ConsultationIdRoute: typeof ConsultationIdRoute
   DSlugRoute: typeof DSlugRouteWithChildren
   DoctorIdRoute: typeof DoctorIdRoute
@@ -1030,6 +1161,7 @@ export interface RootRouteChildren {
   ApiPublicWebVitalsRoute: typeof ApiPublicWebVitalsRoute
   RxVerifyNumberRoute: typeof RxVerifyNumberRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
+  ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1426,6 +1558,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConsultationIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/claim/$token': {
+      id: '/claim/$token'
+      path: '/claim/$token'
+      fullPath: '/claim/$token'
+      preLoaderRoute: typeof ClaimTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout/return': {
       id: '/checkout/return'
       path: '/checkout/return'
@@ -1468,6 +1607,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSupportTicketsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/subscriptions': {
+      id: '/admin/subscriptions'
+      path: '/admin/subscriptions'
+      fullPath: '/admin/subscriptions'
+      preLoaderRoute: typeof AdminSubscriptionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/subscription-requests': {
+      id: '/admin/subscription-requests'
+      path: '/admin/subscription-requests'
+      fullPath: '/admin/subscription-requests'
+      preLoaderRoute: typeof AdminSubscriptionRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/seed-directory': {
+      id: '/admin/seed-directory'
+      path: '/admin/seed-directory'
+      fullPath: '/admin/seed-directory'
+      preLoaderRoute: typeof AdminSeedDirectoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/reviews': {
       id: '/admin/reviews'
       path: '/admin/reviews'
@@ -1475,11 +1635,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/patients': {
+      id: '/admin/patients'
+      path: '/admin/patients'
+      fullPath: '/admin/patients'
+      preLoaderRoute: typeof AdminPatientsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/inventory': {
+      id: '/admin/inventory'
+      path: '/admin/inventory'
+      fullPath: '/admin/inventory'
+      preLoaderRoute: typeof AdminInventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/errors': {
       id: '/admin/errors'
       path: '/admin/errors'
       fullPath: '/admin/errors'
       preLoaderRoute: typeof AdminErrorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/emr': {
+      id: '/admin/emr'
+      path: '/admin/emr'
+      fullPath: '/admin/emr'
+      preLoaderRoute: typeof AdminEmrRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/documents': {
@@ -1496,11 +1677,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDoctorsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/billing': {
+      id: '/admin/billing'
+      path: '/admin/billing'
+      fullPath: '/admin/billing'
+      preLoaderRoute: typeof AdminBillingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/articles': {
       id: '/admin/articles'
       path: '/admin/articles'
       fullPath: '/admin/articles'
       preLoaderRoute: typeof AdminArticlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/admissions': {
+      id: '/admin/admissions'
+      path: '/admin/admissions'
+      fullPath: '/admin/admissions'
+      preLoaderRoute: typeof AdminAdmissionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/specialty/$slug/$city': {
@@ -1571,6 +1766,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/web-vitals'
       fullPath: '/api/public/web-vitals'
       preLoaderRoute: typeof ApiPublicWebVitalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/whatsapp/webhook': {
+      id: '/api/public/whatsapp/webhook'
+      path: '/api/public/whatsapp/webhook'
+      fullPath: '/api/public/whatsapp/webhook'
+      preLoaderRoute: typeof ApiPublicWhatsappWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/payments/webhook': {
@@ -1693,17 +1895,26 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   SwDotjsRoute: SwDotjsRoute,
   TermsRoute: TermsRoute,
+  AdminAdmissionsRoute: AdminAdmissionsRoute,
   AdminArticlesRoute: AdminArticlesRoute,
+  AdminBillingRoute: AdminBillingRoute,
   AdminDoctorsRoute: AdminDoctorsRoute,
   AdminDocumentsRoute: AdminDocumentsRoute,
+  AdminEmrRoute: AdminEmrRoute,
   AdminErrorsRoute: AdminErrorsRoute,
+  AdminInventoryRoute: AdminInventoryRoute,
+  AdminPatientsRoute: AdminPatientsRoute,
   AdminReviewsRoute: AdminReviewsRoute,
+  AdminSeedDirectoryRoute: AdminSeedDirectoryRoute,
+  AdminSubscriptionRequestsRoute: AdminSubscriptionRequestsRoute,
+  AdminSubscriptionsRoute: AdminSubscriptionsRoute,
   AdminSupportTicketsRoute: AdminSupportTicketsRoute,
   AdminVerificationsRoute: AdminVerificationsRoute,
   AdminWithdrawalsRoute: AdminWithdrawalsRoute,
   ArticlesSlugRoute: ArticlesSlugRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
+  ClaimTokenRoute: ClaimTokenRoute,
   ConsultationIdRoute: ConsultationIdRoute,
   DSlugRoute: DSlugRouteWithChildren,
   DoctorIdRoute: DoctorIdRoute,
@@ -1724,6 +1935,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicWebVitalsRoute: ApiPublicWebVitalsRoute,
   RxVerifyNumberRoute: RxVerifyNumberRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
+  ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

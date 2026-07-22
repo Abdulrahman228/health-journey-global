@@ -204,7 +204,7 @@ export const getMyFollowupSettings = createServerFn({ method: "GET" })
     if (!prof) return null;
     const { data: dd } = await supabaseAdmin
       .from("doctor_details")
-      .select("id, consultation_fee")
+      .select("id, consultation_fee, followup_period_days")
       .eq("profile_id", prof.id)
       .maybeSingle();
     if (!dd) return null;
@@ -216,6 +216,8 @@ export const getMyFollowupSettings = createServerFn({ method: "GET" })
     return {
       doctorDetailsId: dd.id as string,
       consultationFee: Number(dd.consultation_fee ?? 0),
+      // Booking-type classification window (consultation vs initial_checkup).
+      followupPeriodDays: Number(dd.followup_period_days ?? 30),
       freeFollowupDays: Number(s?.free_followup_days ?? DEFAULT_SETTINGS.freeFollowupDays),
       followupFee: Number(s?.followup_fee ?? DEFAULT_SETTINGS.followupFee),
       maxFreeFollowups: Number(s?.max_free_followups ?? DEFAULT_SETTINGS.maxFreeFollowups),
@@ -228,6 +230,7 @@ export const updateMyFollowupSettings = createServerFn({ method: "POST" })
     z
       .object({
         userId: z.string().uuid(),
+        followupPeriodDays: z.number().int().min(15).max(60),
         freeFollowupDays: z.number().int().min(0).max(365),
         followupFee: z.number().min(0),
         maxFreeFollowups: z.number().int().min(0).max(10),
@@ -260,5 +263,13 @@ export const updateMyFollowupSettings = createServerFn({ method: "POST" })
         { onConflict: "doctor_details_id" },
       );
     if (error) return { ok: false as const, error: error.message };
+
+    // The classification window lives on doctor_details (per the feature spec).
+    const { error: ddErr } = await supabaseAdmin
+      .from("doctor_details")
+      .update({ followup_period_days: data.followupPeriodDays })
+      .eq("id", dd.id);
+    if (ddErr) return { ok: false as const, error: ddErr.message };
+
     return { ok: true as const };
   });

@@ -331,7 +331,12 @@ function Plans({ t }: { t: T }) {
   const plans = DOCTOR_PLANS.map((p) => ({
     name: t(p.nameEn, p.nameAr),
     price: p.priceEgp === 0 ? "0" : formatEgp(p.priceEgp, "en"),
-    period: p.priceEgp === 0 ? t("forever", "للأبد") : t("EGP / month", "ج.م / شهرياً"),
+    period:
+      p.priceEgp === 0
+        ? t("forever", "للأبد")
+        : p.billingPeriod === "yearly"
+          ? t("EGP / year", "ج.م / سنوياً")
+          : t("EGP / month", "ج.م / شهرياً"),
     featured: !!p.featured,
     badge: p.badgeEn && p.badgeAr ? t(p.badgeEn, p.badgeAr) : undefined,
     features: p.features.map((f) => t(f.en, f.ar)),

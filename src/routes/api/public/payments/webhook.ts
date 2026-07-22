@@ -23,10 +23,27 @@ function resolvePriceId(item: any): string | null {
   );
 }
 
+// Stripe lookup key → internal plan_code. Gold is the single paid tier
+// (Monthly / Yearly). Legacy keys are remapped so in-flight/renewing checkouts
+// still resolve to a Gold plan code.
 const PRICE_TO_PLAN: Record<string, string> = {
-  doctor_pro_monthly: "doctor_pro_monthly",
-  doctor_pro_plus_monthly: "doctor_pro_plus_monthly",
+  doctor_gold_monthly: "doctor_gold_monthly",
+  doctor_gold_yearly: "doctor_gold_yearly",
+  // Legacy → Gold (keeps existing subscribers on a valid plan code).
+  doctor_pro_monthly: "doctor_gold_monthly",
+  doctor_pro_plus_monthly: "doctor_gold_yearly",
+  doctor_premium_monthly: "doctor_gold_monthly",
 };
+
+// Every code here grants FULL Gold access. Legacy pro/pro_plus/premium are
+// included so EXISTING subscribers keep all features after the consolidation.
+const GOLD_PLAN_CODES = new Set<string>([
+  "doctor_gold_monthly",
+  "doctor_gold_yearly",
+  "doctor_pro_monthly",
+  "doctor_pro_plus_monthly",
+  "doctor_premium_monthly",
+]);
 
 async function syncDoctorProFlags(userId: string, env: StripeEnv) {
   const sb = getSupabase();
@@ -49,8 +66,13 @@ async function syncDoctorProFlags(userId: string, env: StripeEnv) {
   );
 
   const plan = isActive ? (sub?.plan_code as string | null) : null;
-  const isPro = Boolean(isActive && (plan === "doctor_pro_monthly" || plan === "doctor_pro_plus_monthly"));
-  const isProPlus = Boolean(isActive && plan === "doctor_pro_plus_monthly");
+
+  // Single paid tier: any Gold code (incl. legacy pro/pro_plus/premium) grants
+  // both the "pro" and "pro-plus" feature flags — so existing subscribers keep
+  // every feature they had before the consolidation.
+  const isGold = Boolean(isActive && plan && GOLD_PLAN_CODES.has(plan));
+  const isPro = isGold;
+  const isProPlus = isGold;
 
   // Find doctor_details for this user
   const { data: profile } = await sb
@@ -60,14 +82,41 @@ async function syncDoctorProFlags(userId: string, env: StripeEnv) {
     .maybeSingle();
   if (!profile) return;
 
+  // LIABILITY GATE: online consultations require verified documents, even on
+  // Pro Plus. A subscription must NEVER unlock telemedicine for an unverified
+  // doctor — otherwise billing bypasses the whole verification flow.
+  const { data: dd } = await sb
+    .from("doctor_details")
+    .select("id, is_verified")
+    .eq("profile_id", profile.id as string)
+    .maybeSingle();
+  const isVerified = dd?.is_verified === true;
+  const telemedicineEnabled = isProPlus && isVerified;
+
   await sb
     .from("doctor_details")
     .update({
       is_pro: isPro,
       pro_plus_active: isProPlus,
-      telemedicine_enabled: isProPlus,
+      telemedicine_enabled: telemedicineEnabled,
     })
     .eq("profile_id", profile.id as string);
+
+  // Subscribed to Pro Plus but not verified → telemedicine stays OFF. Log an
+  // admin-facing warning so the team can nudge the doctor to complete verification.
+  if (isProPlus && !isVerified) {
+    await sb.from("audit_logs").insert({
+      user_id: userId,
+      action: "telemedicine.subscription_pending_verification",
+      resource_type: "doctor_details",
+      resource_id: dd?.id ?? null,
+      metadata: {
+        severity: "warning",
+        reason: "pro_plus_without_verification",
+        note: "Pro Plus active but telemedicine withheld — doctor not verified.",
+      },
+    });
+  }
 }
 
 async function handleSubscriptionUpsert(subscription: any, env: StripeEnv) {
@@ -83,6 +132,13 @@ async function handleSubscriptionUpsert(subscription: any, env: StripeEnv) {
   const periodStart = item?.current_period_start ?? subscription.current_period_start;
   const periodEnd = item?.current_period_end ?? subscription.current_period_end;
   const planCode = subscription.metadata?.planCode || (priceId ? PRICE_TO_PLAN[priceId] : null);
+
+  // Cross-platform tracking: which client initiated the subscription. The
+  // checkout can stamp subscription.metadata.source = "web" | "mobile"; defaults
+  // to "unknown" until both platforms set it. Plan changes still happen ONLY
+  // here in the webhook — never from a client button.
+  const source = (subscription.metadata?.source as string | undefined) ?? "unknown";
+  console.info(`[webhook] subscription upsert · source=${source} · plan=${planCode ?? "?"} · env=${env}`);
 
   await getSupabase()
     .from("subscriptions")

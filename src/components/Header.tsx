@@ -262,7 +262,7 @@ function UserMenu({
   t,
 }: {
   user: { email?: string } | null;
-  role: "admin" | "doctor" | "patient" | "pharmacy" | null;
+  role: "super_admin" | "admin" | "doctor" | "patient" | "pharmacy" | null;
   signOut: () => Promise<void>;
   t: (en: string, ar: string) => string;
 }) {
@@ -311,7 +311,7 @@ function UserMenu({
               </Link>
             </>
           )}
-          {role === "admin" && (
+          {(role === "admin" || role === "super_admin") && (
             <Link
               to="/admin"
               onClick={() => setOpen(false)}
