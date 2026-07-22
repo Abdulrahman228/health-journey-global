@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
   BadgeCheck,
+  Ban,
   Building2,
   Loader2,
   MapPin,
@@ -15,7 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLanguage } from "@/hooks/useLanguage";
-import { getClaimableListing, claimDoctorProfile } from "@/lib/claim.functions";
+import { getClaimableListing, claimDoctorProfile, optOutListing } from "@/lib/claim.functions";
 
 export const Route = createFileRoute("/claim/$token")({
   head: () => ({
@@ -32,6 +33,7 @@ function ClaimPage() {
   const { t, isRTL } = useLanguage();
   const navigate = useNavigate();
   const claim = useServerFn(claimDoctorProfile);
+  const optOut = useServerFn(optOutListing);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,6 +41,25 @@ function ClaimPage() {
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [nameSeeded, setNameSeeded] = useState(false);
+
+  // Reject / opt-out flow
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState<"not_me" | "not_interested" | "other">("not_me");
+  const [rejectNote, setRejectNote] = useState("");
+  const [rejectBusy, setRejectBusy] = useState(false);
+  const [rejected, setRejected] = useState(false);
+
+  const submitReject = async () => {
+    setRejectBusy(true);
+    try {
+      await optOut({ data: { token, reason: rejectReason, note: rejectNote.trim() || undefined } });
+      setRejected(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setRejectBusy(false);
+    }
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["claimable", token],
@@ -119,6 +140,22 @@ function ClaimPage() {
         >
           {t("Log in", "تسجيل الدخول")}
         </Link>
+      </div>
+    );
+  }
+
+  // Declined — the listing is removed and no further contact will happen.
+  if (rejected) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-24 text-center" dir="rtl">
+        <BadgeCheck className="mx-auto h-12 w-12 text-primary" />
+        <h1 className="mt-4 text-xl font-bold">{t("Done", "تم")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t(
+            "We've removed this listing and will not contact you again. Thank you.",
+            "أزلنا هذا الملف من الدليل ولن نتواصل معك مجدداً. شكراً لك.",
+          )}
+        </p>
       </div>
     );
   }
@@ -238,6 +275,77 @@ function ClaimPage() {
           )}
         </p>
       </div>
+
+      {/* Reject / opt-out */}
+      {!showReject ? (
+        <button
+          type="button"
+          onClick={() => setShowReject(true)}
+          className="mx-auto mt-4 flex items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          <Ban className="h-3.5 w-3.5" />
+          {t("This isn't me / I don't want to join", "هذا ليس أنا / لا أريد الانضمام")}
+        </button>
+      ) : (
+        <div className="mt-4 space-y-3 rounded-2xl border border-border bg-muted/30 p-5">
+          <h3 className="text-sm font-bold text-foreground">
+            {t("Remove this listing", "إزالة هذا الملف من الدليل")}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {t("Please tell us why (optional):", "من فضلك أخبرنا بالسبب:")}
+          </p>
+
+          <div className="space-y-2">
+            {[
+              { key: "not_me" as const, label: t("I'm not this doctor", "لست هذا الطبيب") },
+              { key: "not_interested" as const, label: t("I don't want to join", "لا أريد الانضمام") },
+              { key: "other" as const, label: t("Another reason", "سبب آخر") },
+            ].map((opt) => (
+              <label key={opt.key} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="radio"
+                  name="reject-reason"
+                  checked={rejectReason === opt.key}
+                  onChange={() => setRejectReason(opt.key)}
+                  className="h-4 w-4 accent-primary"
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+
+          {rejectReason === "other" && (
+            <textarea
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+              rows={2}
+              maxLength={300}
+              placeholder={t("Write your reason…", "اكتب سببك…")}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            />
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={submitReject}
+              disabled={rejectBusy}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground transition hover:bg-destructive/90 disabled:opacity-60"
+            >
+              {rejectBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+              {t("Remove & don't contact me", "أزل ملفي ولا تتواصل معي")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowReject(false)}
+              disabled={rejectBusy}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-60"
+            >
+              {t("Cancel", "إلغاء")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

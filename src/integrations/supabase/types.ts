@@ -2755,6 +2755,7 @@ export type Database = {
           lng: number | null
           opted_out: boolean
           opted_out_at: string | null
+          opted_out_reason: string | null
           phone: string | null
           source: string
           source_ref: string | null
@@ -2778,6 +2779,7 @@ export type Database = {
           lng?: number | null
           opted_out?: boolean
           opted_out_at?: string | null
+          opted_out_reason?: string | null
           phone?: string | null
           source?: string
           source_ref?: string | null
@@ -2801,6 +2803,7 @@ export type Database = {
           lng?: number | null
           opted_out?: boolean
           opted_out_at?: string | null
+          opted_out_reason?: string | null
           phone?: string | null
           source?: string
           source_ref?: string | null

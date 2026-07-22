@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { Json } from "@/integrations/supabase/types";
 import { signupRateLimit } from "./_rate-limit";
 
 // Same strong-password rule as the normal sign-up flow.
@@ -156,5 +157,98 @@ export const claimDoctorProfile = createServerFn({ method: "POST" })
       })
       .eq("id", row.id);
 
+    // Let the admins know a seeded doctor just activated (best-effort).
+    await notifyAdmins({
+      kind: "listing_claimed",
+      title: "طبيب فعّل ملفه 🎉",
+      body: `${data.fullName} فعّل ملفه من الدليل — بانتظار توثيق الترخيص.`,
+      link: "/admin/doctors",
+      metadata: { doctor_id: doctor.id, scraped_doctor_id: row.id },
+    });
+
     return { success: true as const, email: data.email, doctorId: doctor.id };
   });
+
+/**
+ * Decline a seeded listing from the /claim page (reject-with-reason). Token-gated,
+ * no auth. Sets opted_out=true (removes it from the directory AND all future
+ * outreach) + records the reason, then notifies admins. PDPL: an immediate,
+ * self-serve opt-out honored everywhere.
+ */
+export const optOutListing = createServerFn({ method: "POST" })
+  .middleware([signupRateLimit])
+  .inputValidator((raw: unknown) =>
+    z
+      .object({
+        token: z.string().uuid(),
+        reason: z.enum(["not_me", "not_interested", "other"]),
+        note: z.string().trim().max(300).optional(),
+      })
+      .parse(raw),
+  )
+  .handler(async ({ data }) => {
+    const { data: row } = await supabaseAdmin
+      .from("scraped_doctors")
+      .select("id, full_name, opted_out")
+      .eq("claim_token", data.token)
+      .maybeSingle();
+    if (!row) throw new Error("رابط غير صالح.");
+    if (row.opted_out) return { success: true as const };
+
+    const reasonText =
+      data.reason === "not_me"
+        ? "ليس أنا الطبيب"
+        : data.reason === "not_interested"
+          ? "لا أريد الانضمام"
+          : data.note?.trim() || "سبب آخر";
+
+    await supabaseAdmin
+      .from("scraped_doctors")
+      .update({
+        opted_out: true,
+        opted_out_at: new Date().toISOString(),
+        opted_out_reason: reasonText,
+        listing_status: "suppressed",
+      })
+      .eq("id", row.id);
+
+    await notifyAdmins({
+      kind: "listing_opt_out",
+      title: "رفض طبيب التفعيل",
+      body: `${row.full_name ?? "طبيب"} رفض التفعيل — السبب: ${reasonText}`,
+      link: "/admin/seed-directory",
+      metadata: { scraped_doctor_id: row.id, reason: data.reason },
+    });
+
+    return { success: true as const };
+  });
+
+/** Insert an in-app notification for every admin / super_admin (best-effort). */
+async function notifyAdmins(payload: {
+  kind: string;
+  title: string;
+  body: string;
+  link?: string;
+  metadata?: Json;
+}) {
+  try {
+    const { data: admins } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id")
+      .in("role", ["admin", "super_admin"]);
+    const userIds = [...new Set((admins ?? []).map((a) => a.user_id))];
+    if (userIds.length === 0) return;
+    await supabaseAdmin.from("notifications").insert(
+      userIds.map((user_id) => ({
+        user_id,
+        kind: payload.kind,
+        title: payload.title,
+        body: payload.body,
+        link: payload.link ?? "/admin",
+        metadata: payload.metadata ?? {},
+      })),
+    );
+  } catch {
+    // never block the claim / opt-out flow on notification failure
+  }
+}
