@@ -17,7 +17,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/dashboard/settings/billing")({
   head: () => ({
     meta: [
-      { title: "إعدادات الدفع | لوحة الطبيب — طبيبي" },
+      { title: "إعدادات الدفع | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -93,7 +93,7 @@ function BillingSettingsPage() {
   const m = form.payoutMethod;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div>
       <header className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <Banknote className="h-6 w-6 text-primary" aria-hidden="true" />

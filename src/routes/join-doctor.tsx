@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { buildMeta } from "@/lib/seo";
 import {
   Stethoscope,
@@ -32,7 +32,7 @@ import { DOCTOR_PLANS, formatEgp } from "@/lib/plans";
 export const Route = createFileRoute("/join-doctor")({
   head: () => ({
     meta: buildMeta({
-      title: "انضم كطبيب — طبيبي | Join as Doctor on Tabibi",
+      title: "انضم كطبيب — طبانا | Join as Doctor on Tebana",
       description:
         "انضم لأكبر منصة استشارات طبية أونلاين فى مصر والعالم العربى. تسجيل مجانى، روشتة إلكترونية، فيديو HD مدمج، ودخل إضافى من الكشف الأونلاين.",
       path: "/join-doctor",
@@ -44,6 +44,19 @@ export const Route = createFileRoute("/join-doctor")({
 function JoinDoctorPage() {
   const { t, language } = useLanguage();
   const isAr = language === "ar";
+
+  // Capture a peer referral code from the invite link (/join-doctor?ref=CODE).
+  // Stored until the invited doctor signs in, then attributed on the dashboard.
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    if (ref && ref.trim()) {
+      try {
+        localStorage.setItem("tabibi_ref", ref.trim());
+      } catch {
+        /* ignore */
+      }
+    }
+  }, []);
 
   return (
     <div className="bg-background">
@@ -232,7 +245,7 @@ function WhyJoin({ t }: { t: T }) {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
-            {t("Why join Tabibi?", "ليه تنضم لطبيبي؟")}
+            {t("Why join Tebana?", "ليه تنضم لطبانا؟")}
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
             {t(
@@ -426,8 +439,8 @@ function IncomeCalculator({ t, isAr }: { t: T; isAr: boolean }) {
           </h2>
           <p className="mt-3 text-muted-foreground">
             {t(
-              "Tabibi takes a 15% commission only on online consultations. Booking is 100% free.",
-              "تأخذ طبيبي 15% عمولة فقط على الكشف الأونلاين. الحجز مجانى 100%.",
+              "Tebana takes a 15% commission only on online consultations. Booking is 100% free.",
+              "تأخذ طبانا 15% عمولة فقط على الكشف الأونلاين. الحجز مجانى 100%.",
             )}
           </p>
         </div>
@@ -490,7 +503,7 @@ function IncomeCalculator({ t, isAr }: { t: T; isAr: boolean }) {
                 <span className="font-semibold">{gross.toLocaleString()} EGP</span>
               </div>
               <div className="flex justify-between">
-                <span>{t("Tabibi commission (15%)", "عمولة طبيبي (15%)")}</span>
+                <span>{t("Tebana commission (15%)", "عمولة طبانا (15%)")}</span>
                 <span className="font-semibold">−{commission.toLocaleString()} EGP</span>
               </div>
             </div>
@@ -540,10 +553,10 @@ function Faq({ t }: { t: T }) {
       ),
     },
     {
-      q: t("How much commission does Tabibi take?", "كم تأخذ طبيبي عمولة؟"),
+      q: t("How much commission does Tebana take?", "كم تأخذ طبانا عمولة؟"),
       a: t(
-        "Commission applies only to online consultations: 15% on the Free plan, 12% on Premium, and 10% on Gold. Booking in-clinic appointments through Tabibi is completely free for both you and the patient.",
-        "العمولة على الكشف الأونلاين فقط: 15% على الخطة المجانية، 12% على بريميوم، و10% على جولد. حجز المواعيد الحضورية عبر طبيبي مجانى تماماً للطبيب والمريض على السواء.",
+        "Commission applies only to online consultations: 15% on the Free plan, 12% on Premium, and 10% on Gold. Booking in-clinic appointments through Tebana is completely free for both you and the patient.",
+        "العمولة على الكشف الأونلاين فقط: 15% على الخطة المجانية، 12% على بريميوم، و10% على جولد. حجز المواعيد الحضورية عبر طبانا مجانى تماماً للطبيب والمريض على السواء.",
       ),
     },
     {

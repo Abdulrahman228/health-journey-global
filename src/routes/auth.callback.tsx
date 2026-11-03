@@ -11,7 +11,7 @@ const OAUTH_ROLE_KEY = "tabibi-oauth-role";
 
 export const Route = createFileRoute("/auth/callback")({
   head: () => ({
-    meta: [{ title: "OAuth Callback — Tabibi" }],
+    meta: [{ title: "OAuth Callback — Tebana" }],
   }),
   component: AuthCallbackPage,
 });

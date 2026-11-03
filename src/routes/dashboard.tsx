@@ -10,14 +10,43 @@ import { DoctorLiveQueue } from "@/components/dashboard/DoctorLiveQueue";
 import { EmergencyShiftButton } from "@/components/dashboard/EmergencyShiftButton";
 import { PublicPageManager } from "@/components/dashboard/PublicPageManager";
 import { ConsultationsInbox } from "@/components/ConsultationsInbox";
-import { Loader2, CheckCircle2, XCircle, Calendar, Clock, Users, DollarSign, Stethoscope, Save, Megaphone, Globe, Lock, Video, FilePlus, UserPlus, Zap, TrendingUp, TrendingDown, Crown, ArrowRight, MessageSquare } from "lucide-react";
+import { DoctorShell } from "@/components/doctor/DoctorNav";
+import { PageHeader, StatCard } from "@/components/doctor/ui";
+import {
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Calendar,
+  Clock,
+  Users,
+  DollarSign,
+  Stethoscope,
+  Save,
+  Megaphone,
+  Globe,
+  Lock,
+  Video,
+  FilePlus,
+  UserPlus,
+  Zap,
+  TrendingUp,
+  TrendingDown,
+  Crown,
+  ArrowRight,
+  MessageSquare,
+  MonitorSmartphone,
+  ShieldAlert,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
-      { title: "Doctor Dashboard — Tabibi" },
-      { name: "description", content: "Manage your schedule, appointments, and clinic profile on Tabibi." },
+      { title: "Doctor Dashboard — Tebana" },
+      {
+        name: "description",
+        content: "Manage your schedule, appointments, and clinic profile on Tebana.",
+      },
     ],
   }),
   component: DashboardPage,
@@ -37,18 +66,32 @@ interface DoctorDetails {
   verification_status: string | null;
 }
 
-const CURRENCIES = ["EGP", "USD", "EUR", "SAR", "AED", "KWD", "QAR", "BHD", "OMR", "JOD", "MAD", "TND", "DZD", "GBP"];
-
+const CURRENCIES = [
+  "EGP",
+  "USD",
+  "EUR",
+  "SAR",
+  "AED",
+  "KWD",
+  "QAR",
+  "BHD",
+  "OMR",
+  "JOD",
+  "MAD",
+  "TND",
+  "DZD",
+  "GBP",
+];
 
 function DashboardPage() {
   // When on a child route like /dashboard/analytics, render the child instead
   // of the dashboard home content (dashboard.tsx is a layout for nested routes).
   const matches = useMatches();
-  const isChildRoute = matches.some((m) => m.routeId !== "__root__" && m.routeId !== "/dashboard" && m.routeId.startsWith("/dashboard"));
-  if (isChildRoute) {
-    return <Outlet />;
-  }
-  return <DashboardHomePage />;
+  const isChildRoute = matches.some(
+    (m) =>
+      m.routeId !== "__root__" && m.routeId !== "/dashboard" && m.routeId.startsWith("/dashboard"),
+  );
+  return <DoctorShell>{isChildRoute ? <Outlet /> : <DashboardHomePage />}</DoctorShell>;
 }
 
 function DashboardHomePage() {
@@ -62,6 +105,29 @@ function DashboardHomePage() {
     if (!user) navigate({ to: "/login" });
     else if (role && role !== "doctor") navigate({ to: "/appointments" });
   }, [authLoading, user, role, navigate]);
+
+  // Attribute a peer referral captured from ?ref= on /join-doctor, once the
+  // invited doctor is signed in. Idempotent server-side; cleared on success.
+  useEffect(() => {
+    if (authLoading || role !== "doctor") return;
+    let code: string | null = null;
+    try {
+      code = localStorage.getItem("tabibi_ref");
+    } catch {
+      code = null;
+    }
+    if (!code) return;
+    void (async () => {
+      const { error } = await supabase.rpc("attribute_referral", { p_code: code });
+      if (!error) {
+        try {
+          localStorage.removeItem("tabibi_ref");
+        } catch {
+          /* ignore */
+        }
+      }
+    })();
+  }, [authLoading, role]);
 
   const { data: details, isLoading: detailsLoading } = useQuery({
     queryKey: ["doctor_details", profile?.id],
@@ -138,8 +204,8 @@ function DashboardHomePage() {
         vars.status === "confirmed"
           ? t("Appointment confirmed", "تم تأكيد الموعد")
           : vars.status === "completed"
-          ? t("Marked as completed", "تم تمييزه كمكتمل")
-          : t("Appointment cancelled", "تم إلغاء الموعد"),
+            ? t("Marked as completed", "تم تمييزه كمكتمل")
+            : t("Appointment cancelled", "تم إلغاء الموعد"),
       );
       queryClient.invalidateQueries({ queryKey: ["doctor_appointments"] });
     },
@@ -185,8 +251,8 @@ function DashboardHomePage() {
       prevMonthRevenue > 0
         ? Math.round(((monthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100)
         : monthRevenue > 0
-        ? 100
-        : 0;
+          ? 100
+          : 0;
 
     const uniquePatients = new Set(
       appointments.filter((a) => a.status === "completed").map((a: any) => a.patient_id),
@@ -213,57 +279,99 @@ function DashboardHomePage() {
     );
   }
 
-  return (
-    <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground">
-          {t("Doctor Dashboard", "لوحة تحكم الطبيب")}
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          {t("Welcome back", "مرحبًا بعودتك")}, {profile?.full_name ?? user?.email}
-        </p>
-        {details && !details.is_verified && (
-          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-            {t(
-              "Your account is pending verification. You'll appear in search results once approved.",
-              "حسابك قيد المراجعة. سيظهر ملفك في نتائج البحث بعد الموافقة.",
-            )}
-          </div>
-        )}
-      </div>
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12
+      ? t("Good morning", "صباح الخير")
+      : hour < 18
+        ? t("Good afternoon", "مساء الخير")
+        : t("Good evening", "مساء الخير");
+  const doctorName = profile?.full_name ?? user?.email ?? "";
+  const todayLabel = new Date().toLocaleDateString(t("en-US", "ar-EG"), {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
-      {/* Stats — enhanced with trends */}
-      <div className="mb-8 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KpiCard
-          icon={DollarSign}
-          label={t("This month", "هذا الشهر")}
-          value={`${stats.monthRevenue.toLocaleString()} ${t("EGP", "ج.م")}`}
-          trend={stats.revenueTrend}
-          accent="emerald"
+  return (
+    <div>
+      <PageHeader
+        eyebrow={todayLabel}
+        title={`${greeting}، ${t("Dr.", "د.")} ${doctorName}`}
+        description={t(
+          "Your clinic at a glance — today's queue, requests and numbers.",
+          "عيادتك في نظرة واحدة — طابور اليوم، الطلبات والأرقام.",
+        )}
+        actions={
+          <>
+            <Link
+              to="/dashboard/visit/new"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+            >
+              <Zap className="h-4 w-4" />
+              {t("Start visit", "بدء كشف")}
+            </Link>
+            <Link
+              to="/dashboard/waiting-room"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-sm font-medium text-foreground transition hover:bg-muted"
+            >
+              <MonitorSmartphone className="h-4 w-4" />
+              {t("Waiting room", "صالة الانتظار")}
+            </Link>
+          </>
+        }
+      >
+        {details && !details.is_verified && (
+          <Link
+            to="/doctor/verification"
+            className="mt-4 flex items-start gap-3 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-foreground transition hover:border-warning/60"
+          >
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+            <span>
+              <span className="font-semibold">
+                {t("Verification pending.", "التوثيق قيد المراجعة.")}
+              </span>{" "}
+              {t(
+                "You'll appear in search results once approved — complete your documents to speed it up.",
+                "ستظهر في نتائج البحث بعد الموافقة — أكمل مستنداتك لتسريع المراجعة.",
+              )}
+            </span>
+          </Link>
+        )}
+      </PageHeader>
+
+      {/* KPIs */}
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+        <StatCard
+          icon={Calendar}
+          label={t("Today's appointments", "مواعيد اليوم")}
+          value={stats.todayCount}
+          tone="primary"
         />
-        <KpiCard
+        <StatCard
+          icon={Clock}
+          label={t("Pending confirmation", "بانتظار التأكيد")}
+          value={stats.pending}
+          tone="warning"
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label={t("Completed visits", "زيارات مكتملة")}
+          value={stats.completed}
+          tone="success"
+        />
+        <StatCard
           icon={Users}
           label={t("Patients", "المرضى")}
           value={stats.uniquePatients}
-          accent="blue"
+          tone="info"
         />
-        <KpiCard
-          icon={Calendar}
-          label={t("Today", "اليوم")}
-          value={stats.todayCount}
-          accent="primary"
-        />
-        <KpiCard
-          icon={Clock}
-          label={t("Pending", "بانتظار التأكيد")}
-          value={stats.pending}
-          accent="amber"
-        />
-        <KpiCard
-          icon={CheckCircle2}
-          label={t("Completed", "مكتملة")}
-          value={stats.completed}
-          accent="teal"
+        <StatCard
+          icon={DollarSign}
+          label={t("Revenue this month", "إيراد هذا الشهر")}
+          value={`${stats.monthRevenue.toLocaleString()} ${t("EGP", "ج.م")}`}
+          trend={stats.revenueTrend}
+          hint={t("vs. last month", "مقارنة بالشهر الماضي")}
         />
       </div>
 
@@ -279,88 +387,6 @@ function DashboardHomePage() {
         <QuickActions t={t} isVerified={!!details?.is_verified} tier={activeTier ?? "free"} />
       </div>
 
-      {/* Sponsorship promo (visible to all doctors; route enforces Gold) */}
-      <Link
-        to="/doctor/sponsorship"
-        className="mb-10 block rounded-2xl border border-amber-300/60 bg-linear-to-br from-amber-50 to-amber-100/30 dark:border-amber-900/40 dark:from-amber-950/30 dark:to-amber-900/10 p-5 transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <div className="flex items-start gap-3">
-          <div className="rounded-full bg-amber-500/20 p-2 text-amber-700 dark:text-amber-300" aria-hidden="true">
-            <Megaphone className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-foreground">
-              {t("Sponsored placement (Gold only)", "إعلانات Sponsored — لاشتراكات Gold")}
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t(
-                "Appear at the top of search results, increase visibility 3-5×, pay per click.",
-                "تظهر في أعلى نتائج البحث وتزيد ظهورك 3-5×. تدفع فقط عن النقرات.",
-              )}
-            </p>
-          </div>
-          <span className="text-xs font-bold text-amber-700 dark:text-amber-300 whitespace-nowrap">
-            {t("Manage →", "إدارة ←")}
-          </span>
-        </div>
-      </Link>
-
-      {/* Phase 3-5 cards: Solo Mode + Private Feedback + Reviews curation */}
-      <div className="mb-10 grid gap-3 md:grid-cols-3">
-        <Link
-          to="/doctor/solo"
-          className="block rounded-2xl border border-border bg-card p-5 transition hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <Globe className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h3 className="font-semibold">{t("Solo Mode (white-label)", "Solo Mode — صفحتك الخاصة")}</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {t(
-              "Get your own subdomain like dr-name.mytabibi.com with your branding.",
-              "احصل على نطاق فرعي خاص بك (drname.mytabibi.com) بشعارك ولونك.",
-            )}
-          </p>
-        </Link>
-
-        <Link
-          to="/doctor/feedback"
-          className="block rounded-2xl border border-border bg-card p-5 transition hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <Lock className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h3 className="font-semibold">{t("Private feedback inbox", "ملاحظات خاصة مشفّرة")}</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {t(
-              "Read encrypted notes from patients — visible only to you.",
-              "اقرأ ملاحظات مشفّرة من المرضى — مرئية لك فقط.",
-            )}
-          </p>
-        </Link>
-
-        <Link
-          to="/dashboard/reviews"
-          className="block rounded-2xl border border-border bg-card p-5 transition hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h3 className="font-semibold">
-              {t("Reviews curation", "إدارة تقييماتك")}
-            </h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {t(
-              "Choose which approved reviews appear on your public profile.",
-              "اختر أي التقييمات الموافق عليها تظهر على صفحتك العامة.",
-            )}
-          </p>
-        </Link>
-      </div>
-
-      {/* Profile editor */}
-      <DoctorProfileEditor details={details} profileId={profile?.id ?? null} />
-
       {/* Live queue (today) */}
       {details?.id && (
         <div className="mt-6 flex justify-end">
@@ -373,247 +399,11 @@ function DashboardHomePage() {
       <section className="mt-8">
         <ConsultationsInbox />
       </section>
-
-      {/* Clinics & schedules */}
-      {details?.id && <ClinicsManager doctorDetailsId={details.id} />}
-
-      {/* Public page + QR */}
-      {profile?.id && <PublicPageManager profileId={profile.id} role="doctor" />}
-
-      {/* EMR quick-links */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold text-foreground mb-4">
-          {t("Medical Records", "السجلات الطبية")}
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Link
-            to="/dashboard/patients"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <div className="text-base font-semibold text-foreground">
-              {t("My Patients", "مرضائي")}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("Browse and search patient records", "ابحث في سجلات مرضاك")}
-            </p>
-          </Link>
-          <Link
-            to="/dashboard/visit/new"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <div className="text-base font-semibold text-foreground">
-              {t("New Visit", "زيارة جديدة")}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("Record encounter + prescription", "سجّل زيارة + وصفة")}
-            </p>
-          </Link>
-          <Link
-            to="/dashboard/settings/followup"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <div className="text-base font-semibold text-foreground">
-              {t("Follow-up Settings", "إعدادات المتابعة")}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("Free revisit window & fees", "فترة المتابعة المجانية والرسوم")}
-            </p>
-          </Link>
-          <Link
-            to="/dashboard/settings/signature"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <div className="text-base font-semibold text-foreground">
-              {t("Signature & Stamp", "التوقيع والختم")}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("For prescriptions PDF", "لظهورهما على الوصفات الطبية")}
-            </p>
-          </Link>
-          <Link
-            to="/dashboard/support"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <div className="text-base font-semibold text-foreground flex items-center gap-2">
-              {t("Support", "الدعم الفني")}
-              <span className="rounded-full bg-gradient-to-r from-amber-400 to-yellow-600 text-white px-2 py-0.5 text-[10px] font-bold">
-                {t("Priority", "أولوية")}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("Premium/Gold get faster SLA", "أعضاء بريميوم وجولد بأولوية فائقة")}
-            </p>
-          </Link>
-        </div>
-      </section>
-
-      {/* Online consultations (telemedicine) feature gate */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold text-foreground mb-4">
-          {t("Online Consultations", "الاستشارات عن بُعد")}
-        </h2>
-        <TelemedicineToggle />
-      </section>
-
-      {/* Finance quick-links */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold text-foreground mb-4">
-          {t("Finance", "الإيرادات والمحاسبة")}
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Link
-            to="/dashboard/earnings"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <div className="text-base font-semibold text-foreground">
-              {t("My Earnings", "إيراداتي")}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("Balance, transactions, withdrawals", "الرصيد والمعاملات والسحوبات")}
-            </p>
-          </Link>
-          <Link
-            to="/dashboard/settings/billing"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <div className="text-base font-semibold text-foreground">
-              {t("Payout Settings", "إعدادات الدفع")}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("Bank / InstaPay / Vodafone Cash", "تحويل بنكي / InstaPay / فودافون كاش")}
-            </p>
-          </Link>
-          <Link
-            to="/dashboard/analytics"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40 sm:col-span-2"
-          >
-            <div className="text-base font-semibold text-foreground flex items-center gap-2">
-              {t("Analytics", "التحليلات")}
-              <span className="inline-flex items-center bg-linear-to-r from-amber-400 to-yellow-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                {t("PREMIUM", "بريميوم")}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t(
-                "Profile views, conversion, revenue trends",
-                "المشاهدات، التحويل، اتجاه الإيرادات",
-              )}
-            </p>
-          </Link>
-          <Link
-            to="/dashboard/expenses"
-            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40 sm:col-span-2"
-          >
-            <div className="text-base font-semibold text-foreground flex items-center gap-2">
-              {t("Expenses & Reports", "المصاريف والتقارير")}
-              <span className="inline-flex items-center bg-linear-to-r from-amber-400 to-yellow-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                {t("PREMIUM", "بريميوم")}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t(
-                "Track expenses, monthly P&L, CSV export",
-                "تتبّع المصاريف، تقرير الأرباح الشهري، تصدير CSV",
-              )}
-            </p>
-          </Link>
-        </div>
-      </section>
-
-      {/* Pending appointments */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold text-foreground mb-4">
-          {t("Pending Requests", "طلبات قيد الانتظار")}
-        </h2>
-        {appointments.filter((a) => a.status === "pending").length === 0 ? (
-          <p className="text-muted-foreground text-sm border border-dashed border-border rounded-xl p-6 text-center">
-            {t("No pending requests.", "لا توجد طلبات قيد الانتظار.")}
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {appointments
-              .filter((a) => a.status === "pending")
-              .map((a) => (
-                <AppointmentRow
-                  key={a.id}
-                  appt={a}
-                  onConfirm={() => updateStatus.mutate({ id: a.id, status: "confirmed" })}
-                  onReject={() => updateStatus.mutate({ id: a.id, status: "cancelled" })}
-                  mutationPending={updateStatus.isPending}
-                  t={t}
-                />
-              ))}
-          </div>
-        )}
-      </section>
-
-      {/* Upcoming confirmed */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold text-foreground mb-4">
-          {t("Upcoming Appointments", "المواعيد القادمة")}
-        </h2>
-        {appointments.filter((a) => a.status === "confirmed").length === 0 ? (
-          <p className="text-muted-foreground text-sm border border-dashed border-border rounded-xl p-6 text-center">
-            {t("No upcoming appointments.", "لا توجد مواعيد قادمة.")}
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {appointments
-              .filter((a) => a.status === "confirmed")
-              .map((a) => (
-                <AppointmentRow
-                  key={a.id}
-                  appt={a}
-                  onComplete={() => updateStatus.mutate({ id: a.id, status: "completed" })}
-                  onReject={() => updateStatus.mutate({ id: a.id, status: "cancelled" })}
-                  mutationPending={updateStatus.isPending}
-                  t={t}
-                />
-              ))}
-          </div>
-        )}
-
-        <div className="mt-6">
-          <Link
-            to="/appointments"
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            {t("View all appointments →", "عرض كل المواعيد ←")}
-          </Link>
-        </div>
-      </section>
     </div>
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-  color: "primary" | "teal" | "amber";
-}) {
-  const colorMap = {
-    primary: "bg-primary/10 text-primary",
-    teal: "bg-teal/10 text-teal",
-    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  };
-  return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className={`h-10 w-10 rounded-lg flex items-center justify-center mb-3 ${colorMap[color]}`}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <p className="text-2xl font-bold text-foreground">{value}</p>
-      <p className="text-sm text-muted-foreground mt-1">{label}</p>
-    </div>
-  );
-}
-
-function AppointmentRow({
+export function AppointmentRow({
   appt,
   onConfirm,
   onComplete,
@@ -653,7 +443,11 @@ function AppointmentRow({
             disabled={mutationPending}
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {mutationPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            {mutationPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            )}
             {t("Confirm", "تأكيد")}
           </button>
         )}
@@ -663,7 +457,11 @@ function AppointmentRow({
             disabled={mutationPending}
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal/10 text-teal text-xs font-medium hover:bg-teal/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {mutationPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            {mutationPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            )}
             {t("Complete", "إكمال")}
           </button>
         )}
@@ -682,7 +480,7 @@ function AppointmentRow({
   );
 }
 
-function DoctorProfileEditor({
+export function DoctorProfileEditor({
   details,
   profileId,
 }: {
@@ -715,7 +513,6 @@ function DoctorProfileEditor({
     }
   }, [details]);
 
-
   const save = useMutation({
     mutationFn: async () => {
       if (!profileId) throw new Error("No profile");
@@ -730,7 +527,10 @@ function DoctorProfileEditor({
         years_experience: form.years_experience ? Number(form.years_experience) : null,
       };
       if (details?.id) {
-        const { error } = await supabase.from("doctor_details").update(payload).eq("id", details.id);
+        const { error } = await supabase
+          .from("doctor_details")
+          .update(payload)
+          .eq("id", details.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("doctor_details").insert(payload);
@@ -779,7 +579,9 @@ function DoctorProfileEditor({
               className="rounded-lg border border-border bg-background px-2 py-2 text-sm"
             >
               {CURRENCIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
             </select>
           </div>
@@ -829,14 +631,26 @@ function DoctorProfileEditor({
         disabled={save.isPending}
         className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
       >
-        {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        {save.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Save className="h-4 w-4" />
+        )}
         {t("Save Changes", "حفظ التغييرات")}
       </button>
     </section>
   );
 }
 
-function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+function Field({
+  label,
+  children,
+  full,
+}: {
+  label: string;
+  children: React.ReactNode;
+  full?: boolean;
+}) {
   return (
     <div className={full ? "md:col-span-2" : ""}>
       <label className="block text-sm font-medium text-foreground mb-1.5">{label}</label>
@@ -846,54 +660,6 @@ function Field({ label, children, full }: { label: string; children: React.React
 }
 
 /* ─────────────────────── KPI Card with trend ─────────────────────── */
-function KpiCard({
-  icon: Icon,
-  label,
-  value,
-  trend,
-  accent,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-  trend?: number;
-  accent: "primary" | "teal" | "amber" | "emerald" | "blue";
-}) {
-  const accentMap = {
-    primary: "bg-primary/10 text-primary",
-    teal: "bg-teal-500/10 text-teal-600",
-    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  };
-  const showTrend = typeof trend === "number" && trend !== 0;
-  const trendUp = (trend ?? 0) >= 0;
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${accentMap[accent]}`}>
-          <Icon className="h-4.5 w-4.5" />
-        </div>
-        {showTrend && (
-          <span
-            className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold ${
-              trendUp
-                ? "bg-emerald-500/10 text-emerald-600"
-                : "bg-rose-500/10 text-rose-600"
-            }`}
-          >
-            {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {trendUp ? "+" : ""}
-            {trend}%
-          </span>
-        )}
-      </div>
-      <p className="mt-3 text-xl font-bold text-foreground sm:text-2xl">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
-    </div>
-  );
-}
-
 /* ─────────────────────── Today's Agenda ─────────────────────── */
 function TodayAgenda({
   appts,
@@ -902,7 +668,13 @@ function TodayAgenda({
   mutationPending,
   t,
 }: {
-  appts: Array<{ id: string; scheduled_at: string; status: string; fee: number; notes: string | null }>;
+  appts: Array<{
+    id: string;
+    scheduled_at: string;
+    status: string;
+    fee: number;
+    notes: string | null;
+  }>;
   onConfirm: (id: string) => void;
   onReject: (id: string) => void;
   mutationPending?: boolean;
@@ -914,11 +686,13 @@ function TodayAgenda({
       <div className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-bold text-foreground">
-            {t("Today's agenda", "جدول اليوم")}
-          </h2>
+          <h2 className="text-lg font-bold text-foreground">{t("Today's agenda", "جدول اليوم")}</h2>
           <span className="text-xs text-muted-foreground">
-            {today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
+            {today.toLocaleDateString(undefined, {
+              weekday: "long",
+              day: "numeric",
+              month: "short",
+            })}
           </span>
         </div>
         <Link to="/appointments" className="text-xs font-medium text-primary hover:underline">
@@ -946,8 +720,8 @@ function TodayAgenda({
             const statusBadge = isPending
               ? { c: "bg-amber-500/10 text-amber-600", l: t("Pending", "بانتظار") }
               : a.status === "confirmed"
-              ? { c: "bg-emerald-500/10 text-emerald-600", l: t("Confirmed", "مؤكد") }
-              : { c: "bg-blue-500/10 text-blue-600", l: t(a.status, a.status) };
+                ? { c: "bg-emerald-500/10 text-emerald-600", l: t("Confirmed", "مؤكد") }
+                : { c: "bg-blue-500/10 text-blue-600", l: t(a.status, a.status) };
             return (
               <li key={a.id} className="flex items-center gap-3 py-3">
                 <div className="flex w-16 flex-col items-center rounded-lg bg-primary/5 px-2 py-1.5">
@@ -955,7 +729,9 @@ function TodayAgenda({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusBadge.c}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusBadge.c}`}
+                    >
                       {statusBadge.l}
                     </span>
                     <span className="text-sm font-medium text-foreground">
@@ -1022,8 +798,16 @@ function QuickActions({
   tier: string;
 }) {
   const actions = [
-    { Icon: Zap, label: t("Start instant visit", "بدء كشف فورى"), to: "/dashboard/visit/new" as const },
-    { Icon: FilePlus, label: t("New prescription", "وصفة جديدة"), to: "/dashboard/visit/new" as const },
+    {
+      Icon: Zap,
+      label: t("Start instant visit", "بدء كشف فورى"),
+      to: "/dashboard/visit/new" as const,
+    },
+    {
+      Icon: FilePlus,
+      label: t("New prescription", "وصفة جديدة"),
+      to: "/dashboard/visit/new" as const,
+    },
     { Icon: Video, label: t("Video session", "بدء فيديو"), to: "/appointments" as const },
     { Icon: UserPlus, label: t("Add patient", "إضافة مريض"), to: "/dashboard/patients" as const },
   ];

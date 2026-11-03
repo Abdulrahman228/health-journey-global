@@ -14,7 +14,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/dashboard/settings/signature")({
   head: () => ({
     meta: [
-      { title: "التوقيع والختم | لوحة الطبيب — طبيبي" },
+      { title: "التوقيع والختم | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -119,7 +119,7 @@ function SignaturePage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl" dir={isRTL ? "rtl" : "ltr"}>
+    <div dir={isRTL ? "rtl" : "ltr"}>
       <h1 className="text-2xl font-bold mb-2 flex items-center gap-2">
         <FileSignature className="h-6 w-6 text-primary" />
         {t("Signature & Stamp", "التوقيع والختم")}

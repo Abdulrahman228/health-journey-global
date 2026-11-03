@@ -8,8 +8,9 @@ The custom scheme `tabibi://doctor/{id}` already opens the app with **no** web s
 these files only add the polished `https://` behaviour.
 
 ## `assetlinks.json` (Android App Links)
-Replace `REPLACE_WITH_YOUR_RELEASE_SIGNING_SHA256_FINGERPRINT` with the SHA-256
-fingerprint of the **release** signing key:
+The fingerprint of the local upload/release keystore (`tabibi-release.keystore`, alias
+`tabibi-release`) is already filled in (2026-11-03). If Google Play App Signing re-signs the
+app, ADD Play's signing-key fingerprint as a second entry:
 
 ```
 keytool -list -v -keystore <your-release.keystore> -alias <alias>

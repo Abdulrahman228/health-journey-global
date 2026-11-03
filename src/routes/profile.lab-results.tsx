@@ -37,7 +37,7 @@ interface LabRow {
 export const Route = createFileRoute("/profile/lab-results")({
   head: () => ({
     meta: [
-      { title: "نتائج التحاليل والأشعة | طبيبي" },
+      { title: "نتائج التحاليل والأشعة | طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),

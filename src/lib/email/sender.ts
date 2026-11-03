@@ -53,7 +53,7 @@ function htmlToText(html: string): string {
 
 export async function sendEmail(msg: EmailMessage): Promise<SendResult> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM ?? "Tabibi <noreply@mytabibi.com>";
+  const from = process.env.EMAIL_FROM ?? "Tebana <noreply@mytabibi.com>";
 
   if (!apiKey) {
     return { ok: false, skipped: true, reason: "RESEND_API_KEY not set" };

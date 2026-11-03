@@ -12,8 +12,10 @@
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
+import { PatientShell } from "@/components/patient/PatientNav";
 import { useAuth } from "@/hooks/useAuth";
 import { MedicalAttachmentsPanel } from "@/components/emr/MedicalAttachmentsPanel";
+import { SharedCareCard } from "@/components/emr/SharedCareCard";
 import {
   getMyMedicalHistory,
   getPatientMedicalProfile,
@@ -36,10 +38,10 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/profile/medical-history")({
   head: () => ({
     meta: [
-      { title: "ملفي الطبي | طبيبي" },
+      { title: "ملفي الطبي | طبانا" },
       {
         name: "description",
-        content: "تاريخك الطبي الكامل عبر جميع الأطباء على طبيبي.",
+        content: "تاريخك الطبي الكامل عبر جميع الأطباء على طبانا.",
       },
       { name: "robots", content: "noindex, nofollow" },
     ],
@@ -213,14 +215,15 @@ function PatientMedicalHistoryPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <PatientShell>
+      <div>
       <header className="mb-6">
         <h1 className="flex items-center gap-2 text-3xl font-bold text-foreground">
           <HeartPulse className="h-7 w-7 text-primary" aria-hidden="true" />
           ملفي الطبي
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          تاريخك الطبي وزياراتك لدى جميع الأطباء على طبيبي.
+          تاريخك الطبي وزياراتك لدى جميع الأطباء على طبانا.
         </p>
       </header>
 
@@ -255,6 +258,12 @@ function PatientMedicalHistoryPage() {
           </button>
         ))}
       </nav>
+
+      {tab === "profile" && (
+        <div className="mb-6">
+          <SharedCareCard />
+        </div>
+      )}
 
       {tab === "profile" && (
         <form
@@ -391,7 +400,7 @@ function PatientMedicalHistoryPage() {
                 لا توجد زيارات مسجّلة بعد
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                عند زيارة أي طبيب على طبيبي، ستظهر بياناتها هنا تلقائياً.
+                عند زيارة أي طبيب على طبانا، ستظهر بياناتها هنا تلقائياً.
               </p>
             </div>
           ) : (
@@ -412,6 +421,7 @@ function PatientMedicalHistoryPage() {
         </section>
       )}
     </div>
+    </PatientShell>
   );
 }
 

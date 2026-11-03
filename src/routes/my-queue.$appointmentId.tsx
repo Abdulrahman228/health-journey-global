@@ -193,6 +193,17 @@ function MyQueuePage() {
   const StatusIcon = sl.icon;
   const isTerminal = appt.status === "completed" || appt.status === "cancelled" || appt.status === "no_show";
 
+  // Circular proximity gauge: the ring fills as fewer cases remain, and turns
+  // red as your turn gets close (green while there's still a wait).
+  const RING = 2 * Math.PI * 44;
+  const closeness = ahead <= 0 ? 1 : 1 / (ahead + 1);
+  const ringColor = ahead <= 1 ? "#dc2626" : ahead <= 4 ? "#d97706" : "#059669";
+  const proximityLabel =
+    ahead === 0 ? "دورك تقريبًا الآن"
+    : ahead <= 1 ? "اقترب دورك جدًا"
+    : ahead <= 4 ? "اقترب دورك"
+    : "لسه بدري";
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-6 max-w-2xl">
@@ -221,27 +232,37 @@ function MyQueuePage() {
             </span>
           </div>
 
-          {/* Live queue metrics */}
+          {/* Live queue gauge */}
           {!isTerminal && (
-            <div className="grid grid-cols-3 gap-3 mt-4">
-              <div className="text-center bg-primary/5 rounded-xl p-3">
-                <div className="text-xs text-muted-foreground">رقمك</div>
-                <div className="text-3xl font-bold text-primary mt-1">
-                  #{appt.queue_number ?? "—"}
+            <div className="mt-5 flex flex-col items-center">
+              <div className="relative h-44 w-44">
+                <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+                  <circle cx="50" cy="50" r="44" fill="none" strokeWidth="8"
+                    className="stroke-muted/25" />
+                  <circle cx="50" cy="50" r="44" fill="none" strokeWidth="8" strokeLinecap="round"
+                    stroke={ringColor} strokeDasharray={RING}
+                    strokeDashoffset={RING * (1 - closeness)}
+                    style={{ transition: "stroke-dashoffset .6s ease, stroke .4s" }} />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="text-5xl font-extrabold tabular-nums" style={{ color: ringColor }}>
+                    {ahead}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {ahead === 1 ? "حالة أمامك" : "حالات أمامك"}
+                  </div>
+                  <div className="mt-1.5 inline-flex items-center gap-1 text-sm font-bold text-foreground">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    {formatWait(waitMinutes)}
+                  </div>
                 </div>
               </div>
-              <div className="text-center bg-amber-50 dark:bg-amber-950/30 rounded-xl p-3">
-                <div className="text-xs text-muted-foreground">أمامك</div>
-                <div className="text-3xl font-bold text-amber-700 dark:text-amber-300 mt-1 flex items-center justify-center gap-1">
-                  <Users className="h-5 w-5" />
-                  {ahead}
-                </div>
-              </div>
-              <div className="text-center bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3">
-                <div className="text-xs text-muted-foreground">انتظار متوقع</div>
-                <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">
-                  {formatWait(waitMinutes)}
-                </div>
+              <p className="mt-3 text-sm font-bold" style={{ color: ringColor }}>
+                {proximityLabel}
+              </p>
+              <div className="mt-1 text-xs text-muted-foreground">
+                رقمك في الطابور:{" "}
+                <span className="font-bold text-foreground tabular-nums">#{appt.queue_number ?? "—"}</span>
               </div>
             </div>
           )}

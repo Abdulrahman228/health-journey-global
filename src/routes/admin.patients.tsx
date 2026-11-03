@@ -22,8 +22,8 @@ import {
 export const Route = createFileRoute("/admin/patients")({
   head: () => ({
     meta: [
-      { title: "إدارة المرضى — Super Admin | طبيبي" },
-      { name: "description", content: "إدارة ومراجعة حسابات المرضى في منصة طبيبي." },
+      { title: "إدارة المرضى — Super Admin | طبانا" },
+      { name: "description", content: "إدارة ومراجعة حسابات المرضى في منصة طبانا." },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),

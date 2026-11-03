@@ -158,11 +158,11 @@ export function NotificationBell() {
             </ul>
           )}
           <Link
-            to="/profile/lab-results"
+            to="/notifications"
             onClick={() => setOpen(false)}
-            className="block px-3 py-2 text-xs text-center text-primary hover:underline border-t border-border"
+            className="block px-3 py-2 text-xs text-center font-medium text-primary hover:underline border-t border-border"
           >
-            {t("View lab results →", "عرض نتائج التحاليل ←")}
+            {t("View all notifications →", "عرض كل الإشعارات ←")}
           </Link>
         </div>
       )}

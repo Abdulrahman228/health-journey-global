@@ -36,7 +36,7 @@ import { TierBadge, type DoctorTier } from "@/components/TierBadge";
 export const Route = createFileRoute("/dashboard/support")({
   head: () => ({
     meta: [
-      { title: "الدعم الفني | لوحة الطبيب — طبيبي" },
+      { title: "الدعم الفني | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -151,7 +151,7 @@ function SupportPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-3xl" dir={isRTL ? "rtl" : "ltr"}>
+    <div dir={isRTL ? "rtl" : "ltr"}>
       <div className="flex items-center gap-3 mb-2">
         <HeadphonesIcon className="h-7 w-7 text-primary" />
         <h1 className="text-2xl font-bold">{t("Support", "الدعم الفني")}</h1>

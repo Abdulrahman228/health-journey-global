@@ -1,14 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useLanguage } from "@/hooks/useLanguage";
 import { FileText } from "lucide-react";
-import { buildMeta } from "@/lib/seo";
+import { buildMeta, siteConfig } from "@/lib/seo";
 
 export const Route = createFileRoute("/terms")({
   head: () => ({
     meta: buildMeta({
-      title: "Terms of Service — Tabibi | شروط الخدمة",
+      title: `Terms of Service — ${siteConfig.brand.en} | شروط الخدمة`,
       description:
-        "شروط استخدام منصة طبيبي للاستشارات الطبية أونلاين، مسؤوليات المستخدم، حدود المسؤولية، والسياسات القانونية.",
+        "شروط استخدام منصة طبانا للاستشارات الطبية أونلاين، مسؤوليات المستخدم، حدود المسؤولية، والسياسات القانونية.",
       path: "/terms",
     }),
   }),
@@ -85,7 +85,7 @@ const sectionsAr: Section[] = [
   {
     title: "تعريفات وقبول الشروط",
     body: [
-      "منصة «طبيبي» (mytabibi.com) منصة رقمية تربط المرضى بأطباء موثّقين لتقديم استشارات طبية أونلاين، حجز المواعيد، إصدار الروشتات الإلكترونية، والبحث عن الأدوية نادرة التوفر.",
+      `منصة «طبانا» (mytabibi.com) منصة رقمية تديرها شركة «${siteConfig.organization.legalName}»، تربط المرضى بأطباء موثّقين لتقديم استشارات طبية أونلاين، حجز المواعيد، إصدار الروشتات الإلكترونية، والبحث عن الأدوية نادرة التوفر.`,
       "باستخدامك للمنصة فأنت توافق صراحةً على هذه الشروط وعلى سياسة الخصوصية. إذا كنت لا توافق، فضلاً امتنع عن استخدام الخدمة.",
     ],
   },
@@ -101,9 +101,9 @@ const sectionsAr: Section[] = [
   {
     title: "طبيعة الخدمة وإخلاء المسؤولية الطبية",
     body: [
-      "تقدم منصة «طبيبي» وسيطاً تقنياً يربط المرضى بمقدمي رعاية مرخّصين. الأطباء على المنصة مهنيون مستقلون مسؤولون عن تشخيصاتهم ووصفاتهم العلاجية.",
+      "تقدم منصة «طبانا» وسيطاً تقنياً يربط المرضى بمقدمي رعاية مرخّصين. الأطباء على المنصة مهنيون مستقلون مسؤولون عن تشخيصاتهم ووصفاتهم العلاجية.",
       "الخدمة لا تُغني عن زيارة الطبيب وجهاً لوجه في الحالات المعقدة، ولا تُستخدم في الطوارئ. في حالات الطوارئ، توجّه فوراً إلى أقرب مستشفى أو اتصل بالإسعاف.",
-      "لا تتحمل «طبيبي» مسؤولية نتائج العلاج، أو سوء التشخيص، أو الأضرار الناتجة عن قرارات طبية يتخذها الأطباء أو المرضى.",
+      `لا تتحمل «${siteConfig.organization.legalName}» مسؤولية نتائج العلاج، أو سوء التشخيص، أو الأضرار الناتجة عن قرارات طبية يتخذها الأطباء أو المرضى.`,
     ],
   },
   {
@@ -116,8 +116,8 @@ const sectionsAr: Section[] = [
   {
     title: "المدفوعات والرسوم والاسترداد",
     body: [
-      "حجز المواعيد عبر منصة «طبيبي» مجاني تماماً للمرضى، ولا تُحصّل المنصة أي عمولة على عملية الحجز ذاتها.",
-      "تُحصّل «طبيبي» عمولة فقط على خدمة الكشف الأونلاين (الاستشارة عن بُعد عبر الفيديو/المحادثة)، وذلك من قيمة الاستشارة التي يُحدّدها الطبيب.",
+      "حجز المواعيد عبر منصة «طبانا» مجاني تماماً للمرضى، ولا تُحصّل المنصة أي عمولة على عملية الحجز ذاتها.",
+      `تُحصّل «${siteConfig.organization.legalName}» عمولة فقط على خدمة الكشف الأونلاين (الاستشارة عن بُعد عبر الفيديو/المحادثة)، وذلك من قيمة الاستشارة التي يُحدّدها الطبيب.`,
       "تشمل باقات الأطباء الاختيارية: الباقة المميزة بسعر 500 جنيه شهرياً، والباقة الذهبية بسعر 1000 جنيه شهرياً، وتمنح الطبيب مزايا إضافية على المنصة.",
       "تتم جميع المدفوعات بأمان عبر بوابة Stripe المعتمدة، بالعملة المصرية (EGP) أو ما يعادلها.",
       "سياسة الاسترداد: يحق للمريض طلب استرداد كامل لقيمة الكشف الأونلاين قبل بدء الاستشارة، وذلك بإرسال طلب إلى billing@mytabibi.com. لا يُسترد المبلغ بعد إتمام الاستشارة.",
@@ -143,7 +143,7 @@ const sectionsAr: Section[] = [
   {
     title: "الملكية الفكرية",
     body: [
-      "جميع حقوق الملكية الفكرية للمنصة، بما في ذلك الشعار والتصميم والكود والمحتوى، مملوكة لـ «طبيبي» أو المرخّصين لها. لا يجوز نسخها أو إعادة استخدامها دون إذن كتابي مسبق.",
+      `جميع حقوق الملكية الفكرية للمنصة، بما في ذلك الشعار والتصميم والكود والمحتوى، مملوكة لـ «${siteConfig.organization.legalName}» أو المرخّصين لها. لا يجوز نسخها أو إعادة استخدامها دون إذن كتابي مسبق.`,
     ],
   },
   {
@@ -155,7 +155,7 @@ const sectionsAr: Section[] = [
   {
     title: "حدود المسؤولية",
     body: [
-      "ضمن الحدود التي يسمح بها القانون، لا تتحمل «طبيبي» أو موظفوها أو شركاؤها المسؤولية عن أي أضرار غير مباشرة أو تبعية أو خاصة ناتجة عن استخدام المنصة أو تعطّلها.",
+      `ضمن الحدود التي يسمح بها القانون، لا تتحمل «${siteConfig.organization.legalName}» أو موظفوها أو شركاؤها المسؤولية عن أي أضرار غير مباشرة أو تبعية أو خاصة ناتجة عن استخدام المنصة أو تعطّلها.`,
     ],
   },
   {
@@ -176,7 +176,7 @@ const sectionsEn: Section[] = [
   {
     title: "Acceptance of Terms",
     body: [
-      "Tabibi (mytabibi.com) is a digital platform connecting patients with verified physicians for online consultations, appointment booking, e-prescriptions, and rare medication search.",
+      `Tebana (mytabibi.com) is a digital platform operated by ${siteConfig.organization.legalNameEn}, connecting patients with verified physicians for online consultations, appointment booking, e-prescriptions, and rare medication search.`,
       "By using the platform you expressly agree to these Terms and to our Privacy Policy. If you do not agree, please refrain from using the service.",
     ],
   },
@@ -192,9 +192,9 @@ const sectionsEn: Section[] = [
   {
     title: "Nature of Service & Medical Disclaimer",
     body: [
-      "Tabibi acts as a technical intermediary between patients and licensed providers. Doctors on the platform are independent professionals responsible for their own diagnoses and prescriptions.",
+      "Tebana acts as a technical intermediary between patients and licensed providers. Doctors on the platform are independent professionals responsible for their own diagnoses and prescriptions.",
       "The service is NOT a substitute for in-person care in complex cases and is NOT for emergencies. In emergencies, go to the nearest hospital or call ambulance services immediately.",
-      "Tabibi is not liable for treatment outcomes, misdiagnosis, or damages arising from medical decisions made by doctors or patients.",
+      `${siteConfig.organization.legalNameEn} is not liable for treatment outcomes, misdiagnosis, or damages arising from medical decisions made by doctors or patients.`,
     ],
   },
   {
@@ -207,8 +207,8 @@ const sectionsEn: Section[] = [
   {
     title: "Payments, Fees & Refunds",
     body: [
-      "Booking appointments through Tabibi is completely FREE for patients. Tabibi does not charge any commission on the booking itself.",
-      "Tabibi only takes a commission on online consultations (telemedicine via video/chat), deducted from the consultation fee set by the doctor.",
+      "Booking appointments through Tebana is completely FREE for patients. Tebana does not charge any commission on the booking itself.",
+      `${siteConfig.organization.legalNameEn} only takes a commission on online consultations (telemedicine via video/chat), deducted from the consultation fee set by the doctor.`,
       "Optional doctor subscriptions: Premium (500 EGP/mo), Gold (1,000 EGP/mo) — providing additional platform features.",
       "All payments are securely processed via Stripe in EGP or local equivalents.",
       "Refund policy: full refund of the online consultation fee available before the consultation starts, by emailing billing@mytabibi.com. No refunds after a completed consultation.",
@@ -234,7 +234,7 @@ const sectionsEn: Section[] = [
   {
     title: "Intellectual Property",
     body: [
-      "All IP rights, including logo, design, code, and content, belong to Tabibi or its licensors. No reproduction or reuse is permitted without prior written consent.",
+      `All IP rights, including logo, design, code, and content, belong to ${siteConfig.organization.legalNameEn} or its licensors. No reproduction or reuse is permitted without prior written consent.`,
     ],
   },
   {
@@ -246,7 +246,7 @@ const sectionsEn: Section[] = [
   {
     title: "Limitation of Liability",
     body: [
-      "To the maximum extent permitted by law, Tabibi and its affiliates are not liable for any indirect, incidental, or special damages arising from use or unavailability of the platform.",
+      `To the maximum extent permitted by law, ${siteConfig.organization.legalNameEn} and its affiliates are not liable for any indirect, incidental, or special damages arising from use or unavailability of the platform.`,
     ],
   },
   {

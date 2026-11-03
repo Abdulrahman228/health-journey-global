@@ -31,13 +31,15 @@ import {
   Loader2,
   Pill,
   Plus,
+  Share2,
   Stethoscope,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/patient/$id")({
   head: () => ({
     meta: [
-      { title: "ملف المريض | لوحة الطبيب — طبيبي" },
+      { title: "ملف المريض | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -57,6 +59,7 @@ interface PatientHeader {
   fullName: string;
   city: string | null;
   avatarUrl: string | null;
+  userId: string | null;
 }
 
 type Tab = "summary" | "visits" | "rx" | "files";
@@ -71,6 +74,85 @@ function PatientDetailPage() {
   const [visits, setVisits] = useState<MedicalRecord[]>([]);
   const [rxByVisit, setRxByVisit] = useState<Record<string, Prescription[]>>({});
   const [loading, setLoading] = useState(true);
+  const [inviting, setInviting] = useState(false);
+  const [coDoctors, setCoDoctors] = useState<
+    { doctor_profile_id: string; full_name: string | null; specialty: string | null }[]
+  >([]);
+
+  // Co-doctors following this patient — returns rows only when the patient
+  // consented to shared care (RLS-gated in the RPC).
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.rpc("list_care_doctors_for_patient", {
+        p_patient_profile_id: patientProfileId,
+      });
+      setCoDoctors(
+        (data as {
+          doctor_profile_id: string;
+          full_name: string | null;
+          specialty: string | null;
+        }[]) ?? [],
+      );
+    })();
+  }, [patientProfileId]);
+
+  // Managed (unclaimed) patient only: generate a claim link the patient uses to
+  // adopt this profile and inherit their history.
+  const handleCopyInvite = async () => {
+    setInviting(true);
+    try {
+      const { data, error } = await supabase.rpc("get_or_create_claim_link", {
+        p_patient_profile_id: patientProfileId,
+      });
+      if (error) throw error;
+      const link = `${window.location.origin}/claim/${data}`;
+      await navigator.clipboard.writeText(link);
+      toast.success("تم نسخ رابط الدعوة — أرسله للمريض عبر واتساب/رسالة");
+    } catch (e) {
+      toast.error((e as Error).message || "تعذّر إنشاء الرابط");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  // (Re)send the invite to the patient by WhatsApp/SMS through the outbox
+  // (edge function send-claim-sms → request_patient_invite → send-outbox).
+  const INVITE_ERRORS: Record<string, string> = {
+    no_phone: "لا يوجد رقم هاتف صالح لهذا المريض",
+    already_registered: "هذا المريض أنشأ حسابه بالفعل",
+    already_sent_today: "أُرسلت الدعوة اليوم بالفعل — يمكن إعادة الإرسال غداً",
+    opted_out: "هذا الرقم طلب عدم استقبال رسائل",
+    not_your_patient: "هذا المريض غير مرتبط بحسابك",
+  };
+  const handleSmsInvite = async () => {
+    setInviting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-claim-sms", {
+        body: { patientProfileId },
+      });
+      if (error) throw error;
+      const res = (data ?? {}) as {
+        ok?: boolean;
+        error?: string;
+        sent?: boolean;
+        warning?: string;
+      };
+      if (res.ok === false) {
+        throw new Error(INVITE_ERRORS[res.error ?? ""] ?? res.error ?? "فشل الإرسال");
+      }
+      if (res.warning === "no_provider_configured") {
+        toast.info("تمت جدولة الدعوة وستُرسل فور تفعيل قناة الرسائل");
+      } else {
+        toast.success(
+          res.sent ? "تم إرسال الدعوة للمريض (واتساب/SMS)" : "تمت جدولة الدعوة وستصل خلال دقيقة",
+        );
+      }
+    } catch (e) {
+      toast.error((e as Error).message || "تعذّر إرسال الرسالة");
+    } finally {
+      setInviting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -79,7 +161,7 @@ function PatientDetailPage() {
       const [{ data: hdr }, prof, hist] = await Promise.all([
         supabase
           .from("profiles")
-          .select("full_name, city, avatar_url")
+          .select("full_name, city, avatar_url, user_id")
           .eq("id", patientProfileId)
           .maybeSingle(),
         getPatientMedicalProfile({ data: { patientProfileId } }),
@@ -91,6 +173,7 @@ function PatientDetailPage() {
               fullName: (hdr.full_name as string | null) ?? "—",
               city: (hdr.city as string | null) ?? null,
               avatarUrl: (hdr.avatar_url as string | null) ?? null,
+              userId: (hdr.user_id as string | null) ?? null,
             }
           : null,
       );
@@ -141,9 +224,7 @@ function PatientDetailPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "prescriptions" },
         (payload) => {
-          const row = (payload.new ?? payload.old) as
-            | { medical_record_id?: string }
-            | null;
+          const row = (payload.new ?? payload.old) as { medical_record_id?: string } | null;
           const recordId = row?.medical_record_id;
           if (!recordId || !visitIds.has(recordId)) return;
           getPrescriptionsForRecord({
@@ -181,7 +262,7 @@ function PatientDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div>
       {/* Header card */}
       <header className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card p-5">
         {header?.avatarUrl ? (
@@ -200,14 +281,35 @@ function PatientDetailPage() {
           </div>
         )}
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-foreground">
-            {header?.fullName ?? "—"}
-          </h1>
+          <h1 className="text-2xl font-bold text-foreground">{header?.fullName ?? "—"}</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {header?.city ? `${header.city} · ` : ""}
             <span className="font-mono">ID: {patientProfileId.slice(0, 8)}…</span>
           </p>
         </div>
+        {header?.userId === null && (
+          <>
+            <button
+              type="button"
+              onClick={handleSmsInvite}
+              disabled={inviting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-background px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+              title="أرسل للمريض رسالة واتساب أو SMS بها رابط استلام ملفه"
+            >
+              <Share2 className="h-4 w-4" aria-hidden="true" />
+              {inviting ? "..." : "إرسال دعوة (واتساب/SMS)"}
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyInvite}
+              disabled={inviting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+              title="انسخ رابط الاستلام لإرساله يدويًا (واتساب/رسالة)"
+            >
+              نسخ الرابط
+            </button>
+          </>
+        )}
         <Link
           to="/dashboard/visit/new"
           search={{ patientId: patientProfileId }}
@@ -217,6 +319,26 @@ function PatientDetailPage() {
           بدء زيارة جديدة
         </Link>
       </header>
+
+      {coDoctors.length > 0 && (
+        <div className="mb-4 rounded-xl border border-border bg-card p-4">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
+            أطباء يتابعون هذا المريض (رعاية مشتركة بموافقته)
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {coDoctors.map((d) => (
+              <span
+                key={d.doctor_profile_id}
+                className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1 text-xs text-foreground"
+              >
+                {d.full_name || "طبيب"}
+                {d.specialty ? ` · ${d.specialty}` : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Allergies banner (high-contrast, ARIA alert) */}
       {profile && profile.allergies.length > 0 && (
@@ -274,16 +396,11 @@ function PatientDetailPage() {
           aria-labelledby="tab-summary"
           className="grid gap-4 md:grid-cols-2"
         >
-          <SummaryCard
-            title="فصيلة الدم"
-            value={profile?.bloodType || "غير محدّدة"}
-          />
+          <SummaryCard title="فصيلة الدم" value={profile?.bloodType || "غير محدّدة"} />
           <SummaryCard
             title="حساسيات"
             value={
-              profile && profile.allergies.length > 0
-                ? profile.allergies.join("، ")
-                : "لا توجد"
+              profile && profile.allergies.length > 0 ? profile.allergies.join("، ") : "لا توجد"
             }
             highlight={Boolean(profile && profile.allergies.length > 0)}
           />
@@ -306,18 +423,12 @@ function PatientDetailPage() {
           <SummaryCard
             title="عادات"
             value={
-              [
-                profile?.smoking ? "مدخّن" : null,
-                profile?.alcohol ? "كحول" : null,
-              ]
+              [profile?.smoking ? "مدخّن" : null, profile?.alcohol ? "كحول" : null]
                 .filter(Boolean)
                 .join("، ") || "لا توجد"
             }
           />
-          <SummaryCard
-            title="عدد الزيارات معك"
-            value={String(visits.length)}
-          />
+          <SummaryCard title="عدد الزيارات معك" value={String(visits.length)} />
         </section>
       )}
 
@@ -339,22 +450,12 @@ function PatientDetailPage() {
 
       {/* Prescriptions */}
       {tab === "rx" && (
-        <section
-          id="panel-rx"
-          role="tabpanel"
-          aria-labelledby="tab-rx"
-          className="space-y-3"
-        >
+        <section id="panel-rx" role="tabpanel" aria-labelledby="tab-rx" className="space-y-3">
           {visits.length === 0 ? (
             <EmptyTab message="لا توجد وصفات" />
           ) : (
             visits.map((v) => (
-              <RxExpander
-                key={v.id}
-                v={v}
-                items={rxByVisit[v.id]}
-                onOpen={() => loadRxFor(v.id)}
-              />
+              <RxExpander key={v.id} v={v} items={rxByVisit[v.id]} onOpen={() => loadRxFor(v.id)} />
             ))
           )}
         </section>
@@ -362,11 +463,7 @@ function PatientDetailPage() {
 
       {/* Files / Attachments */}
       {tab === "files" && (
-        <section
-          id="panel-files"
-          role="tabpanel"
-          aria-labelledby="tab-files"
-        >
+        <section id="panel-files" role="tabpanel" aria-labelledby="tab-files">
           <MedicalAttachmentsPanel patientProfileId={patientProfileId} />
         </section>
       )}
@@ -386,8 +483,7 @@ function SummaryCard({
   return (
     <div
       className={
-        "rounded-xl border bg-card p-4 " +
-        (highlight ? "border-destructive/40" : "border-border")
+        "rounded-xl border bg-card p-4 " + (highlight ? "border-destructive/40" : "border-border")
       }
     >
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -395,8 +491,7 @@ function SummaryCard({
       </div>
       <div
         className={
-          "mt-1.5 text-sm " +
-          (highlight ? "font-semibold text-destructive" : "text-foreground")
+          "mt-1.5 text-sm " + (highlight ? "font-semibold text-destructive" : "text-foreground")
         }
       >
         {value}
@@ -528,9 +623,7 @@ function RxExpander({
                       {it.route && ` · ${it.route}`}
                     </div>
                     {it.instructions && (
-                      <div className="mt-1 text-xs text-foreground">
-                        ⓘ {it.instructions}
-                      </div>
+                      <div className="mt-1 text-xs text-foreground">ⓘ {it.instructions}</div>
                     )}
                   </li>
                 ))}

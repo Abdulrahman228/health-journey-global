@@ -35,7 +35,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/dashboard/earnings")({
   head: () => ({
     meta: [
-      { title: "إيراداتي | لوحة الطبيب — طبيبي" },
+      { title: "إيراداتي | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -132,7 +132,7 @@ function EarningsPage() {
   const cur = balance.currency;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div>
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">

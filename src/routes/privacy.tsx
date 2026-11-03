@@ -1,14 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useLanguage } from "@/hooks/useLanguage";
 import { Shield } from "lucide-react";
-import { buildMeta } from "@/lib/seo";
+import { buildMeta, siteConfig } from "@/lib/seo";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: buildMeta({
-      title: "Privacy Policy — Tabibi | سياسة الخصوصية",
+      title: `Privacy Policy — ${siteConfig.brand.en} | سياسة الخصوصية`,
       description:
-        "سياسة الخصوصية وحماية البيانات الطبية لمنصة طبيبي. معلومات عن جمع البيانات، استخدامها، تشفيرها، وحقوقك القانونية.",
+        "سياسة الخصوصية وحماية البيانات الطبية لمنصة طبانا. معلومات عن جمع البيانات، استخدامها، تشفيرها، وحقوقك القانونية.",
       path: "/privacy",
     }),
   }),
@@ -120,7 +120,7 @@ const sectionsAr: Section[] = [
       "تُنقل جميع البيانات عبر الإنترنت باستخدام تشفير TLS 1.3.",
       "تُخزَّن البيانات الحساسة (مثل الملفات الطبية) مشفّرة في قاعدة البيانات (Encryption at Rest) عبر خدمة Supabase الخاضعة لشهادات SOC 2.",
       "نستخدم سياسات الأمان على مستوى الصف (Row Level Security) لضمان أن المريض يرى بياناته فقط، والطبيب يرى فقط ملفات مرضاه المعتمدين.",
-      "لا يطّلع موظفو «طبيبي» على ملفاتك الطبية إلا في حالات الدعم الفني عند طلبك أو لأسباب أمنية موثّقة.",
+      `لا يطّلع موظفو «${siteConfig.organization.legalName}» على ملفاتك الطبية إلا في حالات الدعم الفني عند طلبك أو لأسباب أمنية موثّقة.`,
     ],
   },
   {
@@ -211,7 +211,7 @@ const sectionsEn: Section[] = [
       "All data in transit is protected by TLS 1.3.",
       "Sensitive data (medical files) is encrypted at rest in our Supabase database, which is SOC 2 certified.",
       "Row Level Security ensures patients see only their own data, and doctors only see records of their approved patients.",
-      "Tabibi staff access your medical files only on your explicit support request or for documented security reasons.",
+      `${siteConfig.organization.legalNameEn} staff access your medical files only on your explicit support request or for documented security reasons.`,
     ],
   },
   {

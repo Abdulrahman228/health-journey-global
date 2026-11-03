@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { createPost, uploadPostImage, type PostType } from "@/lib/feed";
 
 export const Route = createFileRoute("/feed/new")({
-  head: () => ({ meta: [{ title: "بوست جديد — Tabibi" }] }),
+  head: () => ({ meta: [{ title: "بوست جديد — Tebana" }] }),
   component: NewPostPage,
 });
 
@@ -139,6 +139,22 @@ function NewPostPage() {
           <h1 className="mt-4 text-2xl font-bold text-foreground">{t("Sign in to post", "سجّل دخول للنشر")}</h1>
           <Link to="/login" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
             {t("Sign In", "تسجيل الدخول")}
+          </Link>
+      </div>
+    );
+  }
+
+  // Only doctors (and admins) may publish to the community. Patients read only.
+  if (role !== "doctor" && role !== "admin") {
+    return (
+      <div className="mx-auto w-full max-w-2xl px-4 py-12 text-center">
+          <Lock className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h1 className="mt-4 text-2xl font-bold text-foreground">{t("Doctors only", "النشر للأطباء فقط")}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {t("Posting in the medical community is limited to doctors. You can read and interact with posts.", "النشر في المجتمع الطبي متاح للأطباء فقط. يمكنك قراءة المنشورات والتفاعل معها.")}
+          </p>
+          <Link to="/feed" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            {t("Back to community", "العودة للمجتمع")}
           </Link>
       </div>
     );

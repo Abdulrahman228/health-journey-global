@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminShell } from "@/components/admin/AdminNav";
+import { AdminAttentionPanel } from "@/components/admin/AdminAttentionPanel";
 import {
   Activity,
   CalendarDays,
@@ -29,8 +30,8 @@ import {
 export const Route = createFileRoute("/admin/")({
   head: () => ({
     meta: [
-      { title: "Super Admin Dashboard — Tabibi" },
-      { name: "description", content: "Central platform administration dashboard for Tabibi." },
+      { title: "Super Admin Dashboard — Tebana" },
+      { name: "description", content: "Central platform administration dashboard for Tebana." },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -231,13 +232,22 @@ function AdminHomePage() {
             متابعة التشغيل، التوثيق، الاشتراكات، ونمو المستخدمين من شاشة واحدة.
           </p>
         </div>
-        <Link
-          to="/admin/doctors"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-          مراجعة الأطباء
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/admin/doctors"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            مراجعة الأطباء
+          </Link>
+          <Link
+            to="/admin/onboarding"
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent"
+          >
+            <Users className="h-4 w-4" aria-hidden="true" />
+            قُمع التسجيل
+          </Link>
+        </div>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="إحصائيات المنصة">
@@ -246,6 +256,10 @@ function AdminHomePage() {
         <StatCard icon={CalendarDays} label="حجوزات اليوم" value={stats.todayAppointments} helper="من جدول appointments" tone="emerald" />
         <StatCard icon={CreditCard} label="اشتراكات نشطة" value={stats.activeSubscriptions} helper={`${Math.round(stats.activeRevenueEgp).toLocaleString("ar-EG")} ج.م شهرياً`} tone="amber" />
       </section>
+
+      <div className="mt-6">
+        <AdminAttentionPanel />
+      </div>
 
       <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(22rem,1fr)]">
         <div className="rounded-xl border border-border bg-card p-5">

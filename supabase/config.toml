@@ -1,1 +1,14 @@
-project_id = "xezgyeddcdarmtywncdt"
+project_id = "wqrrwvaxovrjjiilqkmt"
+
+# Functions that are called by third parties / the platform itself (no user JWT):
+#   paymob-webhook  – Paymob "transaction processed" callback (HMAC-verified in code)
+#   auth-send-sms   – Supabase Auth "Send SMS" hook (Standard-Webhooks signature)
+#   send-outbox     – queue drain, called by pg_cron / server with a shared secret
+[functions.paymob-webhook]
+verify_jwt = false
+
+[functions.auth-send-sms]
+verify_jwt = false
+
+[functions.send-outbox]
+verify_jwt = false

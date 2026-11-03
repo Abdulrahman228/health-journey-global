@@ -8,12 +8,13 @@
  * regardless of whether the email is registered, to avoid user enumeration.
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { siteConfig } from "@/lib/seo";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useServerFn } from "@tanstack/react-start";
-import { HeartPulse, Loader2, Mail } from "lucide-react";
+import { Loader2, Mail } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { requestPasswordReset } from "@/lib/auth.functions";
 
@@ -26,7 +27,7 @@ type FormValues = z.infer<typeof formSchema>;
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
     meta: [
-      { title: "Forgot Password — Tabibi" },
+      { title: "Forgot Password — Tebana" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -66,11 +67,9 @@ function ForgotPasswordPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-teal">
-              <HeartPulse className="h-5 w-5 text-white" />
-            </div>
+            <img src="/logo-mark.png" alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`} className="h-10 w-10 rounded-xl object-cover" />
             <span className="text-2xl font-bold tracking-tight text-foreground">
-              Tabibi
+              {siteConfig.brand.en}
             </span>
           </Link>
           <h1 className="mt-6 text-2xl font-bold text-foreground">

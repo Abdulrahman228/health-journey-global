@@ -7,7 +7,7 @@ export const Route = createFileRoute("/checkout/return")({
   }),
   component: CheckoutReturn,
   head: () => ({
-    meta: [{ title: "تم الدفع - طبيبي" }],
+    meta: [{ title: "تم الدفع - طبانا" }],
   }),
 });
 

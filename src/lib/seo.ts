@@ -1,5 +1,5 @@
 /**
- * SEO configuration and helpers for Tabibi (طبيبي).
+ * SEO configuration and helpers for Tebana (طبانا), formerly Tabibi (طبيبي).
  *
  * Single source of truth for site-wide metadata, canonical URLs,
  * Open Graph defaults, and per-route meta tag generation.
@@ -23,6 +23,15 @@ export const SITE_URL: string =
 export const siteConfig = {
   url: SITE_URL,
   brand: {
+    en: "Tebana",
+    ar: "طبانا",
+  },
+  /**
+   * Former brand name (طبيبي / Tabibi). The company was registered as
+   * "طبانا للخدمات الإلكترونية", so the product was renamed. Kept only for
+   * search continuity (JSON-LD alternateName) — never render it as the brand.
+   */
+  formerBrand: {
     en: "Tabibi",
     ar: "طبيبي",
   },
@@ -33,51 +42,57 @@ export const siteConfig = {
    * the site ranks for any of these queries.
    */
   brandAliases: [
+    "طبانا",
+    "Tebana",
+    "Tibana",
+    "Tabana",
+    "طبانا للخدمات الإلكترونية",
+    "تطبيق طبانا",
+    "موقع طبانا",
+    "طبانا اونلاين",
+    "Tebana app",
+    // Former name — kept so existing rankings and shared links keep resolving.
     "طبيبي",
     "Tabibi",
-    "Tabeebi",
-    "Tbibi",
-    "Taibi",
-    "Tabibi Health",
-    "طبيبي اونلاين",
-    "تطبيق طبيبي",
-    "موقع طبيبي",
-    "Tabibi app",
   ],
   tagline: {
     en: "Your Health, Connected",
     ar: "صحتك بين يديك",
   },
   defaultDescription: {
-    en: "Tabibi (طبيبي) connects patients with verified doctors across the Arab world. Book appointments, video consultations, and manage medical records — all in one trusted platform.",
-    ar: "طبيبي (Tabibi) يربطك بأفضل الأطباء الموثوقين في الوطن العربي. احجز موعدك، استشر أونلاين عبر الفيديو، وأدر سجلك الطبي في منصة واحدة آمنة.",
+    en: "Tebana (طبانا) connects patients with verified doctors across the Arab world. Book appointments, video consultations, and manage medical records — all in one trusted platform.",
+    ar: "طبانا (Tebana) تربطك بأفضل الأطباء الموثوقين في الوطن العربي. احجز موعدك، استشر أونلاين عبر الفيديو، وأدر سجلك الطبي في منصة واحدة آمنة.",
   },
   defaultKeywords: [
     // Arabic brand + intent queries
-    "طبيبي",
-    "تطبيق طبيبي",
-    "موقع طبيبي",
-    "طبيبي اونلاين",
+    "طبانا",
+    "تطبيق طبانا",
+    "موقع طبانا",
+    "طبانا اونلاين",
     "طبيب أونلاين",
     "حجز موعد طبيب",
     "استشارة طبية أونلاين",
     "أطباء معتمدون",
     "تطبيب عن بعد",
     // English brand + transliterations
-    "Tabibi",
-    "Tabibi app",
-    "Tabibi Health",
-    "Tabeebi",
-    "Taibi",
+    "Tebana",
+    "Tebana app",
+    "Tibana",
+    "Tabana",
     "online doctor",
     "telemedicine Arab world",
     "book doctor online",
+    // Former brand (search continuity)
+    "طبيبي",
+    "Tabibi",
   ],
   ogImage: "/og/tabibi-og-default.jpg",
+  // TODO(rebrand): social handle and support email not yet decided by the owner — keep as-is.
   twitterHandle: "@tabibi_health",
   locale: { primary: "ar_AR", alternate: "en_US" },
   organization: {
-    legalName: "Tabibi Health Technologies",
+    legalName: "طبانا للخدمات الإلكترونية",
+    legalNameEn: "Tebana for Electronic Services",
     email: "support@tabibi.health",
     phone: "+20-000-000-0000",
     foundingDate: "2025",

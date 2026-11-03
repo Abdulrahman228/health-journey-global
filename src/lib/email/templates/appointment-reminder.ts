@@ -92,7 +92,7 @@ export function buildAppointmentReminderEmail(p: AppointmentReminderPayload): {
       <td style="background:#ffffff;border-radius:12px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
         <div style="text-align:center;margin-bottom:24px;">
           <a href="${SITE_URL}" style="font-size:24px;font-weight:700;color:#0d9488;text-decoration:none;">
-            طبيبي
+            طبانا
           </a>
         </div>
 
@@ -102,7 +102,7 @@ export function buildAppointmentReminderEmail(p: AppointmentReminderPayload): {
 
         <p style="margin:0 0 12px 0;font-size:15px;">${greeting}</p>
         <p style="margin:0 0 20px 0;font-size:15px;color:#4b5563;line-height:1.7;">
-          هذا تذكير بموعد زيارتك على منصة طبيبي. تفاصيل الموعد:
+          هذا تذكير بموعد زيارتك على منصة طبانا. تفاصيل الموعد:
         </p>
 
         <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;font-size:14px;background:#f9fafb;border-radius:8px;padding:16px;">
@@ -150,7 +150,7 @@ export function buildAppointmentReminderEmail(p: AppointmentReminderPayload): {
         <p style="margin:24px 0 0 0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
           لإلغاء أو إعادة جدولة الموعد، تفضل بزيارة
           <a href="${SITE_URL}/appointments" style="color:#0d9488;">صفحة مواعيدي</a><br>
-          منصة طبيبي · ${SITE_URL}
+          منصة طبانا · ${SITE_URL}
         </p>
       </td>
     </tr>

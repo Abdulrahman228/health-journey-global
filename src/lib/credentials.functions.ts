@@ -80,10 +80,23 @@ export const uploadDocument = createServerFn({ method: "POST" })
         "image/heic",
         "application/pdf",
       ];
-      if (!allowedMime.includes(data.mimeType)) {
+      // Browsers often report an empty or generic MIME (""/application/octet-stream)
+      // for HEIC (iPhone photos) and sometimes PDFs. Fall back to the file
+      // extension so a valid file is not rejected as "Unsupported file type".
+      const extMime: Record<string, string> = {
+        jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+        webp: "image/webp", heic: "image/heic", heif: "image/heic",
+        pdf: "application/pdf",
+      };
+      let mime = (data.mimeType || "").toLowerCase();
+      if (!allowedMime.includes(mime)) {
+        const ext = (data.fileName.split(".").pop() || "").toLowerCase();
+        mime = extMime[ext] ?? "";
+      }
+      if (!allowedMime.includes(mime)) {
         throw new Error("Unsupported file type. Allowed: jpg, png, webp, heic, pdf");
       }
-      return data;
+      return { ...data, mimeType: mime };
     },
   )
   .handler(async ({ data, context }) => {

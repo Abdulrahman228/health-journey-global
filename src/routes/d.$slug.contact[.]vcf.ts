@@ -53,13 +53,13 @@ async function buildVCard(slug: string): Promise<string | null> {
   const lines: string[] = [
     "BEGIN:VCARD",
     "VERSION:3.0",
-    `PRODID:-//Tabibi//Doctor vCard//EN`,
+    `PRODID:-//Tebana//Doctor vCard//EN`,
     `FN:${vEscape(drName)}`,
     `N:${vEscape(drName)};;;;`,
     `TITLE:${vEscape(d.specialty ?? "Physician")}`,
-    `ORG:${vEscape(clinic?.name ?? "Tabibi — طبيبي")}`,
+    `ORG:${vEscape(clinic?.name ?? `${siteConfig.brand.en} — ${siteConfig.brand.ar}`)}`,
     `URL:${vEscape(url)}`,
-    `CATEGORIES:Doctor,Healthcare,Tabibi`,
+    `CATEGORIES:Doctor,Healthcare,Tebana`,
   ];
   if (clinic?.phone) lines.push(`TEL;TYPE=WORK,VOICE:${vEscape(clinic.phone)}`);
   if (clinic?.address || clinic?.city || p.city) {

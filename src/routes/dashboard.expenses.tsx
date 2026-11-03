@@ -11,6 +11,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { FinancialReportCard } from "@/components/dashboard/FinancialReportCard";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
 import {
@@ -39,7 +40,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/dashboard/expenses")({
   head: () => ({
     meta: [
-      { title: "المصاريف والتقارير | لوحة الطبيب — طبيبي" },
+      { title: "المصاريف والتقارير | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -236,7 +237,7 @@ function ExpensesPage() {
   const ccy = pnl?.currency ?? "EGP";
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl" dir={isRTL ? "rtl" : "ltr"}>
+    <div dir={isRTL ? "rtl" : "ltr"}>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <FileSpreadsheet className="h-6 w-6 text-primary" />
@@ -302,6 +303,11 @@ function ExpensesPage() {
           />
         </section>
       )}
+
+      {/* Detailed report: income & expenses by category (unified ledger) */}
+      <div className="mb-6">
+        <FinancialReportCard year={year} month={month} />
+      </div>
 
       {/* Add expense form */}
       <section className="bg-card border border-border rounded-2xl p-4 mb-6">

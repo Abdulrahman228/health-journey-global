@@ -17,8 +17,10 @@ import {
   UserRound,
   Users,
   Wallet,
+  BookOpen,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { siteConfig } from "@/lib/seo";
 
 type LinkItem = {
   kind?: "link";
@@ -42,19 +44,23 @@ const items: NavItem[] = [
   { to: "/admin/patients", label: "المرضى", icon: UserRound },
   { to: "/admin/subscriptions", label: "الاشتراكات", icon: CreditCard },
   { to: "/admin/subscription-requests", label: "طلبات الاشتراك", icon: ClipboardCheck },
+  { to: "/admin/appointment-payments", label: "مدفوعات المواعيد", icon: ReceiptText },
   { to: "/admin/verifications", label: "التوثيق", icon: ShieldCheck },
   { to: "/admin/documents", label: "المستندات", icon: FileCheck },
   { to: "/admin/withdrawals", label: "السحوبات", icon: Wallet },
   { to: "/admin/reviews", label: "التقييمات", icon: Star },
   { to: "/admin/articles", label: "المقالات", icon: FileText },
+  { to: "/admin/ai-references", label: "مكتبة المساعد الذكي", icon: BookOpen },
   { to: "/admin/support-tickets", label: "الدعم", icon: HeadphonesIcon },
   { to: "/admin/errors", label: "الأخطاء", icon: AlertTriangle },
 
   { kind: "section", label: "وحدات المستشفى" },
-  { to: "/admin/admissions", label: "الإدخال والأسرة", icon: BedDouble },
   { to: "/admin/billing", label: "التأمين والفواتير", icon: ReceiptText },
-  { to: "/admin/emr", label: "السجل الطبي المركزي", icon: Archive },
-  { to: "/admin/inventory", label: "الصيدلية والمخزون", icon: Package },
+  // Hospital-tier placeholders — hidden from the nav until implemented (the
+  // routes still exist, reachable by URL). Restore these lines when ready.
+  // { to: "/admin/admissions", label: "الإدخال والأسرة", icon: BedDouble },
+  // { to: "/admin/emr", label: "السجل الطبي المركزي", icon: Archive },
+  // { to: "/admin/inventory", label: "الصيدلية والمخزون", icon: Package },
 ];
 
 export function AdminNav() {
@@ -63,7 +69,7 @@ export function AdminNav() {
     <aside className="rounded-xl border border-border bg-card p-3 shadow-sm lg:sticky lg:top-6 lg:self-start">
       <div className="mb-3 border-b border-border px-2 pb-3">
         <p className="text-xs font-semibold text-muted-foreground">Super Admin</p>
-        <h2 className="mt-1 text-lg font-bold text-foreground">طبيبي</h2>
+        <h2 className="mt-1 text-lg font-bold text-foreground">{siteConfig.brand.ar}</h2>
       </div>
       <nav className="grid gap-0.5" aria-label="قائمة لوحة الأدمن">
         {items.map((item, idx) => {
@@ -80,9 +86,7 @@ export function AdminNav() {
           }
 
           const { to, label, icon: Icon, exact } = item;
-          const active = exact
-            ? pathname === to || pathname === to + "/"
-            : pathname.startsWith(to);
+          const active = exact ? pathname === to || pathname === to + "/" : pathname.startsWith(to);
 
           return (
             <Link

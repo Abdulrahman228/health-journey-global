@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useLocation,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -87,12 +88,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "default" },
-      { name: "apple-mobile-web-app-title", content: "طبيبي Tabibi" },
+      {
+        name: "apple-mobile-web-app-title",
+        content: `${siteConfig.brand.ar} ${siteConfig.brand.en}`,
+      },
       { name: "author", content: `${siteConfig.brand.en} — ${siteConfig.brand.ar}` },
       { name: "application-name", content: `${siteConfig.brand.en} — ${siteConfig.brand.ar}` },
       { httpEquiv: "x-ua-compatible", content: "IE=edge" },
       ...buildMeta({
-        title: `طبيبي Tabibi | ${siteConfig.tagline.ar} — حجز طبيب أونلاين`,
+        title: `${siteConfig.brand.ar} ${siteConfig.brand.en} | ${siteConfig.tagline.ar} — حجز طبيب أونلاين`,
         description: siteConfig.defaultDescription.ar,
         path: "/",
         keywords: [...siteConfig.defaultKeywords],
@@ -100,9 +104,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      { rel: "apple-touch-icon", href: "/icon-192.svg" },
-      { rel: "mask-icon", href: "/favicon.svg", color: "#1d4ed8" },
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
@@ -112,10 +115,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     scripts: [
       {
-        // Inject Google Fonts non-blockingly. Body has system-ui fallback so
-        // text renders immediately, then swaps to Cairo/Inter on load.
+        // Apply the stored colour theme before first paint (class-based dark
+        // mode, toggled from the doctor shell). Default stays light.
         children:
-          "(function(){var h='https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap';var l=document.createElement('link');l.rel='stylesheet';l.href=h;l.media='print';l.onload=function(){this.media='all';this.onload=null};(document.head||document.documentElement).appendChild(l);})();",
+          "(function(){try{if(localStorage.getItem('tabibi-theme')==='dark'){document.documentElement.classList.add('dark')}}catch(e){}})();",
+      },
+      {
+        // Inject Google Fonts non-blockingly. Body has system-ui fallback so
+        // text renders immediately, then swaps to the web fonts on load.
+        // IBM Plex Sans Arabic = the doctor system UI family (see styles.css).
+        children:
+          "(function(){var h='https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap';var l=document.createElement('link');l.rel='stylesheet';l.href=h;l.media='print';l.onload=function(){this.media='all';this.onload=null};(document.head||document.documentElement).appendChild(l);})();",
       },
       {
         // Register service worker for offline-first PWA experience.
@@ -151,7 +161,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <html lang={lang} dir={dir}>
+    <html lang={lang} dir={dir} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
@@ -163,13 +173,40 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Doctor "system" routes render inside their own app shell (sidebar + top bar)
+// without the marketing header/footer. `/doctor/$id` (public doctor profile) is
+// deliberately NOT in this list.
+const DOCTOR_APP_PREFIXES = [
+  "/dashboard",
+  "/billing",
+  "/doctor/feedback",
+  "/doctor/lab-results",
+  "/doctor/solo",
+  "/doctor/sponsorship",
+  "/doctor/verification",
+];
+
+function isDoctorAppPath(pathname: string): boolean {
+  return DOCTOR_APP_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const solo = useSoloMode();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     installClientErrorHandlers();
   }, []);
+
+  if (!solo.isSolo && isDoctorAppPath(pathname)) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Outlet />
+        <WebVitalsReporter />
+      </QueryClientProvider>
+    );
+  }
 
   if (solo.isSolo) {
     return (

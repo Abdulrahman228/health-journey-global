@@ -109,6 +109,9 @@ export function ClinicMap({
     if (markers.length > 0) {
       const c = center ?? markers[0];
       mapRef.current.setCenter(c);
+      // Zoom in to the pin when the map is still zoomed out (e.g. right after
+      // "My location" or filling the address). Keeps a closer user-set zoom.
+      if ((mapRef.current.getZoom() ?? 0) < 13) mapRef.current.setZoom(16);
     }
   }, [ready, authFailed, markers, center, draggable, onMarkerDragEnd]);
 

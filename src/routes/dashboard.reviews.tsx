@@ -40,7 +40,7 @@ type FilterKey = "all" | "published" | "unpublished" | "pending" | "rejected";
 export const Route = createFileRoute("/dashboard/reviews")({
   head: () => ({
     meta: [
-      { title: "تقييمات المرضى | لوحة الطبيب — طبيبي" },
+      { title: "تقييمات المرضى | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -112,7 +112,7 @@ function DoctorReviewsPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl">
+    <div>
       <div className="mb-6">
         <Link
           to="/dashboard"

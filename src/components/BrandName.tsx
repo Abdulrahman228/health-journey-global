@@ -6,7 +6,7 @@ import { siteConfig } from "@/lib/seo";
  * entity (E-A-T signal). Outputs valid HTML5 `<bdi>` to isolate
  * directionality when mixing scripts.
  *
- * Example: <span>طبيبي <bdi>(Tabibi)</bdi></span>
+ * Example: <span>طبانا <bdi>(Tebana)</bdi></span>
  *
  * `variant`:
  *  - "inline" (default): both names on one line, English in parentheses

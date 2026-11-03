@@ -34,9 +34,9 @@ interface Manifest {
 
 function defaultManifest(): Manifest {
   return {
-    name: "طبيبي Tabibi — احجز طبيب أونلاين",
-    short_name: "طبيبي",
-    description: "منصة طبيبي للحجوزات الطبية وخدمات الصحة الرقمية",
+    name: "طبانا Tebana — احجز طبيب أونلاين",
+    short_name: "طبانا",
+    description: "منصة طبانا للحجوزات الطبية وخدمات الصحة الرقمية",
     start_url: "/",
     scope: "/",
     display: "standalone",
@@ -47,9 +47,9 @@ function defaultManifest(): Manifest {
     dir: "rtl",
     categories: ["medical", "health", "lifestyle"],
     icons: [
-      { src: "/icon-192.svg", sizes: "192x192", type: "image/svg+xml", purpose: "any" },
-      { src: "/icon-512.svg", sizes: "512x512", type: "image/svg+xml", purpose: "any" },
-      { src: "/icon-192.svg", sizes: "192x192", type: "image/svg+xml", purpose: "maskable" },
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
     ],
   };
 }

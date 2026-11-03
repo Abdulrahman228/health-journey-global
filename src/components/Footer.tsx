@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { HeartPulse } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { BrandName } from "@/components/BrandName";
+import { siteConfig } from "@/lib/seo";
 
 const footerContent = {
   en: {
@@ -32,7 +32,7 @@ const footerContent = {
       { label: "Privacy Policy", to: "/privacy" },
       { label: "Terms of Service", to: "/terms" },
     ],
-    copyright: "© 2026 Tabibi (طبيبي). All rights reserved.",
+    copyright: `© 2026 ${siteConfig.organization.legalNameEn} (${siteConfig.brand.ar}). All rights reserved.`,
   },
   ar: {
     tagline: "صحتك، متصلة",
@@ -62,7 +62,7 @@ const footerContent = {
       { label: "سياسة الخصوصية", to: "/privacy" },
       { label: "شروط الخدمة", to: "/terms" },
     ],
-    copyright: "© 2026 طبيبي (Tabibi). جميع الحقوق محفوظة.",
+    copyright: `© 2026 ${siteConfig.organization.legalName} (${siteConfig.brand.en}). جميع الحقوق محفوظة.`,
   },
 };
 
@@ -77,10 +77,12 @@ export function Footer() {
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <Link to="/" className="flex items-center gap-2" aria-label="طبيبي - Tabibi">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-linear-to-br from-primary to-primary/75 shadow-sm shadow-primary/20 ring-1 ring-primary/10">
-                <HeartPulse className="h-5 w-5 text-white" strokeWidth={2.4} />
-              </div>
+            <Link to="/" className="flex items-center gap-2" aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}>
+              <img
+                src="/logo-mark.png"
+                alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
+                className="h-14 w-auto object-contain"
+              />
               <BrandName
                 variant="wordmark"
                 primary={isRTL ? "ar" : "en"}

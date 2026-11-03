@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import type { SoloContext } from "@/hooks/useSoloMode";
+import { siteConfig } from "@/lib/seo";
 
 interface Props {
   ctx: SoloContext;
@@ -85,7 +86,7 @@ export function SoloShell({ ctx, children }: Props) {
               rel="noopener noreferrer"
               className="underline hover:text-foreground"
             >
-              طبيبي
+              {siteConfig.brand.ar}
             </a>
           </p>
         </div>

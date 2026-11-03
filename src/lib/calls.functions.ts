@@ -91,7 +91,7 @@ export const initiateMaskedCall = createServerFn({ method: "POST" })
       ? (contacts.find((c) => c.user_id === doctorProfileId)?.phone ?? null)
       : null;
 
-    const proxyNumber = process.env.TWILIO_PHONE_NUMBER ?? "+1-555-TABIBI";
+    const proxyNumber = process.env.TWILIO_PHONE_NUMBER ?? "+1-555-TEBANA";
     let provider: "test" | "twilio" = "test";
     let twilioSid: string | null = null;
     let twilioError: string | null = null;

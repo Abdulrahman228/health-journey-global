@@ -28,7 +28,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/pharmacy/dashboard")({
   component: PharmacyDashboard,
   head: () => ({
-    meta: [{ title: "Pharmacy Dashboard | Tabibi" }],
+    meta: [{ title: "Pharmacy Dashboard | Tebana" }],
   }),
 });
 

@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { DoctorShell } from "@/components/doctor/DoctorNav";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,10 +27,10 @@ import { RegionPicker, type RegionSelection } from "@/components/regions/RegionP
 export const Route = createFileRoute("/doctor/sponsorship")({
   head: () => ({
     meta: [
-      { title: "إعلانات Sponsored — طبيبي" },
+      { title: "إعلانات Sponsored — طبانا" },
       {
         name: "description",
-        content: "إدارة حملاتك الإعلانية الممولة على طبيبي. متاحة فقط لاشتراكات Gold.",
+        content: "إدارة حملاتك الإعلانية الممولة على طبانا. متاحة فقط لاشتراكات Gold.",
       },
       { name: "robots", content: "noindex, follow" },
     ],
@@ -159,7 +160,8 @@ function SponsorshipPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6" dir="rtl">
+    <DoctorShell>
+      <div dir="rtl">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Megaphone className="h-6 w-6 text-primary" aria-hidden="true" />
@@ -271,7 +273,8 @@ function SponsorshipPage() {
           ))}
         </ul>
       )}
-    </div>
+      </div>
+    </DoctorShell>
   );
 }
 

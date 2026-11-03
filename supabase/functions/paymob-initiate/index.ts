@@ -1,15 +1,22 @@
 // ============================================================================
 // Paymob payment initiation (Supabase Edge Function).
 //
-// The mobile app calls this to start a Gold subscription payment. It runs the
-// standard Paymob "Accept" flow (auth token → order → payment key) and returns
-// the hosted iframe URL, which the app opens IN-APP (Custom Tab / SafariView).
-// On a successful payment, `paymob-webhook` activates the subscription.
+// Runs the standard Paymob "Accept" flow (auth token → order → payment key)
+// and returns the hosted checkout URL (cards + Vodafone Cash/wallets + Fawry
+// depending on the integration ids). On success Paymob calls paymob-webhook,
+// which activates the subscription or marks the appointment paid.
+//
+// Body (JSON):
+//   { planCode: "doctor_gold_monthly" | "doctor_gold_yearly" }   – Gold subscription (mobile + web)
+//   { kind: "appointment", appointmentId: "<uuid>" }             – consultation fee (patient)
+//
+// merchant_order_id encodes who/what for the webhook:
+//   subscription → "{user_id}__{planCode}__{uuid}"
+//   appointment  → "appt__{appointment_id}__{uuid}"
 //
 // REQUIRED SECRETS (set via `supabase secrets set`, never committed):
-//   PAYMOB_API_KEY         — your Paymob API key
-//   PAYMOB_INTEGRATION_ID  — the card integration id
-//   PAYMOB_IFRAME_ID       — the iframe id used to render checkout
+//   PAYMOB_API_KEY, PAYMOB_INTEGRATION_ID (card), PAYMOB_IFRAME_ID
+// OPTIONAL: PAYMOB_WALLET_INTEGRATION_ID (mobile wallets), SITE_URL
 // The caller must send a valid Supabase user JWT (Authorization: Bearer …).
 // ============================================================================
 
@@ -28,6 +35,8 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -50,27 +59,73 @@ Deno.serve(async (req) => {
     const user = userData.user;
     if (!user) return json({ error: "Unauthorized" }, 401);
 
-    const { planCode } = await req.json().catch(() => ({ planCode: "" }));
-    const amountCents = PLAN_AMOUNT_CENTS[planCode];
-    if (!amountCents) return json({ error: "Unknown plan" }, 400);
+    const body = (await req.json().catch(() => ({}))) as {
+      planCode?: string;
+      kind?: string;
+      appointmentId?: string;
+    };
+
+    let amountCents: number;
+    let merchantOrderId: string;
+    let description: string;
+
+    if (body.kind === "appointment") {
+      // ---- Consultation fee: server-authoritative amount from the appointment
+      const appointmentId = String(body.appointmentId ?? "");
+      if (!UUID_RE.test(appointmentId)) return json({ error: "Invalid appointmentId" }, 400);
+
+      // RLS: the patient can only read their own appointment.
+      const { data: appt, error: apptErr } = await supabase
+        .from("appointments")
+        .select("id, patient_id, status, payment_status, fee, consultation_fee_cents, currency")
+        .eq("id", appointmentId)
+        .maybeSingle();
+      if (apptErr || !appt) return json({ error: "Appointment not found" }, 404);
+      if (appt.payment_status === "paid") return json({ error: "Already paid" }, 409);
+      if (["cancelled", "no_show", "completed"].includes(String(appt.status))) {
+        return json({ error: "Appointment is not payable" }, 409);
+      }
+      if (appt.currency && String(appt.currency).toUpperCase() !== "EGP") {
+        return json({ error: "Only EGP appointments can be paid through Paymob" }, 400);
+      }
+      const cents = appt.consultation_fee_cents ?? (appt.fee != null ? Math.round(Number(appt.fee) * 100) : 0);
+      if (!Number.isInteger(cents) || cents < 100) return json({ error: "Appointment has no payable fee" }, 400);
+
+      amountCents = cents;
+      merchantOrderId = `appt__${appointmentId}__${crypto.randomUUID()}`;
+      description = `Tebana appointment ${appointmentId}`;
+    } else {
+      // ---- Gold subscription (existing flow)
+      const planCode = String(body.planCode ?? "");
+      const planAmount = PLAN_AMOUNT_CENTS[planCode];
+      if (!planAmount) return json({ error: "Unknown plan" }, 400);
+      amountCents = planAmount;
+      merchantOrderId = `${user.id}__${planCode}__${crypto.randomUUID()}`;
+      description = `Tebana ${planCode}`;
+    }
+
+    // Billing data: Paymob requires every field; use the real phone when we have it.
+    const phone = user.phone ? `+${user.phone.replace(/^\+/, "")}` : "+200000000000";
+    const email = user.email ?? `${user.id}@users.mytabibi.com`;
+    const fullName = String(user.user_metadata?.full_name ?? "Tebana User").trim();
+    const [firstName, ...restName] = fullName.split(/\s+/);
+    const lastName = restName.join(" ") || "User";
 
     // 1) Auth token
     const auth = await pmPost(`${PAYMOB_BASE}/auth/tokens`, { api_key: apiKey });
     const token = auth.token as string;
 
     // 2) Order (merchant_order_id carries who + what for the webhook).
-    const merchantOrderId = `${user.id}__${planCode}__${crypto.randomUUID()}`;
     const order = await pmPost(`${PAYMOB_BASE}/ecommerce/orders`, {
       auth_token: token,
       delivery_needed: false,
       amount_cents: amountCents,
       currency: "EGP",
       merchant_order_id: merchantOrderId,
-      items: [],
+      items: [{ name: description, amount_cents: amountCents, quantity: 1, description }],
     });
 
     // 3) Payment key
-    const email = user.email ?? "doctor@mytabibi.com";
     const paymentKey = await pmPost(`${PAYMOB_BASE}/acceptance/payment_keys`, {
       auth_token: token,
       amount_cents: amountCents,
@@ -80,18 +135,18 @@ Deno.serve(async (req) => {
       integration_id: Number(integrationId),
       billing_data: {
         email,
-        first_name: "Tabibi",
-        last_name: "Doctor",
-        phone_number: "+200000000000",
+        first_name: firstName || "Tebana",
+        last_name: lastName,
+        phone_number: phone,
         apartment: "NA", floor: "NA", street: "NA", building: "NA",
         shipping_method: "NA", postal_code: "NA", city: "NA", country: "EG", state: "NA",
       },
     });
 
     const url = `${PAYMOB_BASE}/acceptance/iframes/${iframeId}?payment_token=${paymentKey.token}`;
-    return json({ url, merchantOrderId });
+    return json({ url, merchantOrderId, amountCents });
   } catch (e) {
-    return json({ error: String(e?.message ?? e) }, 500);
+    return json({ error: String((e as Error)?.message ?? e) }, 500);
   }
 });
 

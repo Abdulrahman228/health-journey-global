@@ -23,7 +23,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/dashboard/settings/followup")({
   head: () => ({
     meta: [
-      { title: "إعدادات المتابعة | لوحة الطبيب — طبيبي" },
+      { title: "إعدادات المتابعة | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -121,7 +121,7 @@ function FollowupSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div>
       <header className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <CalendarClock className="h-6 w-6 text-primary" aria-hidden="true" />

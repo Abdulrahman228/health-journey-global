@@ -30,7 +30,18 @@ export interface SoloContext {
  * page should hide global marketplace navigation.
  */
 export function useSoloMode(): SoloContext {
-  const [info] = useState(() => getCurrentSubdomain());
+  const [info] = useState<ReturnType<typeof getCurrentSubdomain>>(() => {
+    // 1) White-label subdomain: {slug}.mytabibi.com (needs wildcard DNS).
+    const sub = getCurrentSubdomain();
+    if (sub.isSubdomain && sub.slug) return sub;
+    // 2) Apex path /d/{slug} — the SAME white-label page with zero DNS setup,
+    //    so it works instantly for every doctor. Slug rules match the DB.
+    if (typeof window !== "undefined") {
+      const m = window.location.pathname.match(/^\/d\/([a-z0-9][a-z0-9-]{1,79})(?=\/|$)/i);
+      if (m) return { isSubdomain: true, slug: m[1].toLowerCase(), apex: null };
+    }
+    return sub;
+  });
   const [doctor, setDoctor] = useState<SoloDoctor | null>(null);
   const [loading, setLoading] = useState(info.isSubdomain);
 

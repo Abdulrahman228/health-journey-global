@@ -51,7 +51,7 @@ export const listEligibleAppointments = createServerFn({ method: "GET" })
 
     const { data: appts, error } = await supabaseAdmin
       .from("appointments")
-      .select("id, appointment_date, payment_status, fee, status")
+      .select("id, appointment_date, status")
       .eq("patient_id", profileId)
       .eq("doctor_id", data.doctorId)
       .eq("status", "completed")
@@ -59,16 +59,8 @@ export const listEligibleAppointments = createServerFn({ method: "GET" })
       .limit(20);
     if (error) throw new Error(error.message);
 
-    const eligible = (appts ?? []).filter((a) => {
-      const fee = Number(a.fee ?? 0);
-      const ps = a.payment_status as string | null;
-      return (
-        fee === 0 ||
-        ps === "paid" ||
-        ps === "refunded" ||
-        ps === "partially_refunded"
-      );
-    });
+    // Any completed visit is reviewable (payment happens off-app for clinics).
+    const eligible = appts ?? [];
 
     if (eligible.length === 0) return [];
 
@@ -107,7 +99,7 @@ export const submitReview = createServerFn({ method: "POST" })
 
     const { data: appt, error: appErr } = await supabaseAdmin
       .from("appointments")
-      .select("id, patient_id, doctor_id, status, payment_status, fee")
+      .select("id, patient_id, doctor_id, status")
       .eq("id", data.appointmentId)
       .maybeSingle();
     if (appErr) return { ok: false as const, error: appErr.message };
@@ -118,18 +110,7 @@ export const submitReview = createServerFn({ method: "POST" })
     if ((appt.status as string) !== "completed") {
       return { ok: false as const, error: "appointment_not_completed" };
     }
-    const fee = Number(appt.fee ?? 0);
-    const ps = appt.payment_status as string | null;
-    if (
-      !(
-        fee === 0 ||
-        ps === "paid" ||
-        ps === "refunded" ||
-        ps === "partially_refunded"
-      )
-    ) {
-      return { ok: false as const, error: "appointment_unpaid" };
-    }
+    // Payment is no longer required — any completed visit is reviewable.
 
     // Insert — trigger validates again, partial UNIQUE blocks duplicates.
     const { data: ins, error } = await supabaseAdmin

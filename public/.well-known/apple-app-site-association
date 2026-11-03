@@ -4,7 +4,11 @@
     "details": [
       {
         "appID": "REPLACE_TEAMID.com.mytabibi.app",
-        "paths": ["/doctor/*"]
+        "paths": [
+          "/doctor/*",
+          "/claim/*",
+          "/auth/callback"
+        ]
       }
     ]
   }

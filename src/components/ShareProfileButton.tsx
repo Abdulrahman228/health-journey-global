@@ -67,7 +67,7 @@ export function ShareProfileButton({
   }, [open, shortId, creatingShort, profileId, targetPath]);
 
   const shareUrl = shortUrl ?? longUrl;
-  const shareText = t(`Check out ${displayName} on Tabibi`, `زور صفحة ${displayName} على طبيبي`);
+  const shareText = t(`Check out ${displayName} on ${siteConfig.brand.en}`, `زور صفحة ${displayName} على ${siteConfig.brand.ar}`);
 
   const handleCopy = async (which: "long" | "short") => {
     const url = which === "short" ? shortUrl : longUrl;
@@ -104,7 +104,7 @@ export function ShareProfileButton({
       });
       const a = document.createElement("a");
       a.href = dataUrl;
-      a.download = `tabibi-qr-${shortId ?? "profile"}.png`;
+      a.download = `tebana-qr-${shortId ?? "profile"}.png`;
       a.click();
     } catch {
       toast.error(t("Download failed", "فشل التنزيل"));

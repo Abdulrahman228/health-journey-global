@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { DoctorShell } from "@/components/doctor/DoctorNav";
 import { useAuth } from "@/hooks/useAuth";
 import { BadgeCheck, ShieldCheck, Loader2, Clock, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -9,7 +10,7 @@ import { DoctorDocumentsUploader } from "@/components/verification/DoctorDocumen
 export const Route = createFileRoute("/doctor/verification")({
   head: () => ({
     meta: [
-      { title: "توثيق الطبيب - طبيبي" },
+      { title: "توثيق الطبيب - طبانا" },
       { name: "description", content: "قدّم بيانات توثيقك من نقابة الأطباء لتفعيل الكشف أون لاين." },
     ],
   }),
@@ -118,7 +119,8 @@ function VerificationPage() {
   const status = doctor.verification_status ?? "not_submitted";
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+    <DoctorShell>
+      <div>
       <div className="text-center">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
           <ShieldCheck className="h-7 w-7 text-primary" />
@@ -210,6 +212,7 @@ function VerificationPage() {
       <div className="mt-8 rounded-2xl border border-border bg-card p-6">
         <DoctorDocumentsUploader />
       </div>
-    </div>
+      </div>
+    </DoctorShell>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,7 +6,7 @@ import { PlacePicker } from "@/components/maps/PlacePicker";
 import { ClinicMap } from "@/components/maps/ClinicMap";
 import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 import { RegionPicker, type RegionSelection } from "@/components/regions/RegionPicker";
-import { Building2, Plus, Trash2, Save, Loader2, Clock, CalendarOff, Navigation, MapPin } from "lucide-react";
+import { Building2, Plus, Trash2, Save, Loader2, Clock, CalendarOff, Navigation, MapPin, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 
 interface Clinic {
@@ -30,6 +30,10 @@ interface Clinic {
   building?: string | null;
   floor_unit?: string | null;
   landmark?: string | null;
+  google_place_id?: string | null;
+  google_maps_uri?: string | null;
+  place_verified?: boolean | null;
+  place_verified_at?: string | null;
 }
 
 interface Schedule {
@@ -75,6 +79,11 @@ export function ClinicsManager({ doctorDetailsId }: { doctorDetailsId: string })
         country: payload.country ?? "Egypt",
         lat: payload.lat ?? null,
         lng: payload.lng ?? null,
+        phone: payload.phone ?? null,
+        google_place_id: payload.google_place_id ?? null,
+        google_maps_uri: payload.google_maps_uri ?? null,
+        place_verified: payload.place_verified ?? false,
+        place_verified_at: payload.place_verified ? new Date().toISOString() : null,
         country_id: payload.country_id ?? null,
         governorate_id: payload.governorate_id ?? null,
         city_id: payload.city_id ?? null,
@@ -176,6 +185,10 @@ function NewClinicForm({
     countryCode?: string;
     governorate?: string;
     district?: string;
+    placeId?: string;
+    name?: string;
+    phone?: string;
+    mapsUri?: string;
   } | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
 
@@ -257,12 +270,67 @@ function NewClinicForm({
   const [floorUnit, setFloorUnit] = useState("");
   const [landmark, setLandmark] = useState("");
   const [autoResolving, setAutoResolving] = useState(false);
+  // Guards the reverse (picked → region) resolve so it doesn't fight the
+  // forward (region → map) geocode below.
+  const skipRegionResolveRef = useRef(false);
+
+  // Forward-geocode the manually-selected location (region + street) so the map
+  // pin follows what the doctor fills in. Only called on explicit user changes
+  // (region dropdown / street) — never from the reverse resolve, so picking "My
+  // location" keeps its precise pin.
+  async function geocodeFromRegion(sel: RegionSelection, streetVal: string) {
+    if (!mapsReady) return;
+    if (!sel.governorateId && !sel.cityId) return;
+    try {
+      const ids = [sel.governorateId, sel.cityId, sel.districtId].filter(Boolean) as string[];
+      const namesById = new Map<string, string>();
+      if (ids.length) {
+        const { data } = await supabase
+          .from("regions")
+          .select("id,name_ar,name_en")
+          .in("id", ids);
+        (data ?? []).forEach((r) =>
+          namesById.set(r.id as string, (r.name_ar as string) || (r.name_en as string)),
+        );
+      }
+      const gov = sel.governorateId ? namesById.get(sel.governorateId) : undefined;
+      const cityName = sel.cityId ? namesById.get(sel.cityId) : undefined;
+      const districtName = sel.districtId ? namesById.get(sel.districtId) : undefined;
+      const parts = [streetVal.trim(), districtName, cityName, gov, "مصر"].filter(
+        Boolean,
+      ) as string[];
+      if (parts.length < 2) return;
+      const geocoder = new google.maps.Geocoder();
+      const res = await geocoder.geocode({ address: parts.join("، "), region: "eg" });
+      const r = res.results?.[0];
+      if (!r) return;
+      const loc = r.geometry.location;
+      skipRegionResolveRef.current = true; // don't re-resolve region from this pin
+      setPicked({
+        address: r.formatted_address,
+        lat: loc.lat(),
+        lng: loc.lng(),
+        city: cityName,
+        governorate: gov,
+        district: districtName,
+        country: "مصر",
+      });
+    } catch (e) {
+      console.error("forward geocode failed", e);
+    }
+  }
 
   // Auto-resolve region IDs from the Google-picked place by matching
   // address components against the `regions` table (case-insensitive,
   // both ar/en).
   useEffect(() => {
     if (!picked) return;
+    // Skip when this pin came from the forward geocode (region → map), so the
+    // two syncs don't loop.
+    if (skipRegionResolveRef.current) {
+      skipRegionResolveRef.current = false;
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -346,8 +414,13 @@ function NewClinicForm({
           </label>
           <div className="flex gap-2">
             <PlacePicker
-              placeholder={t("Type address...", "اكتب العنوان...")}
-              onPick={setPicked}
+              placeholder={t("Search your clinic or address…", "ابحث عن عيادتك أو العنوان…")}
+              onPick={(p) => {
+                setPicked(p);
+                // Auto-fill the clinic name from the Google listing when the
+                // doctor hasn't typed one yet.
+                if (p.name && !name.trim()) setName(p.name);
+              }}
               className="flex-1"
             />
             <button
@@ -373,6 +446,12 @@ function NewClinicForm({
               "نصيحة: يمكنك أيضاً الضغط على الخريطة بالأسفل أو سحب الدبوس لضبط الموقع بدقة.",
             )}
           </p>
+          {picked?.placeId && (
+            <p className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <BadgeCheck className="h-3 w-3" />
+              {t("Verified from Google Maps", "موثّقة من خرائط جوجل")}
+            </p>
+          )}
         </div>
       </div>
 
@@ -388,7 +467,14 @@ function NewClinicForm({
             </span>
           )}
         </div>
-        <RegionPicker value={region} onChange={setRegion} idPrefix="new-clinic" />
+        <RegionPicker
+          value={region}
+          onChange={(next) => {
+            setRegion(next);
+            void geocodeFromRegion(next, street); // move the map pin to match
+          }}
+          idPrefix="new-clinic"
+        />
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -397,6 +483,7 @@ function NewClinicForm({
             {t("Street", "الشارع")}
           </label>
           <input id="clinic-street" type="text" value={street} onChange={(e) => setStreet(e.target.value)}
+            onBlur={() => void geocodeFromRegion(region, street)}
             placeholder={t("e.g. El-Tahrir St.", "مثال: شارع التحرير")}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
         </div>
@@ -464,12 +551,16 @@ function NewClinicForm({
         <button
           onClick={() =>
             onSave({
-              name: name || t("Main Clinic", "العيادة الرئيسية"),
+              name: name || picked?.name || t("Main Clinic", "العيادة الرئيسية"),
               address: picked?.address ?? null,
               lat: picked?.lat ?? null,
               lng: picked?.lng ?? null,
               city: picked?.city ?? null,
               country: picked?.country ?? null,
+              phone: picked?.phone ?? null,
+              google_place_id: picked?.placeId ?? null,
+              google_maps_uri: picked?.mapsUri ?? null,
+              place_verified: !!picked?.placeId,
               country_id: region.countryId,
               governorate_id: region.governorateId,
               city_id: region.cityId,
@@ -607,6 +698,18 @@ function ClinicCard({
         <div className="flex-1">
           <h3 className="font-semibold text-foreground">{clinic.name}</h3>
           {clinic.address && <p className="text-sm text-muted-foreground mt-0.5">{clinic.address}</p>}
+          {clinic.place_verified && (
+            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <BadgeCheck className="h-3 w-3" />
+              {clinic.google_maps_uri ? (
+                <a href={clinic.google_maps_uri} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                  {t("Verified from Google Maps", "موثّقة من خرائط جوجل")}
+                </a>
+              ) : (
+                t("Verified from Google Maps", "موثّقة من خرائط جوجل")
+              )}
+            </span>
+          )}
         </div>
         <button
           onClick={onDelete}

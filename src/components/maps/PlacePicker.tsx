@@ -15,6 +15,12 @@ interface PlacePickerProps {
     countryCode?: string;
     governorate?: string;
     district?: string;
+    // Business-listing fields (present when the picked place is a real Google
+    // Maps listing) — used to mark a clinic as "verified from Google Maps".
+    placeId?: string;
+    name?: string;
+    phone?: string;
+    mapsUri?: string;
   }) => void;
   className?: string;
 }
@@ -31,7 +37,7 @@ interface Suggestion {
  * Calls onPick with a normalized place once a suggestion is chosen.
  */
 export function PlacePicker({ value, placeholder, onPick, className }: PlacePickerProps) {
-  const { ready } = useGoogleMaps();
+  const { ready, error } = useGoogleMaps();
   const [input, setInput] = useState(value ?? "");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -75,7 +81,16 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
       setLoading(true);
       const { Place } = (await google.maps.importLibrary("places")) as google.maps.PlacesLibrary;
       const place = new Place({ id: s.placePrediction.placeId });
-      await place.fetchFields({ fields: ["location", "formattedAddress", "addressComponents"] });
+      await place.fetchFields({
+        fields: [
+          "location",
+          "formattedAddress",
+          "addressComponents",
+          "displayName",
+          "internationalPhoneNumber",
+          "googleMapsURI",
+        ],
+      });
       const loc = place.location;
       if (!loc) return;
       const components = place.addressComponents ?? [];
@@ -99,6 +114,10 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
         countryCode: countryComp?.shortText ?? undefined,
         governorate: govComp?.longText ?? undefined,
         district: districtComp?.longText ?? undefined,
+        placeId: s.placePrediction.placeId,
+        name: place.displayName ?? undefined,
+        phone: place.internationalPhoneNumber ?? undefined,
+        mapsUri: place.googleMapsURI ?? undefined,
       });
       setInput(place.formattedAddress ?? s.placePrediction.text.text);
       setOpen(false);
@@ -124,6 +143,11 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
       />
       {loading && (
         <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+      )}
+      {error && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          بحث Google غير مفعّل حاليًا — أدخِل عنوان العيادة يدويًا في الحقول بالأسفل.
+        </p>
       )}
       {open && suggestions.length > 0 && (
         <ul className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-lg border border-border bg-popover shadow-lg">

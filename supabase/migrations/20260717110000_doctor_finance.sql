@@ -104,11 +104,11 @@ $$;
 GRANT EXECUTE ON FUNCTION public.doctor_financial_summary(uuid, date, date) TO authenticated;
 
 -- 5) Finance PIN: hashed server-side (bcrypt) so the app never handles crypto.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 CREATE OR REPLACE FUNCTION public.set_finance_pin(p_doctor_id uuid, p_pin text)
 RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions
 AS $$
 BEGIN
   IF auth.uid() NOT IN (
@@ -125,7 +125,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.verify_finance_pin(p_doctor_id uuid, p_pin text)
 RETURNS boolean
-LANGUAGE sql SECURITY DEFINER SET search_path = public
+LANGUAGE sql SECURITY DEFINER SET search_path = public, extensions
 AS $$
   SELECT finance_pin_hash IS NOT NULL
      AND finance_pin_hash = crypt(p_pin, finance_pin_hash)

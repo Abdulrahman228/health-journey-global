@@ -23,7 +23,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/admin/articles")({
   head: () => ({
     meta: [
-      { title: "إدارة المقالات — لوحة الأدمن | طبيبي" },
+      { title: "إدارة المقالات — لوحة الأدمن | طبانا" },
       { name: "description", content: "إنشاء وتحرير ونشر المقالات الطبية." },
       { name: "robots", content: "noindex, nofollow" },
     ],

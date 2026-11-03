@@ -19,7 +19,7 @@ import { AlertTriangle, Loader2, Printer, ShieldCheck } from "lucide-react";
 export const Route = createFileRoute("/rx/$id")({
   head: () => ({
     meta: [
-      { title: "وصفة طبية | طبيبي" },
+      { title: "وصفة طبية | طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -125,7 +125,7 @@ function PrescriptionPrintPage() {
         {/* Header */}
         <header className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
           <div>
-            <div className="text-lg font-extrabold tracking-tight">طبيبي · Tabibi</div>
+            <div className="text-lg font-extrabold tracking-tight">{siteConfig.brand.ar} · {siteConfig.brand.en}</div>
             <div className="mt-0.5 text-xs text-slate-600">
               منصة الرعاية الصحية الموحّدة
             </div>
@@ -277,7 +277,7 @@ function PrescriptionPrintPage() {
             </div>
             <div className="mt-3 flex items-center gap-1 text-xs text-slate-500">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              توقيع رقمي معتمد عبر منصة طبيبي
+              توقيع رقمي معتمد عبر منصة طبانا
             </div>
           </div>
           <div className="text-center">

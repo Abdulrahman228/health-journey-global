@@ -24,6 +24,7 @@ export function organizationSchema() {
     "@type": ["Organization", "MedicalBusiness"],
     "@id": `${siteConfig.url}/#organization`,
     name: siteConfig.brand.en,
+    legalName: siteConfig.organization.legalName,
     // Multiple spellings so Google's Knowledge Graph matches any of
     // them (Arabic, English, and common transliterations).
     alternateName: siteConfig.brandAliases,

@@ -23,10 +23,12 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PayRouteImport } from './routes/pay'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as NearbyRouteImport } from './routes/nearby'
 import { Route as MissingDrugsRouteImport } from './routes/missing-drugs'
 import { Route as ManifestDotwebmanifestRouteImport } from './routes/manifest[.]webmanifest'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LabOrdersRouteImport } from './routes/lab-orders'
 import { Route as JoinDoctorRouteImport } from './routes/join-doctor'
 import { Route as IndexnowKeyDottxtRouteImport } from './routes/indexnow-key[.]txt'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
@@ -51,17 +53,23 @@ import { Route as ProfileLabResultsRouteImport } from './routes/profile.lab-resu
 import { Route as PharmacyRegisterRouteImport } from './routes/pharmacy.register'
 import { Route as PharmacyDashboardRouteImport } from './routes/pharmacy.dashboard'
 import { Route as MyQueueAppointmentIdRouteImport } from './routes/my-queue.$appointmentId'
+import { Route as LabRegisterRouteImport } from './routes/lab.register'
+import { Route as LabDashboardRouteImport } from './routes/lab.dashboard'
 import { Route as FeedNewRouteImport } from './routes/feed.new'
 import { Route as DoctorVerificationRouteImport } from './routes/doctor.verification'
 import { Route as DoctorSponsorshipRouteImport } from './routes/doctor.sponsorship'
 import { Route as DoctorSoloRouteImport } from './routes/doctor.solo'
+import { Route as DoctorLabResultsRouteImport } from './routes/doctor.lab-results'
 import { Route as DoctorFeedbackRouteImport } from './routes/doctor.feedback'
 import { Route as DoctorIdRouteImport } from './routes/doctor.$id'
+import { Route as DashboardWaitingRoomRouteImport } from './routes/dashboard.waiting-room'
 import { Route as DashboardSupportRouteImport } from './routes/dashboard.support'
 import { Route as DashboardReviewsRouteImport } from './routes/dashboard.reviews'
+import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardPatientsRouteImport } from './routes/dashboard.patients'
 import { Route as DashboardExpensesRouteImport } from './routes/dashboard.expenses'
 import { Route as DashboardEarningsRouteImport } from './routes/dashboard.earnings'
+import { Route as DashboardAppointmentsRouteImport } from './routes/dashboard.appointments'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard.analytics'
 import { Route as DSlugRouteImport } from './routes/d.$slug'
 import { Route as ConsultationIdRouteImport } from './routes/consultation.$id'
@@ -77,6 +85,7 @@ import { Route as AdminSubscriptionRequestsRouteImport } from './routes/admin.su
 import { Route as AdminSeedDirectoryRouteImport } from './routes/admin.seed-directory'
 import { Route as AdminReviewsRouteImport } from './routes/admin.reviews'
 import { Route as AdminPatientsRouteImport } from './routes/admin.patients'
+import { Route as AdminOnboardingRouteImport } from './routes/admin.onboarding'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminErrorsRouteImport } from './routes/admin.errors'
 import { Route as AdminEmrRouteImport } from './routes/admin.emr'
@@ -84,6 +93,8 @@ import { Route as AdminDocumentsRouteImport } from './routes/admin.documents'
 import { Route as AdminDoctorsRouteImport } from './routes/admin.doctors'
 import { Route as AdminBillingRouteImport } from './routes/admin.billing'
 import { Route as AdminArticlesRouteImport } from './routes/admin.articles'
+import { Route as AdminAppointmentPaymentsRouteImport } from './routes/admin.appointment-payments'
+import { Route as AdminAiReferencesRouteImport } from './routes/admin.ai-references'
 import { Route as AdminAdmissionsRouteImport } from './routes/admin.admissions'
 import { Route as SpecialtySlugCityRouteImport } from './routes/specialty.$slug.$city'
 import { Route as RxVerifyNumberRouteImport } from './routes/rx.verify.$number'
@@ -169,6 +180,11 @@ const PayRoute = PayRouteImport.update({
   path: '/pay',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NearbyRoute = NearbyRouteImport.update({
   id: '/nearby',
   path: '/nearby',
@@ -187,6 +203,11 @@ const ManifestDotwebmanifestRoute = ManifestDotwebmanifestRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabOrdersRoute = LabOrdersRouteImport.update({
+  id: '/lab-orders',
+  path: '/lab-orders',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JoinDoctorRoute = JoinDoctorRouteImport.update({
@@ -309,6 +330,16 @@ const MyQueueAppointmentIdRoute = MyQueueAppointmentIdRouteImport.update({
   path: '/my-queue/$appointmentId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LabRegisterRoute = LabRegisterRouteImport.update({
+  id: '/lab/register',
+  path: '/lab/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabDashboardRoute = LabDashboardRouteImport.update({
+  id: '/lab/dashboard',
+  path: '/lab/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FeedNewRoute = FeedNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -329,6 +360,11 @@ const DoctorSoloRoute = DoctorSoloRouteImport.update({
   path: '/doctor/solo',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DoctorLabResultsRoute = DoctorLabResultsRouteImport.update({
+  id: '/doctor/lab-results',
+  path: '/doctor/lab-results',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DoctorFeedbackRoute = DoctorFeedbackRouteImport.update({
   id: '/doctor/feedback',
   path: '/doctor/feedback',
@@ -339,6 +375,11 @@ const DoctorIdRoute = DoctorIdRouteImport.update({
   path: '/doctor/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardWaitingRoomRoute = DashboardWaitingRoomRouteImport.update({
+  id: '/waiting-room',
+  path: '/waiting-room',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardSupportRoute = DashboardSupportRouteImport.update({
   id: '/support',
   path: '/support',
@@ -347,6 +388,11 @@ const DashboardSupportRoute = DashboardSupportRouteImport.update({
 const DashboardReviewsRoute = DashboardReviewsRouteImport.update({
   id: '/reviews',
   path: '/reviews',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardProfileRoute = DashboardProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardPatientsRoute = DashboardPatientsRouteImport.update({
@@ -362,6 +408,11 @@ const DashboardExpensesRoute = DashboardExpensesRouteImport.update({
 const DashboardEarningsRoute = DashboardEarningsRouteImport.update({
   id: '/earnings',
   path: '/earnings',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardAppointmentsRoute = DashboardAppointmentsRouteImport.update({
+  id: '/appointments',
+  path: '/appointments',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
@@ -440,6 +491,11 @@ const AdminPatientsRoute = AdminPatientsRouteImport.update({
   path: '/admin/patients',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminOnboardingRoute = AdminOnboardingRouteImport.update({
+  id: '/admin/onboarding',
+  path: '/admin/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminInventoryRoute = AdminInventoryRouteImport.update({
   id: '/admin/inventory',
   path: '/admin/inventory',
@@ -473,6 +529,17 @@ const AdminBillingRoute = AdminBillingRouteImport.update({
 const AdminArticlesRoute = AdminArticlesRouteImport.update({
   id: '/admin/articles',
   path: '/admin/articles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAppointmentPaymentsRoute =
+  AdminAppointmentPaymentsRouteImport.update({
+    id: '/admin/appointment-payments',
+    path: '/admin/appointment-payments',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdminAiReferencesRoute = AdminAiReferencesRouteImport.update({
+  id: '/admin/ai-references',
+  path: '/admin/ai-references',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminAdmissionsRoute = AdminAdmissionsRouteImport.update({
@@ -559,10 +626,12 @@ export interface FileRoutesByFullPath {
   '/how-it-works': typeof HowItWorksRoute
   '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
+  '/lab-orders': typeof LabOrdersRoute
   '/login': typeof LoginRoute
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/missing-drugs': typeof MissingDrugsRoute
   '/nearby': typeof NearbyRoute
+  '/notifications': typeof NotificationsRoute
   '/pay': typeof PayRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
@@ -578,6 +647,8 @@ export interface FileRoutesByFullPath {
   '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
   '/admin/admissions': typeof AdminAdmissionsRoute
+  '/admin/ai-references': typeof AdminAiReferencesRoute
+  '/admin/appointment-payments': typeof AdminAppointmentPaymentsRoute
   '/admin/articles': typeof AdminArticlesRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/doctors': typeof AdminDoctorsRoute
@@ -585,6 +656,7 @@ export interface FileRoutesByFullPath {
   '/admin/emr': typeof AdminEmrRoute
   '/admin/errors': typeof AdminErrorsRoute
   '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
   '/admin/patients': typeof AdminPatientsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/seed-directory': typeof AdminSeedDirectoryRoute
@@ -600,17 +672,23 @@ export interface FileRoutesByFullPath {
   '/consultation/$id': typeof ConsultationIdRoute
   '/d/$slug': typeof DSlugRouteWithChildren
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/appointments': typeof DashboardAppointmentsRoute
   '/dashboard/earnings': typeof DashboardEarningsRoute
   '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reviews': typeof DashboardReviewsRoute
   '/dashboard/support': typeof DashboardSupportRoute
+  '/dashboard/waiting-room': typeof DashboardWaitingRoomRoute
   '/doctor/$id': typeof DoctorIdRoute
   '/doctor/feedback': typeof DoctorFeedbackRoute
+  '/doctor/lab-results': typeof DoctorLabResultsRoute
   '/doctor/solo': typeof DoctorSoloRoute
   '/doctor/sponsorship': typeof DoctorSponsorshipRoute
   '/doctor/verification': typeof DoctorVerificationRoute
   '/feed/new': typeof FeedNewRoute
+  '/lab/dashboard': typeof LabDashboardRoute
+  '/lab/register': typeof LabRegisterRoute
   '/my-queue/$appointmentId': typeof MyQueueAppointmentIdRoute
   '/pharmacy/dashboard': typeof PharmacyDashboardRoute
   '/pharmacy/register': typeof PharmacyRegisterRoute
@@ -649,10 +727,12 @@ export interface FileRoutesByTo {
   '/how-it-works': typeof HowItWorksRoute
   '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
+  '/lab-orders': typeof LabOrdersRoute
   '/login': typeof LoginRoute
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/missing-drugs': typeof MissingDrugsRoute
   '/nearby': typeof NearbyRoute
+  '/notifications': typeof NotificationsRoute
   '/pay': typeof PayRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
@@ -668,6 +748,8 @@ export interface FileRoutesByTo {
   '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
   '/admin/admissions': typeof AdminAdmissionsRoute
+  '/admin/ai-references': typeof AdminAiReferencesRoute
+  '/admin/appointment-payments': typeof AdminAppointmentPaymentsRoute
   '/admin/articles': typeof AdminArticlesRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/doctors': typeof AdminDoctorsRoute
@@ -675,6 +757,7 @@ export interface FileRoutesByTo {
   '/admin/emr': typeof AdminEmrRoute
   '/admin/errors': typeof AdminErrorsRoute
   '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
   '/admin/patients': typeof AdminPatientsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/seed-directory': typeof AdminSeedDirectoryRoute
@@ -690,17 +773,23 @@ export interface FileRoutesByTo {
   '/consultation/$id': typeof ConsultationIdRoute
   '/d/$slug': typeof DSlugRouteWithChildren
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/appointments': typeof DashboardAppointmentsRoute
   '/dashboard/earnings': typeof DashboardEarningsRoute
   '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reviews': typeof DashboardReviewsRoute
   '/dashboard/support': typeof DashboardSupportRoute
+  '/dashboard/waiting-room': typeof DashboardWaitingRoomRoute
   '/doctor/$id': typeof DoctorIdRoute
   '/doctor/feedback': typeof DoctorFeedbackRoute
+  '/doctor/lab-results': typeof DoctorLabResultsRoute
   '/doctor/solo': typeof DoctorSoloRoute
   '/doctor/sponsorship': typeof DoctorSponsorshipRoute
   '/doctor/verification': typeof DoctorVerificationRoute
   '/feed/new': typeof FeedNewRoute
+  '/lab/dashboard': typeof LabDashboardRoute
+  '/lab/register': typeof LabRegisterRoute
   '/my-queue/$appointmentId': typeof MyQueueAppointmentIdRoute
   '/pharmacy/dashboard': typeof PharmacyDashboardRoute
   '/pharmacy/register': typeof PharmacyRegisterRoute
@@ -740,10 +829,12 @@ export interface FileRoutesById {
   '/how-it-works': typeof HowItWorksRoute
   '/indexnow-key.txt': typeof IndexnowKeyDottxtRoute
   '/join-doctor': typeof JoinDoctorRoute
+  '/lab-orders': typeof LabOrdersRoute
   '/login': typeof LoginRoute
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/missing-drugs': typeof MissingDrugsRoute
   '/nearby': typeof NearbyRoute
+  '/notifications': typeof NotificationsRoute
   '/pay': typeof PayRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
@@ -759,6 +850,8 @@ export interface FileRoutesById {
   '/sw.js': typeof SwDotjsRoute
   '/terms': typeof TermsRoute
   '/admin/admissions': typeof AdminAdmissionsRoute
+  '/admin/ai-references': typeof AdminAiReferencesRoute
+  '/admin/appointment-payments': typeof AdminAppointmentPaymentsRoute
   '/admin/articles': typeof AdminArticlesRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/doctors': typeof AdminDoctorsRoute
@@ -766,6 +859,7 @@ export interface FileRoutesById {
   '/admin/emr': typeof AdminEmrRoute
   '/admin/errors': typeof AdminErrorsRoute
   '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
   '/admin/patients': typeof AdminPatientsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/seed-directory': typeof AdminSeedDirectoryRoute
@@ -781,17 +875,23 @@ export interface FileRoutesById {
   '/consultation/$id': typeof ConsultationIdRoute
   '/d/$slug': typeof DSlugRouteWithChildren
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/appointments': typeof DashboardAppointmentsRoute
   '/dashboard/earnings': typeof DashboardEarningsRoute
   '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/patients': typeof DashboardPatientsRoute
+  '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reviews': typeof DashboardReviewsRoute
   '/dashboard/support': typeof DashboardSupportRoute
+  '/dashboard/waiting-room': typeof DashboardWaitingRoomRoute
   '/doctor/$id': typeof DoctorIdRoute
   '/doctor/feedback': typeof DoctorFeedbackRoute
+  '/doctor/lab-results': typeof DoctorLabResultsRoute
   '/doctor/solo': typeof DoctorSoloRoute
   '/doctor/sponsorship': typeof DoctorSponsorshipRoute
   '/doctor/verification': typeof DoctorVerificationRoute
   '/feed/new': typeof FeedNewRoute
+  '/lab/dashboard': typeof LabDashboardRoute
+  '/lab/register': typeof LabRegisterRoute
   '/my-queue/$appointmentId': typeof MyQueueAppointmentIdRoute
   '/pharmacy/dashboard': typeof PharmacyDashboardRoute
   '/pharmacy/register': typeof PharmacyRegisterRoute
@@ -832,10 +932,12 @@ export interface FileRouteTypes {
     | '/how-it-works'
     | '/indexnow-key.txt'
     | '/join-doctor'
+    | '/lab-orders'
     | '/login'
     | '/manifest.webmanifest'
     | '/missing-drugs'
     | '/nearby'
+    | '/notifications'
     | '/pay'
     | '/pricing'
     | '/privacy'
@@ -851,6 +953,8 @@ export interface FileRouteTypes {
     | '/sw.js'
     | '/terms'
     | '/admin/admissions'
+    | '/admin/ai-references'
+    | '/admin/appointment-payments'
     | '/admin/articles'
     | '/admin/billing'
     | '/admin/doctors'
@@ -858,6 +962,7 @@ export interface FileRouteTypes {
     | '/admin/emr'
     | '/admin/errors'
     | '/admin/inventory'
+    | '/admin/onboarding'
     | '/admin/patients'
     | '/admin/reviews'
     | '/admin/seed-directory'
@@ -873,17 +978,23 @@ export interface FileRouteTypes {
     | '/consultation/$id'
     | '/d/$slug'
     | '/dashboard/analytics'
+    | '/dashboard/appointments'
     | '/dashboard/earnings'
     | '/dashboard/expenses'
     | '/dashboard/patients'
+    | '/dashboard/profile'
     | '/dashboard/reviews'
     | '/dashboard/support'
+    | '/dashboard/waiting-room'
     | '/doctor/$id'
     | '/doctor/feedback'
+    | '/doctor/lab-results'
     | '/doctor/solo'
     | '/doctor/sponsorship'
     | '/doctor/verification'
     | '/feed/new'
+    | '/lab/dashboard'
+    | '/lab/register'
     | '/my-queue/$appointmentId'
     | '/pharmacy/dashboard'
     | '/pharmacy/register'
@@ -922,10 +1033,12 @@ export interface FileRouteTypes {
     | '/how-it-works'
     | '/indexnow-key.txt'
     | '/join-doctor'
+    | '/lab-orders'
     | '/login'
     | '/manifest.webmanifest'
     | '/missing-drugs'
     | '/nearby'
+    | '/notifications'
     | '/pay'
     | '/pricing'
     | '/privacy'
@@ -941,6 +1054,8 @@ export interface FileRouteTypes {
     | '/sw.js'
     | '/terms'
     | '/admin/admissions'
+    | '/admin/ai-references'
+    | '/admin/appointment-payments'
     | '/admin/articles'
     | '/admin/billing'
     | '/admin/doctors'
@@ -948,6 +1063,7 @@ export interface FileRouteTypes {
     | '/admin/emr'
     | '/admin/errors'
     | '/admin/inventory'
+    | '/admin/onboarding'
     | '/admin/patients'
     | '/admin/reviews'
     | '/admin/seed-directory'
@@ -963,17 +1079,23 @@ export interface FileRouteTypes {
     | '/consultation/$id'
     | '/d/$slug'
     | '/dashboard/analytics'
+    | '/dashboard/appointments'
     | '/dashboard/earnings'
     | '/dashboard/expenses'
     | '/dashboard/patients'
+    | '/dashboard/profile'
     | '/dashboard/reviews'
     | '/dashboard/support'
+    | '/dashboard/waiting-room'
     | '/doctor/$id'
     | '/doctor/feedback'
+    | '/doctor/lab-results'
     | '/doctor/solo'
     | '/doctor/sponsorship'
     | '/doctor/verification'
     | '/feed/new'
+    | '/lab/dashboard'
+    | '/lab/register'
     | '/my-queue/$appointmentId'
     | '/pharmacy/dashboard'
     | '/pharmacy/register'
@@ -1012,10 +1134,12 @@ export interface FileRouteTypes {
     | '/how-it-works'
     | '/indexnow-key.txt'
     | '/join-doctor'
+    | '/lab-orders'
     | '/login'
     | '/manifest.webmanifest'
     | '/missing-drugs'
     | '/nearby'
+    | '/notifications'
     | '/pay'
     | '/pricing'
     | '/privacy'
@@ -1031,6 +1155,8 @@ export interface FileRouteTypes {
     | '/sw.js'
     | '/terms'
     | '/admin/admissions'
+    | '/admin/ai-references'
+    | '/admin/appointment-payments'
     | '/admin/articles'
     | '/admin/billing'
     | '/admin/doctors'
@@ -1038,6 +1164,7 @@ export interface FileRouteTypes {
     | '/admin/emr'
     | '/admin/errors'
     | '/admin/inventory'
+    | '/admin/onboarding'
     | '/admin/patients'
     | '/admin/reviews'
     | '/admin/seed-directory'
@@ -1053,17 +1180,23 @@ export interface FileRouteTypes {
     | '/consultation/$id'
     | '/d/$slug'
     | '/dashboard/analytics'
+    | '/dashboard/appointments'
     | '/dashboard/earnings'
     | '/dashboard/expenses'
     | '/dashboard/patients'
+    | '/dashboard/profile'
     | '/dashboard/reviews'
     | '/dashboard/support'
+    | '/dashboard/waiting-room'
     | '/doctor/$id'
     | '/doctor/feedback'
+    | '/doctor/lab-results'
     | '/doctor/solo'
     | '/doctor/sponsorship'
     | '/doctor/verification'
     | '/feed/new'
+    | '/lab/dashboard'
+    | '/lab/register'
     | '/my-queue/$appointmentId'
     | '/pharmacy/dashboard'
     | '/pharmacy/register'
@@ -1103,10 +1236,12 @@ export interface RootRouteChildren {
   HowItWorksRoute: typeof HowItWorksRoute
   IndexnowKeyDottxtRoute: typeof IndexnowKeyDottxtRoute
   JoinDoctorRoute: typeof JoinDoctorRoute
+  LabOrdersRoute: typeof LabOrdersRoute
   LoginRoute: typeof LoginRoute
   ManifestDotwebmanifestRoute: typeof ManifestDotwebmanifestRoute
   MissingDrugsRoute: typeof MissingDrugsRoute
   NearbyRoute: typeof NearbyRoute
+  NotificationsRoute: typeof NotificationsRoute
   PayRoute: typeof PayRoute
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -1122,6 +1257,8 @@ export interface RootRouteChildren {
   SwDotjsRoute: typeof SwDotjsRoute
   TermsRoute: typeof TermsRoute
   AdminAdmissionsRoute: typeof AdminAdmissionsRoute
+  AdminAiReferencesRoute: typeof AdminAiReferencesRoute
+  AdminAppointmentPaymentsRoute: typeof AdminAppointmentPaymentsRoute
   AdminArticlesRoute: typeof AdminArticlesRoute
   AdminBillingRoute: typeof AdminBillingRoute
   AdminDoctorsRoute: typeof AdminDoctorsRoute
@@ -1129,6 +1266,7 @@ export interface RootRouteChildren {
   AdminEmrRoute: typeof AdminEmrRoute
   AdminErrorsRoute: typeof AdminErrorsRoute
   AdminInventoryRoute: typeof AdminInventoryRoute
+  AdminOnboardingRoute: typeof AdminOnboardingRoute
   AdminPatientsRoute: typeof AdminPatientsRoute
   AdminReviewsRoute: typeof AdminReviewsRoute
   AdminSeedDirectoryRoute: typeof AdminSeedDirectoryRoute
@@ -1145,9 +1283,12 @@ export interface RootRouteChildren {
   DSlugRoute: typeof DSlugRouteWithChildren
   DoctorIdRoute: typeof DoctorIdRoute
   DoctorFeedbackRoute: typeof DoctorFeedbackRoute
+  DoctorLabResultsRoute: typeof DoctorLabResultsRoute
   DoctorSoloRoute: typeof DoctorSoloRoute
   DoctorSponsorshipRoute: typeof DoctorSponsorshipRoute
   DoctorVerificationRoute: typeof DoctorVerificationRoute
+  LabDashboardRoute: typeof LabDashboardRoute
+  LabRegisterRoute: typeof LabRegisterRoute
   MyQueueAppointmentIdRoute: typeof MyQueueAppointmentIdRoute
   PharmacyDashboardRoute: typeof PharmacyDashboardRoute
   PharmacyRegisterRoute: typeof PharmacyRegisterRoute
@@ -1264,6 +1405,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PayRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/nearby': {
       id: '/nearby'
       path: '/nearby'
@@ -1290,6 +1438,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab-orders': {
+      id: '/lab-orders'
+      path: '/lab-orders'
+      fullPath: '/lab-orders'
+      preLoaderRoute: typeof LabOrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/join-doctor': {
@@ -1460,6 +1615,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MyQueueAppointmentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lab/register': {
+      id: '/lab/register'
+      path: '/lab/register'
+      fullPath: '/lab/register'
+      preLoaderRoute: typeof LabRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab/dashboard': {
+      id: '/lab/dashboard'
+      path: '/lab/dashboard'
+      fullPath: '/lab/dashboard'
+      preLoaderRoute: typeof LabDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/feed/new': {
       id: '/feed/new'
       path: '/new'
@@ -1488,6 +1657,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DoctorSoloRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/doctor/lab-results': {
+      id: '/doctor/lab-results'
+      path: '/doctor/lab-results'
+      fullPath: '/doctor/lab-results'
+      preLoaderRoute: typeof DoctorLabResultsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/doctor/feedback': {
       id: '/doctor/feedback'
       path: '/doctor/feedback'
@@ -1502,6 +1678,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DoctorIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/waiting-room': {
+      id: '/dashboard/waiting-room'
+      path: '/waiting-room'
+      fullPath: '/dashboard/waiting-room'
+      preLoaderRoute: typeof DashboardWaitingRoomRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/support': {
       id: '/dashboard/support'
       path: '/support'
@@ -1514,6 +1697,13 @@ declare module '@tanstack/react-router' {
       path: '/reviews'
       fullPath: '/dashboard/reviews'
       preLoaderRoute: typeof DashboardReviewsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/profile': {
+      id: '/dashboard/profile'
+      path: '/profile'
+      fullPath: '/dashboard/profile'
+      preLoaderRoute: typeof DashboardProfileRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/patients': {
@@ -1535,6 +1725,13 @@ declare module '@tanstack/react-router' {
       path: '/earnings'
       fullPath: '/dashboard/earnings'
       preLoaderRoute: typeof DashboardEarningsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/appointments': {
+      id: '/dashboard/appointments'
+      path: '/appointments'
+      fullPath: '/dashboard/appointments'
+      preLoaderRoute: typeof DashboardAppointmentsRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/analytics': {
@@ -1642,6 +1839,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPatientsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/onboarding': {
+      id: '/admin/onboarding'
+      path: '/admin/onboarding'
+      fullPath: '/admin/onboarding'
+      preLoaderRoute: typeof AdminOnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/inventory': {
       id: '/admin/inventory'
       path: '/admin/inventory'
@@ -1689,6 +1893,20 @@ declare module '@tanstack/react-router' {
       path: '/admin/articles'
       fullPath: '/admin/articles'
       preLoaderRoute: typeof AdminArticlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/appointment-payments': {
+      id: '/admin/appointment-payments'
+      path: '/admin/appointment-payments'
+      fullPath: '/admin/appointment-payments'
+      preLoaderRoute: typeof AdminAppointmentPaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/ai-references': {
+      id: '/admin/ai-references'
+      path: '/admin/ai-references'
+      fullPath: '/admin/ai-references'
+      preLoaderRoute: typeof AdminAiReferencesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/admissions': {
@@ -1787,11 +2005,14 @@ declare module '@tanstack/react-router' {
 
 interface DashboardRouteChildren {
   DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
+  DashboardAppointmentsRoute: typeof DashboardAppointmentsRoute
   DashboardEarningsRoute: typeof DashboardEarningsRoute
   DashboardExpensesRoute: typeof DashboardExpensesRoute
   DashboardPatientsRoute: typeof DashboardPatientsRoute
+  DashboardProfileRoute: typeof DashboardProfileRoute
   DashboardReviewsRoute: typeof DashboardReviewsRoute
   DashboardSupportRoute: typeof DashboardSupportRoute
+  DashboardWaitingRoomRoute: typeof DashboardWaitingRoomRoute
   DashboardPatientIdRoute: typeof DashboardPatientIdRoute
   DashboardSettingsBillingRoute: typeof DashboardSettingsBillingRoute
   DashboardSettingsFollowupRoute: typeof DashboardSettingsFollowupRoute
@@ -1801,11 +2022,14 @@ interface DashboardRouteChildren {
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAnalyticsRoute: DashboardAnalyticsRoute,
+  DashboardAppointmentsRoute: DashboardAppointmentsRoute,
   DashboardEarningsRoute: DashboardEarningsRoute,
   DashboardExpensesRoute: DashboardExpensesRoute,
   DashboardPatientsRoute: DashboardPatientsRoute,
+  DashboardProfileRoute: DashboardProfileRoute,
   DashboardReviewsRoute: DashboardReviewsRoute,
   DashboardSupportRoute: DashboardSupportRoute,
+  DashboardWaitingRoomRoute: DashboardWaitingRoomRoute,
   DashboardPatientIdRoute: DashboardPatientIdRoute,
   DashboardSettingsBillingRoute: DashboardSettingsBillingRoute,
   DashboardSettingsFollowupRoute: DashboardSettingsFollowupRoute,
@@ -1877,10 +2101,12 @@ const rootRouteChildren: RootRouteChildren = {
   HowItWorksRoute: HowItWorksRoute,
   IndexnowKeyDottxtRoute: IndexnowKeyDottxtRoute,
   JoinDoctorRoute: JoinDoctorRoute,
+  LabOrdersRoute: LabOrdersRoute,
   LoginRoute: LoginRoute,
   ManifestDotwebmanifestRoute: ManifestDotwebmanifestRoute,
   MissingDrugsRoute: MissingDrugsRoute,
   NearbyRoute: NearbyRoute,
+  NotificationsRoute: NotificationsRoute,
   PayRoute: PayRoute,
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
@@ -1896,6 +2122,8 @@ const rootRouteChildren: RootRouteChildren = {
   SwDotjsRoute: SwDotjsRoute,
   TermsRoute: TermsRoute,
   AdminAdmissionsRoute: AdminAdmissionsRoute,
+  AdminAiReferencesRoute: AdminAiReferencesRoute,
+  AdminAppointmentPaymentsRoute: AdminAppointmentPaymentsRoute,
   AdminArticlesRoute: AdminArticlesRoute,
   AdminBillingRoute: AdminBillingRoute,
   AdminDoctorsRoute: AdminDoctorsRoute,
@@ -1903,6 +2131,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminEmrRoute: AdminEmrRoute,
   AdminErrorsRoute: AdminErrorsRoute,
   AdminInventoryRoute: AdminInventoryRoute,
+  AdminOnboardingRoute: AdminOnboardingRoute,
   AdminPatientsRoute: AdminPatientsRoute,
   AdminReviewsRoute: AdminReviewsRoute,
   AdminSeedDirectoryRoute: AdminSeedDirectoryRoute,
@@ -1919,9 +2148,12 @@ const rootRouteChildren: RootRouteChildren = {
   DSlugRoute: DSlugRouteWithChildren,
   DoctorIdRoute: DoctorIdRoute,
   DoctorFeedbackRoute: DoctorFeedbackRoute,
+  DoctorLabResultsRoute: DoctorLabResultsRoute,
   DoctorSoloRoute: DoctorSoloRoute,
   DoctorSponsorshipRoute: DoctorSponsorshipRoute,
   DoctorVerificationRoute: DoctorVerificationRoute,
+  LabDashboardRoute: LabDashboardRoute,
+  LabRegisterRoute: LabRegisterRoute,
   MyQueueAppointmentIdRoute: MyQueueAppointmentIdRoute,
   PharmacyDashboardRoute: PharmacyDashboardRoute,
   PharmacyRegisterRoute: PharmacyRegisterRoute,

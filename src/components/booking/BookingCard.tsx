@@ -50,6 +50,27 @@ type ClinicOption = {
 
 type AppointmentType = "clinic" | "online";
 
+type DaySlot = {
+  slot_time: string; // HH:MM:SS
+  slot_start_at: string; // ISO timestamp
+  is_taken: boolean;
+  is_past: boolean;
+};
+
+// Next `count` calendar days (local) as YYYY-MM-DD.
+function nextDays(count: number): string[] {
+  const out: string[] = [];
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  for (let i = 0; i < count; i++) {
+    const x = new Date(base.getTime() + i * 86400000);
+    out.push(
+      `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`,
+    );
+  }
+  return out;
+}
+
 const ARABIC_WEEKDAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 function formatArabicDate(iso: string): string {
@@ -107,6 +128,12 @@ export function BookingCard({
   const [selectedClinicId, setSelectedClinicId] = useState<string | null>(null);
   const [showClinicList, setShowClinicList] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const days = useMemo(() => nextDays(14), []);
+  const [selectedDate, setSelectedDate] = useState<string>(() => nextDays(1)[0]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  // Clinic visits let the patient choose to pay online or at the clinic; online
+  // consults are always paid online.
+  const [payMethod, setPayMethod] = useState<"clinic" | "online">("clinic");
 
   // Coupon state
   const [couponInput, setCouponInput] = useState("");
@@ -134,23 +161,31 @@ export function BookingCard({
     },
   });
 
-  // === Unified queue slot lookup — runs for both clinic and online ===
-  const { data: slot, isLoading: slotLoading, refetch: refetchSlot } = useQuery({
-    queryKey: ["next-slot", doctorId, selectedClinicId, appointmentType],
-    // For online we never filter by a specific clinic — find any available slot.
-    enabled: appointmentType === "clinic" || (isVerified && telemedicineEnabled),
+  // Availability source clinic: the selected clinic (or the doctor's first).
+  const effectiveClinicId = selectedClinicId ?? clinics?.[0]?.id ?? null;
+
+  // === Fixed time-slot grid for the chosen clinic + date ===
+  const { data: daySlots = [], isLoading: slotsLoading, refetch: refetchSlots } = useQuery({
+    queryKey: ["day-slots", doctorId, effectiveClinicId, selectedDate],
+    enabled:
+      Boolean(effectiveClinicId) &&
+      (appointmentType === "clinic" || (isVerified && telemedicineEnabled)),
     refetchInterval: 30_000,
-    queryFn: async (): Promise<AvailableSlot | null> => {
-      const { data, error } = await supabase.rpc("get_next_available_slot", {
+    queryFn: async (): Promise<DaySlot[]> => {
+      const { data, error } = await supabase.rpc("get_clinic_day_slots", {
         p_doctor_id: doctorId,
-        p_clinic_id: appointmentType === "clinic" ? (selectedClinicId ?? undefined) : undefined,
-        p_days_ahead: 30,
+        p_clinic_id: effectiveClinicId,
+        p_date: selectedDate,
       });
       if (error) throw error;
-      const rows = (data ?? []) as AvailableSlot[];
-      return rows[0] ?? null;
+      return (data ?? []) as DaySlot[];
     },
   });
+
+  // Drop a stale slot pick when the date/clinic/type changes.
+  useEffect(() => {
+    setSelectedSlot(null);
+  }, [selectedDate, effectiveClinicId, appointmentType]);
 
   useEffect(() => {
     if (clinics && clinics.length === 1 && !selectedClinicId) {
@@ -164,10 +199,10 @@ export function BookingCard({
   // Predicted visit type + fee for the pre-payment label (consultation vs first
   // visit). createAppointmentCheckout recomputes the fee authoritatively.
   const { data: pricing } = useQuery({
-    queryKey: ["visit-pricing", doctorId, user?.id, slot?.schedule_date],
-    enabled: Boolean(user && requiresPayment && slot?.schedule_date),
+    queryKey: ["visit-pricing", doctorId, user?.id, selectedDate],
+    enabled: Boolean(user && requiresPayment && selectedDate),
     queryFn: () =>
-      previewVisitPricing({ data: { doctorId, scheduledAt: slot?.schedule_date } }),
+      previewVisitPricing({ data: { doctorId, scheduledAt: selectedDate } }),
   });
 
   const bookMutation = useMutation({
@@ -177,7 +212,7 @@ export function BookingCard({
       recording_consent: boolean;
     }) => {
       if (!user || !profile) throw new Error("Login required");
-      if (!slot) throw new Error("لا توجد مواعيد متاحة");
+      if (!selectedSlot || !effectiveClinicId) throw new Error("اختر وقتًا متاحًا أولاً");
 
       if (appointmentType === "online") {
         if (!isVerified || !telemedicineEnabled) {
@@ -188,17 +223,18 @@ export function BookingCard({
         }
       }
 
-      // Both clinic and online go through the identical queue booking RPC.
-      const { data, error } = await supabase.rpc("book_queue_appointment", {
+      // Book the exact chosen time slot (clinic + online share the RPC).
+      const { data, error } = await supabase.rpc("book_slot_appointment", {
         p_doctor_id: doctorId,
-        p_clinic_id: slot.clinic_id,
-        p_appointment_date: slot.schedule_date,
+        p_clinic_id: effectiveClinicId,
+        p_appointment_date: selectedDate,
+        p_slot_time: selectedSlot,
         p_appointment_type: appointmentType,
         p_notes: notes || undefined,
       });
       if (error) throw error;
 
-      const result = data as { id: string; queue_number: number };
+      const result = data as { id: string };
 
       // Non-blocking: classify the visit (consultation vs initial checkup) and
       // notify the doctor on a follow-up. Wrapped so classification failures can
@@ -236,49 +272,31 @@ export function BookingCard({
       setNotes("");
       setIsEmergency(false);
       setConsentOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["next-slot", doctorId] });
+      setSelectedSlot(null);
+      queryClient.invalidateQueries({ queryKey: ["day-slots", doctorId] });
       queryClient.invalidateQueries({ queryKey: ["my-appointments"] });
 
-      if (requiresPayment && result?.id) {
-        try {
-          setIsRedirecting(true);
-          toast.success(t("Reserved. Redirecting to payment…", "تم الحجز. جارٍ تحويلك للدفع…"));
-          const returnUrl = `${window.location.origin}/my-queue/${result.id}?paid=1`;
-          const url = await createAppointmentCheckout({
-            data: {
-              appointmentId: result.id,
-              amount: Math.round(consultationFee * 100),
-              currency: currency.toLowerCase(),
-              doctorName,
-              returnUrl,
-              cancelUrl: window.location.href,
-              customerEmail: user?.email ?? undefined,
-              userId: user?.id,
-              ...(coupon?.valid && coupon.code ? { couponCode: coupon.code } : {}),
-              appointmentType: appointmentType === "online" ? "video" : "in_person",
-              doctorId,
-            },
-          });
-          if (url) {
-            window.location.href = url;
-            return;
-          }
-        } catch (e) {
-          console.error("checkout error", e);
-          toast.error(
-            t(
-              "Could not start payment. Try the manual payment options at /pay.",
-              "تعذّر بدء الدفع. جرّب خيارات الدفع اليدوي على /pay.",
-            ),
-          );
-        } finally {
-          setIsRedirecting(false);
-        }
+      // Online consults are always paid online; clinic visits only when the
+      // patient chose "pay online". Otherwise it's a confirmed booking to be
+      // paid at the clinic (or free).
+      const shouldCheckout =
+        requiresPayment && (appointmentType === "online" || payMethod === "online");
+
+      if (shouldCheckout && result?.id) {
+        // Local manual transfer (InstaPay / Vodafone Cash) — no card gateway
+        // needed. The /pay page shows the receiving details + amount + reference;
+        // the doctor confirms the transfer.
+        setIsRedirecting(true);
+        toast.success(t("Booked. Complete the transfer to confirm.", "تم الحجز. أكمل التحويل لتأكيد الدفع."));
+        window.location.href = `/pay?amount=${Math.round(consultationFee)}&ref=${result.id}`;
+        return;
+      } else if (requiresPayment) {
+        toast.success(t("Booked — pay at the clinic", "تم الحجز — الدفع في العيادة"));
       } else {
         toast.success(t("Appointment booked", "تم الحجز بنجاح"));
       }
 
-      navigate({ to: "/my-queue/$appointmentId", params: { appointmentId: result.id } });
+      navigate({ to: "/appointments" });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -296,16 +314,18 @@ export function BookingCard({
     [clinics, selectedClinicId],
   );
 
-  const waitMinutes = slot ? slot.booked_count * slot.avg_minutes : 0;
-
   const isBookDisabled =
     bookMutation.isPending ||
     isRedirecting ||
-    !slot ||
+    !selectedSlot ||
     (appointmentType === "online" && (!isVerified || !telemedicineEnabled));
 
+  // Will this booking redirect to online payment (vs. confirm to pay at clinic)?
+  const willCheckout =
+    requiresPayment && (appointmentType === "online" || payMethod === "online");
+
   return (
-    <div className="bg-card border border-border rounded-2xl p-6 sticky top-4">
+    <div className="bg-card border border-border rounded-2xl p-6 lg:sticky lg:top-4">
       <div className="text-center pb-4 border-b border-border">
         <p className="text-sm text-muted-foreground">{t("Consultation fee", "رسوم الكشف")}</p>
         <p className="text-2xl font-bold text-primary mt-1">
@@ -446,103 +466,112 @@ export function BookingCard({
             </div>
           )}
 
-          {/* ── Unified slot card ── */}
-          {slotLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          {/* ── Day strip ── */}
+          <div>
+            <label className="text-sm font-medium text-foreground mb-1.5 block">
+              {t("Choose a day", "اختر اليوم")}
+            </label>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {days.map((d) => {
+                const active = d === selectedDate;
+                const dd = new Date(d + "T00:00:00");
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setSelectedDate(d)}
+                    className={`shrink-0 rounded-lg border px-3 py-1.5 text-center transition ${
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <div className="text-[11px]">{ARABIC_WEEKDAYS[dd.getDay()]}</div>
+                    <div className="text-sm font-bold">
+                      {dd.getDate()}/{dd.getMonth() + 1}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-          ) : !slot ? (
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
-              <AlertCircle className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                {clinics && clinics.length === 0
-                  ? t(
-                      "No clinic schedule configured yet.",
-                      "لم يحدد الطبيب جدول عياداته بعد، تواصل معه مباشرة.",
-                    )
-                  : t(
-                      "No available slots in the next 30 days.",
-                      "لا توجد مواعيد متاحة خلال 30 يوماً.",
-                    )}
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2 text-sm">
-              {/* Visual badge — the only UI difference between clinic and online */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-semibold text-primary">
-                  {appointmentType === "clinic" ? (
-                    <>
-                      <Building2 className="h-4 w-4" />
-                      <span>{slot.clinic_name}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Video className="h-4 w-4" />
-                      <span>{t("Online consultation", "كشف أونلاين")}</span>
-                    </>
-                  )}
-                </div>
-                <span
-                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                    appointmentType === "online"
-                      ? "bg-violet-100 text-violet-700"
-                      : "bg-primary/10 text-primary"
-                  }`}
-                >
-                  {appointmentType === "online"
-                    ? t("Online", "أونلاين")
-                    : t("Clinic", "عيادة")}
-                </span>
-              </div>
+          </div>
 
-              {appointmentType === "clinic" && slot.clinic_city && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <MapPin className="h-3.5 w-3.5" />
-                  <span>{slot.clinic_city}</span>
-                </div>
-              )}
-
-              <div className="flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-primary" />
-                <span className="font-medium">{formatArabicDate(slot.schedule_date)}</span>
-                <span className="text-muted-foreground">
-                  ({formatTime(slot.start_time)} - {formatTime(slot.end_time)})
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-primary/20">
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground">دورك</div>
-                  <div className="text-lg font-bold text-primary">
-                    #{slot.queue_position_if_book_now}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground">انتظار تقريبي</div>
-                  <div className="text-lg font-bold text-foreground flex items-center justify-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {formatWait(waitMinutes)}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground">متبقي</div>
-                  <div className="text-lg font-bold text-emerald-600 flex items-center justify-center gap-1">
-                    <Users className="h-4 w-4" />
-                    {slot.slots_remaining}
-                  </div>
-                </div>
-              </div>
-
+          {/* ── Time-slot grid (taken/past shown locked) ── */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-sm font-medium text-foreground">
+                {t("Choose a time", "اختر الوقت")}
+              </label>
               <button
                 type="button"
-                onClick={() => refetchSlot()}
-                className="w-full text-xs text-muted-foreground hover:text-primary pt-1"
+                onClick={() => refetchSlots()}
+                className="text-xs text-muted-foreground hover:text-primary"
               >
-                {t("Refresh", "تحديث الحالة")}
+                {t("Refresh", "تحديث")}
               </button>
             </div>
-          )}
+            {slotsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : daySlots.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
+                <AlertCircle className="mx-auto mb-1 h-5 w-5 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  {clinics && clinics.length === 0
+                    ? t(
+                        "No clinic schedule configured yet.",
+                        "لم يحدد الطبيب جدول عياداته بعد، تواصل معه مباشرة.",
+                      )
+                    : t("No times available on this day.", "لا مواعيد متاحة في هذا اليوم.")}
+                </p>
+                {!(clinics && clinics.length === 0) && (
+                  <p className="mt-1 text-xs font-medium text-primary">
+                    {t("Pick another day from the strip above ↑", "اختر يومًا آخر من الشريط بالأعلى ↑")}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {daySlots.map((s) => {
+                    const disabled = s.is_taken || s.is_past;
+                    const selected = selectedSlot === s.slot_time;
+                    return (
+                      <button
+                        key={s.slot_time}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setSelectedSlot(s.slot_time)}
+                        title={
+                          s.is_taken
+                            ? t("Booked", "محجوز")
+                            : s.is_past
+                              ? t("Passed", "انتهى")
+                              : undefined
+                        }
+                        className={`rounded-lg border px-2 py-2 text-sm font-medium transition ${
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : disabled
+                              ? "cursor-not-allowed border-border bg-muted/50 text-muted-foreground/50 line-through"
+                              : "border-border bg-background text-foreground hover:border-primary hover:bg-primary/5"
+                        }`}
+                      >
+                        {formatTime(s.slot_time)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  {t(
+                    "Greyed-out times are already booked or have passed.",
+                    "الأوقات الرمادية محجوزة أو انتهى وقتها.",
+                  )}
+                </p>
+              </>
+            )}
+          </div>
 
           {/* ── Notes ── */}
           <div>
@@ -671,6 +700,39 @@ export function BookingCard({
             </div>
           )}
 
+          {/* ── Payment method — clinic visits let the patient choose ── */}
+          {requiresPayment && appointmentType === "clinic" && selectedSlot && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                {t("Payment method", "طريقة الدفع")}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayMethod("clinic")}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    payMethod === "clinic"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {t("Pay at clinic", "الدفع في العيادة")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayMethod("online")}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    payMethod === "online"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {t("Transfer (InstaPay / wallet)", "تحويل (InstaPay/محفظة)")}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── Book button ── */}
           <button
             onClick={handleBook}
@@ -684,12 +746,12 @@ export function BookingCard({
                   ? t("Redirecting…", "جارٍ التحويل…")
                   : t("Booking…", "جارٍ الحجز…")}
               </span>
-            ) : slot ? (
-              requiresPayment
-                ? t("Reserve & pay", `احجز وادفع (دورك #${slot.queue_position_if_book_now})`)
-                : t("Reserve my spot", `احجز دوري (#${slot.queue_position_if_book_now})`)
+            ) : selectedSlot ? (
+              willCheckout
+                ? t("Reserve & pay", `احجز وادفع — ${formatTime(selectedSlot)}`)
+                : t("Reserve my spot", `احجز موعدي — ${formatTime(selectedSlot)}`)
             ) : (
-              t("Book appointment", "احجز موعداً")
+              t("Pick a time above", "اختر وقتًا بالأعلى")
             )}
           </button>
 

@@ -1,9 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { HeartPulse, Menu, X, Globe, Check, ChevronDown, User, LogOut, Calendar, LayoutDashboard, ShieldCheck, BadgeCheck, Receipt } from "lucide-react";
+import { Menu, X, Globe, Check, ChevronDown, User, LogOut, Calendar, LayoutDashboard, ShieldCheck, BadgeCheck, Receipt, FlaskConical } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLanguage, LANGUAGES, type Language } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
+import { siteConfig } from "@/lib/seo";
 
 const navLinks = {
   en: [
@@ -39,13 +40,15 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2" aria-label="طبيبي - Tabibi">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-primary/75 shadow-md shadow-primary/25 ring-1 ring-primary/10">
-            <HeartPulse className="h-[22px] w-[22px] text-white" strokeWidth={2.4} />
-          </div>
+        <Link to="/" className="flex items-center gap-2" aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}>
+          <img
+            src="/logo-mark.png"
+            alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
+            className="h-14 w-auto object-contain"
+          />
           <div className="flex flex-col leading-none">
             <span className="text-xl font-bold text-foreground">
-              {language === "ar" ? "طبيبي" : "Tabibi"}
+              {language === "ar" ? siteConfig.brand.ar : siteConfig.brand.en}
             </span>
             <span className="mt-0.5 hidden text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:inline">
               {language === "ar" ? "صحتك بين يديك" : "Your Health, Connected"}
@@ -262,7 +265,7 @@ function UserMenu({
   t,
 }: {
   user: { email?: string } | null;
-  role: "super_admin" | "admin" | "doctor" | "patient" | "pharmacy" | null;
+  role: "super_admin" | "admin" | "doctor" | "patient" | "pharmacy" | "lab" | null;
   signOut: () => Promise<void>;
   t: (en: string, ar: string) => string;
 }) {
@@ -309,7 +312,25 @@ function UserMenu({
                 <BadgeCheck className="h-4 w-4" />
                 {t("Verification", "التوثيق")}
               </Link>
+              <Link
+                to="/doctor/lab-results"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+              >
+                <FlaskConical className="h-4 w-4" />
+                {t("Shared results", "النتائج المُشاركة")}
+              </Link>
             </>
+          )}
+          {role === "lab" && (
+            <Link
+              to="/lab/dashboard"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+            >
+              <FlaskConical className="h-4 w-4" />
+              {t("Lab Dashboard", "لوحة المعمل")}
+            </Link>
           )}
           {(role === "admin" || role === "super_admin") && (
             <Link
@@ -347,6 +368,16 @@ function UserMenu({
             <Calendar className="h-4 w-4" />
             {t("My Appointments", "مواعيدي")}
           </Link>
+          {(role === "patient" || role === null) && (
+            <Link
+              to="/lab-orders"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+            >
+              <FlaskConical className="h-4 w-4" />
+              {t("My tests & imaging", "تحاليلي وأشعتي")}
+            </Link>
+          )}
           <Link
             to="/billing"
             onClick={() => setOpen(false)}

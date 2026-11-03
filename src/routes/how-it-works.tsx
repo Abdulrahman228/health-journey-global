@@ -19,11 +19,11 @@ import {
 export const Route = createFileRoute("/how-it-works")({
   head: () => ({
     meta: [
-      { title: "كيف يعمل طبيبي — How It Works | Tabibi" },
+      { title: "كيف تعمل منصة طبانا — How It Works | Tebana" },
       {
         name: "description",
         content:
-          "تعرّف على طريقة عمل منصة طبيبي للمرضى والأطباء — من اختيار الطبيب وحتى الكشف الحضوري أو الاستشارة أونلاين والروشتة الإلكترونية.",
+          "تعرّف على طريقة عمل منصة طبانا للمرضى والأطباء — من اختيار الطبيب وحتى الكشف الحضوري أو الاستشارة أونلاين والروشتة الإلكترونية.",
       },
     ],
   }),
@@ -133,7 +133,7 @@ function HowItWorksPage() {
         <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
           <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             <Stethoscope className="h-3.5 w-3.5" />
-            {t("How Tabibi Works", "كيف يعمل طبيبي")}
+            {t("How Tebana Works", "كيف تعمل منصة طبانا")}
           </span>
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
             {t(
@@ -143,8 +143,8 @@ function HowItWorksPage() {
           </h1>
           <p className="mt-4 text-base text-muted-foreground sm:text-lg">
             {t(
-              "From booking a verified doctor to receiving an e-prescription at home — Tabibi makes every step seamless.",
-              "من حجز طبيب موثّق إلى استلام روشتة إلكترونية في البيت — منصة طبيبي تخلّي كل خطوة سلسة.",
+              "From booking a verified doctor to receiving an e-prescription at home — Tebana makes every step seamless.",
+              "من حجز طبيب موثّق إلى استلام روشتة إلكترونية في البيت — منصة طبانا تخلّي كل خطوة سلسة.",
             )}
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -272,7 +272,7 @@ function HowItWorksPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
-              {t("Why trust Tabibi?", "ليه طبيبي؟")}
+              {t("Why trust Tebana?", "ليه طبانا؟")}
             </h2>
           </div>
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -332,8 +332,8 @@ function HowItWorksPage() {
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
             {t(
-              "Tabibi is HIPAA-aligned and GDPR-compliant.",
-              "منصة طبيبي ملتزمة بمعايير HIPAA وGDPR.",
+              "Tebana is HIPAA-aligned and GDPR-compliant.",
+              "منصة طبانا ملتزمة بمعايير HIPAA وGDPR.",
             )}
           </p>
         </div>

@@ -50,8 +50,8 @@ import { adminGrantSubscription } from "@/lib/admin/financial";
 export const Route = createFileRoute("/admin/doctors")({
   head: () => ({
     meta: [
-      { title: "إدارة الأطباء — لوحة الأدمن | طبيبي" },
-      { name: "description", content: "توثيق وتحرير ملفات الأطباء على طبيبي." },
+      { title: "إدارة الأطباء — لوحة الأدمن | طبانا" },
+      { name: "description", content: "توثيق وتحرير ملفات الأطباء على طبانا." },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),

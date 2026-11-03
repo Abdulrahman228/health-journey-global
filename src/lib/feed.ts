@@ -96,8 +96,11 @@ export async function listPosts(filters: ListPostsFilters = {}): Promise<FeedPos
   const profileIds = Array.from(new Set(posts.map((p) => p.author_profile_id)));
 
   const [{ data: profiles }, { data: doctorRows }] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, avatar_url, city").in("id", profileIds),
-    supabase.from("doctor_details").select("profile_id, is_verified, specialty").in("profile_id", profileIds),
+    fetchAuthorCards(profileIds).then((rows) => ({ data: rows })),
+    supabase
+      .from("doctor_details")
+      .select("profile_id, is_verified, specialty")
+      .in("profile_id", profileIds),
   ]);
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
@@ -107,7 +110,7 @@ export async function listPosts(filters: ListPostsFilters = {}): Promise<FeedPos
     const dd = doctorMap.get(p.author_profile_id);
     return {
       ...p,
-      drug_info: Array.isArray(p.drug_info) ? p.drug_info[0] ?? null : p.drug_info,
+      drug_info: Array.isArray(p.drug_info) ? (p.drug_info[0] ?? null) : p.drug_info,
       author: profileMap.get(p.author_profile_id) ?? undefined,
       is_author_verified_doctor: dd?.is_verified ?? false,
       author_specialty: dd?.specialty ?? null,
@@ -115,7 +118,10 @@ export async function listPosts(filters: ListPostsFilters = {}): Promise<FeedPos
   });
 }
 
-export async function reverseGeocodeCity(lat: number, lng: number): Promise<{ city: string | null; country: string | null }> {
+export async function reverseGeocodeCity(
+  lat: number,
+  lng: number,
+): Promise<{ city: string | null; country: string | null }> {
   if (typeof window === "undefined" || !window.google?.maps) return { city: null, country: null };
   const geocoder = new window.google.maps.Geocoder();
   return new Promise((resolve) => {
@@ -128,7 +134,11 @@ export async function reverseGeocodeCity(lat: number, lng: number): Promise<{ ci
       let country: string | null = null;
       for (const r of results) {
         for (const c of r.address_components) {
-          if (!city && (c.types.includes("locality") || c.types.includes("administrative_area_level_2"))) city = c.long_name;
+          if (
+            !city &&
+            (c.types.includes("locality") || c.types.includes("administrative_area_level_2"))
+          )
+            city = c.long_name;
           if (!country && c.types.includes("country")) country = c.long_name;
         }
         if (city && country) break;
@@ -149,13 +159,17 @@ export async function getPost(id: string): Promise<FeedPost | null> {
   const post = data as unknown as FeedPost;
 
   const [{ data: profile }, { data: dd }] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, avatar_url, city").eq("id", post.author_profile_id).maybeSingle(),
-    supabase.from("doctor_details").select("is_verified, specialty").eq("profile_id", post.author_profile_id).maybeSingle(),
+    fetchAuthorCards([post.author_profile_id]).then((rows) => ({ data: rows[0] ?? null })),
+    supabase
+      .from("doctor_details")
+      .select("is_verified, specialty")
+      .eq("profile_id", post.author_profile_id)
+      .maybeSingle(),
   ]);
 
   return {
     ...post,
-    drug_info: Array.isArray(post.drug_info) ? post.drug_info[0] ?? null : post.drug_info,
+    drug_info: Array.isArray(post.drug_info) ? (post.drug_info[0] ?? null) : post.drug_info,
     author: profile ?? undefined,
     is_author_verified_doctor: dd?.is_verified ?? false,
     author_specialty: dd?.specialty ?? null,
@@ -174,11 +188,8 @@ export async function listReplies(postId: string): Promise<FeedReply[]> {
   if (replies.length === 0) return [];
 
   const profileIds = Array.from(new Set(replies.map((r) => r.author_profile_id)));
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, full_name, avatar_url")
-    .in("id", profileIds);
-  const map = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const profiles = await fetchAuthorCards(profileIds);
+  const map = new Map(profiles.map((p) => [p.id, p]));
 
   return replies.map((r) => ({ ...r, author: map.get(r.author_profile_id) ?? undefined }));
 }
@@ -301,4 +312,31 @@ export async function uploadPostImage(file: File, userId: string): Promise<strin
   if (error) throw error;
   const { data } = supabase.storage.from("post-media").getPublicUrl(path);
   return data.publicUrl;
+}
+
+// ---------------------------------------------------------------------------
+// Author cards (2026-11-02 security hardening)
+// Patient rows in `profiles` are no longer readable by other users, so post /
+// reply author names come from the `public_profile_cards` RPC, which returns
+// name / avatar / city only — and only for actual post or reply authors.
+// ---------------------------------------------------------------------------
+type AuthorCard = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  city: string | null;
+};
+
+async function fetchAuthorCards(ids: string[]): Promise<AuthorCard[]> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (unique.length === 0) return [];
+  const { data, error } = await supabase.rpc(
+    "public_profile_cards" as never,
+    { p_ids: unique } as never,
+  );
+  if (error) {
+    console.warn("[feed] public_profile_cards failed:", error.message);
+    return [];
+  }
+  return (data as unknown as AuthorCard[] | null) ?? [];
 }

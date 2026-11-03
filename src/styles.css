@@ -51,6 +51,20 @@
   --color-teal-foreground: var(--teal-foreground);
   --color-sand: var(--sand);
   --color-sand-foreground: var(--sand-foreground);
+  /* Semantic status tokens (doctor-area redesign) */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
+  /* App canvas behind cards (slightly cooler than the page background) */
+  --color-surface: var(--surface);
+  /* Single Arabic-first UI family for the doctor system */
+  --font-app: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, sans-serif;
 }
 
 :root {
@@ -95,9 +109,29 @@
   --teal-foreground: oklch(1 0 0);
   --sand: oklch(0.98 0.01 250);
   --sand-foreground: oklch(0.32 0.1 255);
+  --surface: oklch(0.975 0.006 250);
+  --success: oklch(0.55 0.15 155);
+  --success-foreground: oklch(1 0 0);
+  --success-soft: oklch(0.955 0.045 155);
+  --warning: oklch(0.62 0.15 65);
+  --warning-foreground: oklch(1 0 0);
+  --warning-soft: oklch(0.965 0.05 85);
+  --info: oklch(0.58 0.14 235);
+  --info-foreground: oklch(1 0 0);
+  --info-soft: oklch(0.955 0.03 235);
 }
 
 .dark {
+  --surface: oklch(0.135 0.03 260);
+  --success: oklch(0.72 0.15 155);
+  --success-foreground: oklch(0.12 0.03 260);
+  --success-soft: oklch(0.24 0.05 155);
+  --warning: oklch(0.8 0.15 80);
+  --warning-foreground: oklch(0.15 0.04 80);
+  --warning-soft: oklch(0.27 0.06 80);
+  --info: oklch(0.74 0.12 235);
+  --info-foreground: oklch(0.12 0.03 260);
+  --info-soft: oklch(0.25 0.05 235);
   --background: oklch(0.12 0.03 260);
   --foreground: oklch(0.95 0.01 85);
   --card: oklch(0.18 0.03 260);
@@ -189,6 +223,28 @@
     letter-spacing: 0 !important;
     padding-top: 0.1em;
     text-wrap: balance;
+  }
+}
+
+/* ───────────── Doctor system (app shell) typography ─────────────
+ * One family (IBM Plex Sans Arabic) for Arabic + Latin + digits inside the
+ * doctor area, tabular numerals so KPIs / tables line up, calmer headings.
+ * Scoped to .doctor-shell so the public marketing pages keep their look. */
+@layer base {
+  .doctor-shell {
+    font-family: var(--font-app);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+  .doctor-shell h1,
+  .doctor-shell h2,
+  .doctor-shell h3 {
+    letter-spacing: 0;
+    text-wrap: balance;
+  }
+  .doctor-shell :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
   }
 }
 

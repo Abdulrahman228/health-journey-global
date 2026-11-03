@@ -23,7 +23,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/admin/withdrawals")({
   head: () => ({
     meta: [
-      { title: "إدارة السحوبات | الأدمن — طبيبي" },
+      { title: "إدارة السحوبات | الأدمن — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),

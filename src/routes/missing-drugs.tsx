@@ -14,7 +14,7 @@ export const Route = createFileRoute("/missing-drugs")({
   component: MissingDrugsPage,
   head: () => ({
     meta: [
-      { title: "Missing Medications | Tabibi | الأدوية الناقصة" },
+      { title: "Missing Medications | Tebana | الأدوية الناقصة" },
       {
         name: "description",
         content:

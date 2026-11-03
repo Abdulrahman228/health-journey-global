@@ -10,6 +10,7 @@ export interface SubscriptionRow {
   current_period_end: string | null;
   cancel_at_period_end: boolean | null;
   stripe_customer_id: string;
+  is_manual: boolean | null;
 }
 
 export function isSubscriptionActive(sub: SubscriptionRow | null): boolean {
@@ -37,7 +38,7 @@ export function useSubscription(userId: string | null | undefined) {
     const fetchSub = async () => {
       const { data } = await supabase
         .from("subscriptions")
-        .select("id,status,price_id,plan_code,current_period_end,cancel_at_period_end,stripe_customer_id")
+        .select("id,status,price_id,plan_code,current_period_end,cancel_at_period_end,stripe_customer_id,is_manual")
         .eq("user_id", userId)
         .eq("environment", env)
         .order("created_at", { ascending: false })

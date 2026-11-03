@@ -8,15 +8,15 @@ import { buildMeta, buildSeoLinks, siteConfig } from "@/lib/seo";
 export const Route = createFileRoute("/about")({
   head: () => ({
     meta: buildMeta({
-      title: "عن طبيبي Tabibi — منصة الصحة الرقمية الأولى للوطن العربي",
+      title: "عن طبانا Tebana — منصة الصحة الرقمية الأولى للوطن العربي",
       description:
-        "طبيبي (Tabibi) — تعرّف على رسالتنا ورؤيتنا لربط المرضى بأطباء موثوقين في الوطن العربي عبر استشارات فيديو آمنة وحجوزات فورية.",
+        "طبانا (Tebana) — تعرّف على رسالتنا ورؤيتنا لربط المرضى بأطباء موثوقين في الوطن العربي عبر استشارات فيديو آمنة وحجوزات فورية.",
       path: "/about",
       keywords: [
-        "عن طبيبي",
-        "About Tabibi",
-        "من نحن طبيبي",
-        "Tabibi mission",
+        "عن طبانا",
+        "About Tebana",
+        "من نحن طبانا",
+        "Tebana mission",
         ...siteConfig.brandAliases,
       ],
     }),
@@ -61,19 +61,19 @@ function AboutPage() {
           </p>
 
           <h2 className="mt-10 text-xl font-bold text-foreground sm:text-2xl">
-            {t("Why the name", "لماذا الاسم")}{" "}
-            <span lang="ar">«طبيبي»</span> /{" "}
-            <span lang="en">“Tabibi”</span>؟
+            {t("Who is behind", "من يقف خلف")}{" "}
+            <span lang="ar">«{siteConfig.brand.ar}»</span> /{" "}
+            <span lang="en">“{siteConfig.brand.en}”</span>؟
           </h2>
           <p className="mt-3 text-foreground/90">
             {t(
-              `The word "Tabibi" (طبيبي) means "my doctor" in Arabic — a personal, trusted relationship between every patient and their physician. Whether you search for us as `,
-              `كلمة «طبيبي» (Tabibi) تعني علاقة شخصية موثوقة بين كل مريض وطبيبه. سواء بحثت عنّا باسم `,
+              `${siteConfig.brand.en} (${siteConfig.brand.ar}) is operated by ${siteConfig.organization.legalNameEn} (${siteConfig.organization.legalName}), the company registered to run the platform. You may also know us by our former name, ${siteConfig.formerBrand.en} (${siteConfig.formerBrand.ar}). Whether you search for us as `,
+              `منصة ${siteConfig.brand.ar} (${siteConfig.brand.en}) تُديرها شركة ${siteConfig.organization.legalName}، الجهة المسجّلة لتشغيل المنصة. وقد تعرفنا أيضاً باسمنا السابق ${siteConfig.formerBrand.ar} (${siteConfig.formerBrand.en}). سواء بحثت عنّا باسم `,
             )}
-            <strong>طبيبي</strong>،{" "}
-            <strong>Tabibi</strong>،{" "}
-            <strong>Tabeebi</strong>،{" "}
-            {t("or", "أو")} <strong>تطبيق طبيبي</strong>،{" "}
+            <strong>{siteConfig.brand.ar}</strong>،{" "}
+            <strong>{siteConfig.brand.en}</strong>،{" "}
+            <strong>{siteConfig.formerBrand.ar}</strong>،{" "}
+            {t("or", "أو")} <strong>تطبيق {siteConfig.brand.ar}</strong>،{" "}
             {t(
               "you'll always land on the same trusted platform.",
               "ستصل دائماً للمنصة الموثوقة نفسها.",

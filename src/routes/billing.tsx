@@ -2,6 +2,8 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { PatientShell } from "@/components/patient/PatientNav";
+import { DoctorShell } from "@/components/doctor/DoctorNav";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -14,8 +16,8 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/billing")({
   head: () => ({
     meta: [
-      { title: "الفواتير والاشتراك — طبيبي" },
-      { name: "description", content: "إدارة اشتراكك، طريقة الدفع، وتنزيل فواتيرك على طبيبي." },
+      { title: "الفواتير والاشتراك — طبانا" },
+      { name: "description", content: "إدارة اشتراكك، طريقة الدفع، وتنزيل فواتيرك على طبانا." },
     ],
   }),
   component: BillingPage,
@@ -57,8 +59,11 @@ function statusBadge(status: string, t: (en: string, ar: string) => string) {
 
 function BillingPage() {
   const { t } = useLanguage();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { user, role, isLoading: authLoading, isAuthenticated } = useAuth();
   const { subscription, isActive, isLoading: subLoading } = useSubscription(user?.id);
+  // /billing is shared: doctors manage their Gold plan, patients see receipts.
+  // Show each role its own sidebar instead of always the patient one.
+  const Shell = role === "doctor" ? DoctorShell : PatientShell;
   const navigate = useNavigate();
   const openPortal = useServerFn(createPortalSession);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -76,7 +81,9 @@ function BillingPage() {
         .from("invoices")
         .select("id,number,amount_cents,currency,status,description,issued_at,paid_at,pdf_url")
         .eq("user_id", user!.id)
-        .eq("environment", env)
+        // Subscription invoices keep Stripe env separation; appointment
+        // receipts (appointment_id set) always show regardless of environment.
+        .or(`environment.eq.${env},appointment_id.not.is.null`)
         .order("issued_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -112,8 +119,31 @@ function BillingPage() {
     ? new Date(subscription.current_period_end).toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" })
     : null;
 
+  // Manual grants — admin "Grant Gold" (stripe_customer_id "comp") or receipt
+  // approval (prefix "manual_") — carry is_manual = true. They have no Stripe
+  // portal and may be lifetime (current_period_end = null), so the Stripe
+  // "Manage" button must NOT show for them (it silently fails).
+  const isManual =
+    subscription?.is_manual === true ||
+    subscription?.stripe_customer_id === "comp" ||
+    (subscription?.stripe_customer_id?.startsWith("manual_") ?? false);
+  const isLifetime = isActive && !subscription?.current_period_end;
+  const planLabel =
+    subscription?.plan_code === "doctor_gold_yearly"
+      ? t("Gold (Yearly)", "الخطة الذهبية — سنوي")
+      : subscription?.plan_code === "doctor_gold_monthly"
+      ? t("Gold", "الخطة الذهبية")
+      : subscription?.plan_code === "doctor_pro_plus_monthly"
+      ? t("Doctor Pro+", "طبيب برو+")
+      : subscription?.plan_code === "doctor_pro_monthly"
+      ? t("Doctor Pro", "طبيب برو")
+      : isActive
+      ? t("Gold", "الخطة الذهبية")
+      : t("Free plan", "الخطة المجانية");
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10">
+    <Shell>
+      <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground">{t("Billing & Subscription", "الفواتير والاشتراك")}</h1>
         <p className="mt-2 text-muted-foreground">
@@ -129,19 +159,15 @@ function BillingPage() {
               {isActive ? <CheckCircle2 className="h-6 w-6" /> : <AlertCircle className="h-6 w-6" />}
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                {subscription?.plan_code === "doctor_pro_plus_monthly"
-                  ? t("Doctor Pro+", "طبيب برو+")
-                  : subscription?.plan_code === "doctor_pro_monthly"
-                  ? t("Doctor Pro", "طبيب برو")
-                  : t("Free plan", "الخطة المجانية")}
-              </h2>
+              <h2 className="text-lg font-semibold text-foreground">{planLabel}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {isActive
-                  ? subscription?.cancel_at_period_end
-                    ? t(`Cancels on ${periodEnd}`, `يُلغى في ${periodEnd}`)
-                    : t(`Renews on ${periodEnd}`, `يتجدد في ${periodEnd}`)
-                  : t("No active subscription.", "لا يوجد اشتراك مفعّل.")}
+                {!isActive
+                  ? t("No active subscription.", "لا يوجد اشتراك مفعّل.")
+                  : isLifetime
+                  ? t("Lifetime access — never expires.", "اشتراك دائم — مدى الحياة، لا ينتهي.")
+                  : subscription?.cancel_at_period_end
+                  ? t(`Cancels on ${periodEnd}`, `يُلغى في ${periodEnd}`)
+                  : t(`Renews on ${periodEnd}`, `يتجدد في ${periodEnd}`)}
               </p>
               {subscription?.status === "past_due" && (
                 <p className="mt-1 text-sm text-amber-600">
@@ -151,7 +177,12 @@ function BillingPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {subscription ? (
+            {isManual ? (
+              <span className="inline-flex items-center gap-2 rounded-lg bg-teal/10 px-4 py-2 text-sm font-medium text-teal">
+                <CheckCircle2 className="h-4 w-4" />
+                {t("Activated by Tebana admin", "مُفعّل من إدارة طبانا")}
+              </span>
+            ) : subscription ? (
               <button
                 onClick={handleManage}
                 disabled={portalLoading}
@@ -240,5 +271,6 @@ function BillingPage() {
         </p>
       </div>
     </div>
+    </Shell>
   );
 }

@@ -1,0 +1,11 @@
+-- ============================================================================
+-- RBAC Phase 2 — step A: add the 'lab' role (lab / radiology center).
+--
+-- MUST run as its own migration BEFORE 20260808210000_lab_orders.sql. Postgres
+-- forbids USING a new enum value in the same transaction that adds it, so this
+-- is isolated. The lab's actual authority in Phase 2 is gated on OWNING a
+-- lab_facilities row (not on has_role), exactly like pharmacy chains — so the
+-- next migration never references this value. This value is used only for
+-- app routing (which dashboard to show) and is assigned at registration time.
+-- ============================================================================
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'lab';

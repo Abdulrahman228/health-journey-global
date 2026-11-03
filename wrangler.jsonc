@@ -6,7 +6,11 @@
   "main": "src/server.ts",
   "routes": [
     { "pattern": "mytabibi.com/*", "zone_name": "mytabibi.com" },
-    { "pattern": "www.mytabibi.com/*", "zone_name": "mytabibi.com" }
+    { "pattern": "www.mytabibi.com/*", "zone_name": "mytabibi.com" },
+    // White-label doctor subdomains (Solo Mode): {slug}.mytabibi.com.
+    // Requires a PROXIED DNS record so traffic reaches this Worker — a wildcard
+    // `*` record (Cloudflare Enterprise) or a per-doctor proxied CNAME on any plan.
+    { "pattern": "*.mytabibi.com/*", "zone_name": "mytabibi.com" }
   ],
   // Public values only. Secrets are managed with `wrangler secret put <NAME>`.
   // Required secrets:

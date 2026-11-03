@@ -10,7 +10,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Star, BadgeCheck, MapPin, ArrowRight, Video, Stethoscope } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
-import { buildMeta, buildSeoLinks, canonicalUrl } from "@/lib/seo";
+import { buildMeta, buildSeoLinks, canonicalUrl, siteConfig } from "@/lib/seo";
 import { breadcrumbSchema, faqSchema, itemListSchema, jsonLdString } from "@/lib/schema";
 import {
   loadSpecialtyCityForSeo,
@@ -19,17 +19,17 @@ import {
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 function buildTitle(d: SpecialtyCitySeoData | null, slug: string, citySlug: string): string {
-  if (!d) return `أفضل أطباء ${slug} في ${citySlug} | طبيبي`;
+  if (!d) return `أفضل أطباء ${slug} في ${citySlug} | طبانا`;
   const count = d.doctorCount > 0 ? `+${d.doctorCount}` : "نخبة من";
-  return `أفضل أطباء ${d.specialty.nameAr} في ${d.city.nameAr} ${count} طبيب | طبيبي`;
+  return `أفضل أطباء ${d.specialty.nameAr} في ${d.city.nameAr} ${count} طبيب | طبانا`;
 }
 
 function buildDescription(d: SpecialtyCitySeoData | null): string {
   if (!d) {
-    return "تصفّح أفضل الأطباء حسب التخصص والمدينة واحجز موعدك أونلاين على منصة طبيبي.";
+    return "تصفّح أفضل الأطباء حسب التخصص والمدينة واحجز موعدك أونلاين على منصة طبانا.";
   }
   const cnt = d.doctorCount > 0 ? `${d.doctorCount}+ طبيب موثّق` : "أطباء موثّقون";
-  return `${cnt} في تخصص ${d.specialty.nameAr} داخل ${d.city.nameAr}. قارن التقييمات والأسعار، احجز حضورياً أو فيديو في دقائق على طبيبي — تأكيد فوري.`;
+  return `${cnt} في تخصص ${d.specialty.nameAr} داخل ${d.city.nameAr}. قارن التقييمات والأسعار، احجز حضورياً أو فيديو في دقائق على طبانا — تأكيد فوري.`;
 }
 
 function buildFaq(d: SpecialtyCitySeoData) {
@@ -40,14 +40,14 @@ function buildFaq(d: SpecialtyCitySeoData) {
     },
     {
       question: `هل أستطيع حجز موعد فيديو مع طبيب ${d.specialty.nameAr} في ${d.city.nameAr}؟`,
-      answer: `نعم — كثير من أطباء ${d.specialty.nameAr} في ${d.city.nameAr} على طبيبي يدعمون استشارات الفيديو المشفّرة. ابحث عن علامة "كشف أون لاين" بجانب اسم الطبيب.`,
+      answer: `نعم — كثير من أطباء ${d.specialty.nameAr} في ${d.city.nameAr} على طبانا يدعمون استشارات الفيديو المشفّرة. ابحث عن علامة "كشف أون لاين" بجانب اسم الطبيب.`,
     },
     {
       question: `كيف أحجز موعد طبيب ${d.specialty.nameAr} في ${d.city.nameAr} الآن؟`,
       answer: `اختر طبيب من القائمة، اطّلع على تقييمات المرضى وسعر الكشف، حدد الموعد المناسب من جدول العيادة، وأكد الحجز. ستصلك رسالة تأكيد فوراً.`,
     },
     {
-      question: `هل أطباء ${d.specialty.nameAr} على طبيبي مرخّصون رسمياً؟`,
+      question: `هل أطباء ${d.specialty.nameAr} على طبانا مرخّصون رسمياً؟`,
       answer: `نعم — كل طبيب يمر بمرحلة تحقق صارمة من الترخيص والشهادات قبل عرض ملفه. تظهر شارة "موثّق" بجانب اسم الطبيب المعتمد.`,
     },
   ];
@@ -113,7 +113,7 @@ export const Route = createFileRoute("/specialty/$slug/$city")({
               `${d.specialty.nameEn} ${d.city.nameEn}`,
               `best ${d.specialty.nameEn} doctor ${d.city.nameEn}`,
               "حجز موعد طبيب",
-              "طبيبي",
+              siteConfig.brand.ar,
             ]
           : undefined,
       }),
@@ -169,8 +169,8 @@ function SpecialtyCityPage() {
           </div>
           <p className="mt-6 max-w-3xl text-base leading-relaxed text-muted-foreground">
             {t(
-              `Find and book the best ${data.specialty.nameEn} doctors in ${data.city.nameEn} on Tabibi. Compare verified profiles, real patient ratings, consultation fees, and availability — then book in-person or video in minutes.`,
-              `ابحث واحجز مع أفضل أطباء ${data.specialty.nameAr} في ${data.city.nameAr} على منصة طبيبي. قارن بين الملفات الموثّقة وتقييمات المرضى الحقيقية وأسعار الكشف وجدول المواعيد، ثم احجز حضورياً أو عبر فيديو في دقائق.`,
+              `Find and book the best ${data.specialty.nameEn} doctors in ${data.city.nameEn} on Tebana. Compare verified profiles, real patient ratings, consultation fees, and availability — then book in-person or video in minutes.`,
+              `ابحث واحجز مع أفضل أطباء ${data.specialty.nameAr} في ${data.city.nameAr} على منصة طبانا. قارن بين الملفات الموثّقة وتقييمات المرضى الحقيقية وأسعار الكشف وجدول المواعيد، ثم احجز حضورياً أو عبر فيديو في دقائق.`,
             )}
           </p>
         </header>

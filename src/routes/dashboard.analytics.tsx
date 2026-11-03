@@ -19,6 +19,7 @@ import {
   getDoctorAnalytics,
   type DoctorAnalytics,
 } from "@/lib/analytics.functions";
+import { RevenueAnalytics } from "@/components/dashboard/RevenueAnalytics";
 import {
   Activity,
   ArrowUpRight,
@@ -51,7 +52,7 @@ import {
 export const Route = createFileRoute("/dashboard/analytics")({
   head: () => ({
     meta: [
-      { title: "تحليلات | لوحة الطبيب — طبيبي" },
+      { title: "تحليلات | لوحة الطبيب — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -175,7 +176,7 @@ function AnalyticsPage() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl" dir={isRTL ? "rtl" : "ltr"}>
+    <div dir={isRTL ? "rtl" : "ltr"}>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -196,6 +197,13 @@ function AnalyticsPage() {
             : t("Premium", "بريميوم")}
         </span>
       </div>
+
+      {/* Professional 12-month revenue analytics (unified ledger) */}
+      <div className="mb-8">
+        <RevenueAnalytics />
+      </div>
+
+      <h2 className="mb-3 text-lg font-bold text-foreground">{t("Last 30 days", "آخر 30 يومًا")}</h2>
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

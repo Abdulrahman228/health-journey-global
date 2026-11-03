@@ -13,12 +13,13 @@ import {
   getAppointmentReceipt,
   type AppointmentReceipt,
 } from "@/lib/payments.functions";
+import { siteConfig } from "@/lib/seo";
 import { AlertTriangle, Loader2, Mail, Printer, ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/receipt/$appointmentId")({
   head: () => ({
     meta: [
-      { title: "إيصال دفع | طبيبي" },
+      { title: "إيصال دفع | طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -235,12 +236,12 @@ function ReceiptPage() {
         {/* Header */}
         <header className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
           <div>
-            <div className="text-lg font-extrabold tracking-tight">طبيبي · Tabibi</div>
+            <div className="text-lg font-extrabold tracking-tight">{siteConfig.brand.ar} · {siteConfig.brand.en}</div>
             <div className="mt-0.5 text-xs text-slate-600">
               منصة الرعاية الصحية الموحّدة
             </div>
             <div className="mt-4 text-xs text-slate-500">
-              منصة الكترونية · مسجلة في جمهورية مصر العربية
+              {siteConfig.organization.legalName} · مسجلة في جمهورية مصر العربية
             </div>
           </div>
           <div className="text-end">
@@ -377,7 +378,7 @@ function ReceiptPage() {
             <div className="flex items-start gap-1.5">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>
-                هذا الإيصال صادر إلكترونياً من منصة طبيبي. يُستخدم كإثبات دفع غير
+                هذا الإيصال صادر إلكترونياً من منصة طبانا. يُستخدم كإثبات دفع غير
                 ضريبي. الفاتورة الضريبية الإلكترونية (ETA) — إن وجبت — تصدر منفصلة.
               </span>
             </div>

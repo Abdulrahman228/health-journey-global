@@ -11,7 +11,7 @@ import { Ban, Loader2, RefreshCw, ShieldAlert, UploadCloud, UserCheck, Info } fr
 export const Route = createFileRoute("/admin/seed-directory")({
   head: () => ({
     meta: [
-      { title: "استيراد دليل الأطباء — Admin | طبيبي" },
+      { title: "استيراد دليل الأطباء — Admin | طبانا" },
       { name: "description", content: "استيراد بذور الأطباء غير المُفعّلين من مصادر مشروعة." },
       { name: "robots", content: "noindex, nofollow" },
     ],

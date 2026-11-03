@@ -4,8 +4,11 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { signupRateLimit, passwordResetRateLimit } from "./_rate-limit";
 import { assertSelf } from "./_authz";
+import { normalizePhone } from "./phone";
 
 type BootstrapRole = "doctor" | "patient";
+
+const SITE_URL = (process.env.VITE_SITE_URL || "https://mytabibi.com").replace(/\/+$/, "");
 
 // Strong-password rule: min 10 chars, at least one letter and one digit
 // (kept ASCII-friendly to avoid breaking Arabic/Latin keyboards).
@@ -69,38 +72,76 @@ export const signUpUser = createServerFn({ method: "POST" })
         phone: z.string().optional(),
         city: z.string().optional(),
       })
-      .parse(data)
+      .parse(data),
   )
   .handler(async ({ data }) => {
-    // Use admin.createUser (requires service role) to bypass email-confirmation
-    // rate limits and create a verified user immediately. This is appropriate
-    // for our flow because the form already collects the password directly.
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: data.email,
-      password: data.password,
-      email_confirm: true,
-      user_metadata: { full_name: data.fullName },
-    });
+    const email = data.email.trim().toLowerCase();
+    const phone = normalizePhone(data.phone) ?? (data.phone?.trim() || null);
 
-    if (authError || !authData.user) {
-      throw new Error(authError?.message ?? "Sign up failed");
+    // E-mail confirmation (2026-11-03): when transactional e-mail is configured
+    // the account is created UNCONFIRMED and gets our own Arabic confirmation
+    // mail; it cannot sign in before the link is opened. This closes the
+    // Google-linking takeover that auto-confirmed addresses allowed. Without
+    // RESEND_API_KEY we keep the legacy auto-confirm so sign-up never breaks.
+    const canSendEmail = Boolean(process.env.RESEND_API_KEY);
+
+    let userId: string;
+    let requiresEmailConfirmation = false;
+
+    if (canSendEmail) {
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: "signup",
+        email,
+        password: data.password,
+        options: {
+          data: { full_name: data.fullName },
+          redirectTo: `${SITE_URL}/auth/callback`,
+        },
+      });
+      if (linkErr || !linkData?.user || !linkData.properties?.action_link) {
+        throw new Error(linkErr?.message ?? "Sign up failed");
+      }
+      userId = linkData.user.id;
+      requiresEmailConfirmation = true;
+
+      const { buildConfirmEmail } = await import("@/lib/email/templates/confirm-email");
+      const { sendEmail } = await import("@/lib/email/sender");
+      const { subject, html } = buildConfirmEmail({
+        confirmUrl: linkData.properties.action_link,
+        recipientName: data.fullName,
+      });
+      await sendEmail({
+        to: email,
+        subject,
+        html,
+        tags: [{ name: "category", value: "confirm_email" }],
+      });
+    } else {
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: data.password,
+        email_confirm: true,
+        user_metadata: { full_name: data.fullName },
+      });
+      if (authError || !authData.user) {
+        throw new Error(authError?.message ?? "Sign up failed");
+      }
+      userId = authData.user.id;
     }
-
-    const userId = authData.user.id;
 
     // Create profile
     const { error: profileError } = await supabaseAdmin.from("profiles").insert({
       user_id: userId,
       full_name: data.fullName,
       city: data.city ?? null,
+      ...(phone ? { phone } : {}),
     });
 
     // Store phone privately in user_contacts
-    if (data.phone) {
-      await supabaseAdmin.from("user_contacts").insert({
-        user_id: userId,
-        phone: data.phone,
-      });
+    if (phone) {
+      await supabaseAdmin
+        .from("user_contacts")
+        .upsert({ user_id: userId, phone }, { onConflict: "user_id" });
     }
 
     if (profileError) {
@@ -120,7 +161,106 @@ export const signUpUser = createServerFn({ method: "POST" })
     // Create role-specific details
     await ensureRoleSpecificDetails(userId, data.role);
 
-    return { success: true, userId };
+    return { success: true, userId, requiresEmailConfirmation };
+  });
+
+// =============================================================================
+// Phone-first sign-up / sign-in (2026-11-03).
+//
+// The browser runs: signInWithOtp({ phone }) → verifyOtp({ phone, token }).
+// Once the session exists it calls this to create the profile / role / details
+// for a NEW user (idempotent for returning users) and — for patients — to
+// adopt any doctor-created profile that carries the same verified number, so
+// the person inherits their visits, prescriptions and results automatically.
+// =============================================================================
+export const bootstrapPhoneUser = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        role: z.enum(["doctor", "patient"]).optional(),
+        fullName: z.string().trim().min(2).max(120).optional(),
+        city: z.string().trim().max(80).optional(),
+      })
+      .parse(data ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const userId = context.userId;
+    const { data: userRes, error: userErr } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const authUser = userRes?.user;
+    if (userErr || !authUser) throw new Error(userErr?.message ?? "User not found");
+    if (!authUser.phone || !authUser.phone_confirmed_at) {
+      throw new Error("phone_not_verified");
+    }
+    const phone = normalizePhone(
+      authUser.phone.startsWith("+") ? authUser.phone : `+${authUser.phone}`,
+    );
+    if (!phone) throw new Error("invalid_phone");
+
+    const metaName =
+      typeof authUser.user_metadata?.full_name === "string"
+        ? authUser.user_metadata.full_name
+        : null;
+    const fullName = data.fullName ?? metaName ?? null;
+
+    // Profile (create once; never overwrite an existing name with nothing).
+    const { data: existingProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name")
+      .eq("user_id", userId)
+      .maybeSingle();
+    let isNew = false;
+    if (!existingProfile) {
+      isNew = true;
+      const { error: insErr } = await supabaseAdmin.from("profiles").insert({
+        user_id: userId,
+        full_name: fullName,
+        city: data.city || null,
+        phone,
+      });
+      if (insErr) throw new Error(insErr.message);
+    } else if (fullName && !existingProfile.full_name) {
+      await supabaseAdmin
+        .from("profiles")
+        .update({ full_name: fullName })
+        .eq("id", existingProfile.id);
+    }
+    await supabaseAdmin
+      .from("user_contacts")
+      .upsert({ user_id: userId, phone }, { onConflict: "user_id" });
+
+    // Role (first one wins; later calls never change it).
+    const { data: existingRole } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+    const role: BootstrapRole =
+      existingRole?.role === "doctor" || existingRole?.role === "patient"
+        ? existingRole.role
+        : (data.role ?? "patient");
+    if (!existingRole) {
+      const { error: roleErr } = await supabaseAdmin
+        .from("user_roles")
+        .insert({ user_id: userId, role });
+      if (roleErr) throw new Error(roleErr.message);
+    }
+    await ensureRoleSpecificDetails(userId, role);
+
+    // Patients: inherit the profile a doctor registered under this number.
+    let adopted = false;
+    let doctors: string[] = [];
+    if (role === "patient") {
+      const { data: adoptRes } = await context.supabase.rpc(
+        "adopt_managed_profile_by_phone" as never,
+      );
+      const r = (adoptRes ?? null) as { adopted?: boolean; doctors?: string[] } | null;
+      adopted = Boolean(r?.adopted);
+      doctors = Array.isArray(r?.doctors) ? r!.doctors!.map(String) : [];
+    }
+
+    return { success: true, isNew, role, adopted, doctors };
   });
 
 export const bootstrapOAuthUser = createServerFn({ method: "POST" })
@@ -133,12 +273,14 @@ export const bootstrapOAuthUser = createServerFn({ method: "POST" })
         email: z.string().email().optional(),
         fullName: z.string().optional(),
       })
-      .parse(data)
+      .parse(data),
   )
   .handler(async ({ data, context }) => {
     // Only the user who just authenticated may bootstrap their own profile/role.
     assertSelf(context.userId, data.userId);
-    const { data: authUserResult, error: userError } = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    const { data: authUserResult, error: userError } = await supabaseAdmin.auth.admin.getUserById(
+      data.userId,
+    );
     if (userError || !authUserResult.user) {
       throw new Error(userError?.message ?? "OAuth user not found");
     }
@@ -147,7 +289,9 @@ export const bootstrapOAuthUser = createServerFn({ method: "POST" })
     const finalRole: BootstrapRole = data.role ?? "patient";
     const resolvedName =
       data.fullName ??
-      (typeof authUser.user_metadata?.full_name === "string" ? authUser.user_metadata.full_name : null) ??
+      (typeof authUser.user_metadata?.full_name === "string"
+        ? authUser.user_metadata.full_name
+        : null) ??
       (typeof authUser.user_metadata?.name === "string" ? authUser.user_metadata.name : null) ??
       null;
 
@@ -233,12 +377,11 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
     try {
       // 1. Generate a recovery link. This call returns 422 if the email
       //    isn't registered — we swallow that to avoid enumeration.
-      const { data: linkData, error: linkErr } =
-        await supabaseAdmin.auth.admin.generateLink({
-          type: "recovery",
-          email,
-          options: { redirectTo },
-        });
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: { redirectTo },
+      });
 
       if (linkErr || !linkData?.properties?.action_link) {
         // Either the email doesn't exist or generation failed; either way,
@@ -261,9 +404,7 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
       }
 
       // 3. Render + send email.
-      const { buildPasswordResetEmail } = await import(
-        "@/lib/email/templates/password-reset"
-      );
+      const { buildPasswordResetEmail } = await import("@/lib/email/templates/password-reset");
       const { sendEmail } = await import("@/lib/email/sender");
 
       const { subject, html } = buildPasswordResetEmail({

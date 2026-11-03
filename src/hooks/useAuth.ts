@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
-type UserRole = "super_admin" | "admin" | "doctor" | "patient" | "pharmacy";
+type UserRole = "super_admin" | "admin" | "doctor" | "patient" | "pharmacy" | "lab";
 
 interface ProfileLite {
   id: string;
@@ -28,8 +28,8 @@ async function fetchRole(userId: string): Promise<UserRole | null> {
       .eq("user_id", userId);
     if (error || !data || data.length === 0) return null;
     const roles = data.map((r) => r.role as UserRole);
-    // Priority: super_admin > admin > doctor > pharmacy > patient
-    const priority: UserRole[] = ["super_admin", "admin", "doctor", "pharmacy", "patient"];
+    // Priority: super_admin > admin > doctor > lab > pharmacy > patient
+    const priority: UserRole[] = ["super_admin", "admin", "doctor", "lab", "pharmacy", "patient"];
     for (const p of priority) {
       if (roles.includes(p)) return p;
     }

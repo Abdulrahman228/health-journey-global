@@ -21,6 +21,17 @@ type QueueAppt = {
 
 const TODAY = () => new Date().toISOString().split("T")[0];
 
+// Local-day window [00:00, next 00:00) as ISO — matches how the dashboard counts
+// "today" (by scheduled_at), so the queue and the dashboard agree. Filtering by
+// scheduled_at (always set) instead of appointment_date (queue-only, often null
+// on regular bookings) is why appointments were missing from the queue.
+const todayWindow = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(start.getTime() + 86_400_000);
+  return { start: start.toISOString(), end: end.toISOString() };
+};
+
 export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }) {
   const { t } = useLanguage();
   const queryClient = useQueryClient();
@@ -51,6 +62,7 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
     queryKey: ["doctor-queue", selectedClinicId, TODAY()],
     enabled: Boolean(selectedClinicId),
     queryFn: async (): Promise<QueueAppt[]> => {
+      const { start, end } = todayWindow();
       const { data, error } = await supabase
         .from("appointments")
         .select(`
@@ -59,9 +71,10 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
           patient:profiles!appointments_patient_id_fkey ( full_name, phone )
         `)
         .eq("clinic_id", selectedClinicId!)
-        .eq("appointment_date", TODAY())
-        .in("status", ["waiting", "called", "in_progress", "completed"])
-        .order("queue_number");
+        .gte("scheduled_at", start)
+        .lt("scheduled_at", end)
+        .in("status", ["pending", "confirmed", "waiting", "called", "in_progress", "completed"])
+        .order("queue_number", { nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as any;
     },
@@ -134,6 +147,20 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Check a scheduled (confirmed) patient into the live queue.
+  const checkIn = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc("check_in_appointment", { p_appointment_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("تم تسجيل الحضور");
+      queryClient.invalidateQueries({ queryKey: ["doctor-queue"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const scheduled  = queue.filter((q) => q.status === "confirmed" || q.status === "pending"); // booked, not checked in
   const waiting    = queue.filter((q) => q.status === "waiting");
   const called     = queue.find((q) => q.status === "called") ?? null;
   const inProgress = queue.find((q) => q.status === "in_progress") ?? null;
@@ -171,7 +198,7 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
         <>
           {/* Stats row */}
           <div className="grid grid-cols-4 gap-3 mb-5">
-            <StatBlock label="بالانتظار" value={waiting.length} color="amber" />
+            <StatBlock label="بالانتظار" value={waiting.length + scheduled.length} color="amber" />
             <StatBlock label="منادى" value={called ? 1 : 0} color="blue" />
             <StatBlock label="داخل الكشف" value={inProgress ? 1 : 0} color="emerald" />
             <StatBlock label="مكتمل" value={completed.length} color="gray" />
@@ -210,19 +237,54 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
             </button>
           )}
 
-          {/* Waiting list */}
-          {waiting.length === 0 ? (
+          {/* Scheduled appointments — booked but not checked in yet */}
+          {scheduled.length > 0 && (
+            <div className="space-y-2 mb-5">
+              <h3 className="text-sm font-semibold text-muted-foreground">
+                مواعيد اليوم — سجّل الحضور
+              </h3>
+              {scheduled.map((q) => (
+                <div
+                  key={q.id}
+                  className="flex items-center gap-3 rounded-lg border border-amber-200/60 bg-amber-50/60 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/20"
+                >
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{q.patient?.full_name ?? "مريض"}</div>
+                    {q.estimated_start_at && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {new Date(q.estimated_start_at).toLocaleTimeString("ar-EG", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => checkIn.mutate(q.id)}
+                    disabled={checkIn.isPending}
+                    className="flex items-center gap-1 rounded-lg bg-teal px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4" /> تسجيل حضور
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Waiting list (checked-in) */}
+          {waiting.length === 0 && scheduled.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">
-              لا يوجد مرضى في الانتظار
+              لا يوجد مرضى اليوم
             </p>
-          ) : (
+          ) : waiting.length > 0 ? (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-muted-foreground">قائمة الانتظار</h3>
               {waiting.map((q) => (
                 <QueueRow key={q.id} q={q} onCancel={() => cancelAppt.mutate(q.id)} />
               ))}
             </div>
-          )}
+          ) : null}
         </>
       )}
     </section>

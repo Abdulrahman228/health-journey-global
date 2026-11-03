@@ -5,8 +5,8 @@ import { MessageCircle } from "lucide-react";
 export const Route = createFileRoute("/contact")({
   head: () => ({
     meta: [
-      { title: "Contact — Tabibi" },
-      { name: "description", content: "Contact Tabibi team." },
+      { title: "Contact — Tebana" },
+      { name: "description", content: "Contact Tebana team." },
     ],
   }),
   component: ContactPage,

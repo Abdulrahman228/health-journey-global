@@ -4,12 +4,13 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { HeartPulse, User, Mail, Shield } from "lucide-react";
 import { PublicPageManager } from "@/components/dashboard/PublicPageManager";
 import { MedicalCardEditor } from "@/components/dashboard/MedicalCardEditor";
+import { PatientShell } from "@/components/patient/PatientNav";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
     meta: [
-      { title: "Profile — Tabibi" },
-      { name: "description", content: "Manage your Tabibi profile and settings." },
+      { title: "Profile — Tebana" },
+      { name: "description", content: "Manage your Tebana profile and settings." },
     ],
   }),
   component: ProfilePage,
@@ -41,7 +42,8 @@ function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
+    <PatientShell>
+      <div className="space-y-6">
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
@@ -113,6 +115,7 @@ function ProfilePage() {
           <MedicalCardEditor profileId={profile.id} />
         </>
       )}
-    </div>
+      </div>
+    </PatientShell>
   );
 }

@@ -20,11 +20,10 @@ import { getRequest } from "@tanstack/react-start/server";
 type Bucket = { count: number; resetAt: number };
 
 const buckets: Map<string, Bucket> =
-  (globalThis as unknown as { __iaskRateBuckets?: Map<string, Bucket> })
-    .__iaskRateBuckets ?? new Map<string, Bucket>();
+  (globalThis as unknown as { __iaskRateBuckets?: Map<string, Bucket> }).__iaskRateBuckets ??
+  new Map<string, Bucket>();
 
-(globalThis as unknown as { __iaskRateBuckets?: Map<string, Bucket> })
-  .__iaskRateBuckets = buckets;
+(globalThis as unknown as { __iaskRateBuckets?: Map<string, Bucket> }).__iaskRateBuckets = buckets;
 
 function getClientIp(): string {
   try {
@@ -57,12 +56,10 @@ function enforce(scope: string, limit: number, windowMs: number) {
 }
 
 /** 5 sign-ups per hour per IP — anti-spam on account creation. */
-export const signupRateLimit = createMiddleware({ type: "function" }).server(
-  async ({ next }) => {
-    enforce("signup", 5, 60 * 60 * 1000);
-    return next();
-  },
-);
+export const signupRateLimit = createMiddleware({ type: "function" }).server(async ({ next }) => {
+  enforce("signup", 5, 60 * 60 * 1000);
+  return next();
+});
 
 /** 3 password-reset requests per 15 min per IP — anti-enumeration + anti-spam. */
 export const passwordResetRateLimit = createMiddleware({ type: "function" }).server(
@@ -71,3 +68,10 @@ export const passwordResetRateLimit = createMiddleware({ type: "function" }).ser
     return next();
   },
 );
+
+/** 120 tracking events per 5 min per IP — keeps sponsored-click billing from
+ *  being drained by a script (2026-11-02 audit). */
+export const trackingRateLimit = createMiddleware({ type: "function" }).server(async ({ next }) => {
+  enforce("tracking", 120, 5 * 60 * 1000);
+  return next();
+});

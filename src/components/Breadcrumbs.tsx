@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Home } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { breadcrumbSchema, jsonLdString, type BreadcrumbItem } from "@/lib/schema";
+import { siteConfig } from "@/lib/seo";
 
 interface BreadcrumbsProps {
   items: BreadcrumbItem[];
@@ -30,7 +31,7 @@ export function Breadcrumbs({ items, showHome = true, className }: BreadcrumbsPr
   const Sep = isRTL ? ChevronLeft : ChevronRight;
 
   const fullItems: BreadcrumbItem[] = showHome
-    ? [{ name: t("Tabibi — Home", "طبيبي — Tabibi"), path: "/" }, ...items]
+    ? [{ name: t(`${siteConfig.brand.en} — Home`, `${siteConfig.brand.ar} — ${siteConfig.brand.en}`), path: "/" }, ...items]
     : items;
 
   return (

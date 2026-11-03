@@ -11,8 +11,8 @@ export const Route = createFileRoute("/pharmacy/register")({
   component: PharmacyRegisterPage,
   head: () => ({
     meta: [
-      { title: "Register your pharmacy chain | Tabibi" },
-      { name: "description", content: "Register your pharmacy chain on Tabibi and help patients find missing medications." },
+      { title: "Register your pharmacy chain | Tebana" },
+      { name: "description", content: "Register your pharmacy chain on Tebana and help patients find missing medications." },
     ],
   }),
 });

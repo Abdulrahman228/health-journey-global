@@ -12,6 +12,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertSelf } from "./_authz";
+import { normalizePhone } from "./phone";
+import { triggerOutboxDrain } from "./messaging.server";
 
 // ---- Types ----
 export interface VitalsJson {
@@ -39,7 +41,7 @@ export interface MedicalRecord {
   treatmentPlan: string | null;
   recommendedTests: string[];
   followUpDays: number | null;
-  privateNotes: string | null;       // null for patient viewers
+  privateNotes: string | null; // null for patient viewers
   visitDate: string;
   doctorName?: string | null;
   doctorSpecialty?: string | null;
@@ -119,9 +121,7 @@ function mapRecord(row: Record<string, unknown>, includePrivate: boolean): Medic
 // ============================================================
 export const getPatientHistoryForDoctor = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ patientProfileId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ patientProfileId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }) => {
     // Caller must be admin OR a doctor who has a medical_record with this patient.
     const myProfileId = await getMyProfileId(context.userId);
@@ -135,9 +135,24 @@ export const getPatientHistoryForDoctor = createServerFn({ method: "GET" })
         .eq("doctor_profile_id", myProfileId)
         .limit(1)
         .maybeSingle();
-      if (!link) {
-        // Allow the patient themselves to read their full history with private notes hidden:
-        if (myProfileId !== data.patientProfileId) return [];
+      if (!link && myProfileId !== data.patientProfileId) {
+        // Shared care (Phase D): a doctor LINKED to this patient may follow the
+        // case even without a prior record — but only if the patient consented.
+        const [{ data: dpLink }, { data: pt }] = await Promise.all([
+          supabaseAdmin
+            .from("doctor_patients")
+            .select("id")
+            .eq("doctor_profile_id", myProfileId)
+            .eq("patient_profile_id", data.patientProfileId)
+            .limit(1)
+            .maybeSingle(),
+          supabaseAdmin
+            .from("profiles")
+            .select("shared_care_consent")
+            .eq("id", data.patientProfileId)
+            .maybeSingle(),
+        ]);
+        if (!(dpLink && pt?.shared_care_consent)) return [];
       }
     }
 
@@ -159,9 +174,7 @@ export const getPatientHistoryForDoctor = createServerFn({ method: "GET" })
 // ============================================================
 export const getMyMedicalHistory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ userId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ userId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }) => {
     assertSelf(context.userId, data.userId);
     const profileId = await getMyProfileId(data.userId);
@@ -188,8 +201,12 @@ export const getMyMedicalHistory = createServerFn({ method: "GET" })
       .select("profile_id, specialty")
       .in("profile_id", doctorIds);
 
-    const nameByProfile = new Map((docs ?? []).map((d) => [d.id as string, (d.full_name as string | null) ?? ""]));
-    const specByProfile = new Map((docDetails ?? []).map((d) => [d.profile_id as string, (d.specialty as string | null) ?? ""]));
+    const nameByProfile = new Map(
+      (docs ?? []).map((d) => [d.id as string, (d.full_name as string | null) ?? ""]),
+    );
+    const specByProfile = new Map(
+      (docDetails ?? []).map((d) => [d.profile_id as string, (d.specialty as string | null) ?? ""]),
+    );
 
     return rows.map((r) => {
       const rec = mapRecord(r as Record<string, unknown>, false);
@@ -217,6 +234,17 @@ export const searchMyPatients = createServerFn({ method: "GET" })
     const doctorProfileId = await getMyProfileId(data.userId);
     if (!doctorProfileId) return [];
 
+    // appointments.doctor_id references doctor_details.id (NOT the profile id),
+    // so resolve it first. Without this, appointment-only patients (booked but
+    // with no recorded visit yet) never surface — so a doctor can't find them to
+    // open their file or write their first prescription. This was the bug.
+    const { data: ddRow } = await supabaseAdmin
+      .from("doctor_details")
+      .select("id")
+      .eq("profile_id", doctorProfileId)
+      .maybeSingle();
+    const doctorDetailsId = (ddRow?.id as string | undefined) ?? null;
+
     // Collect distinct patient ids across medical_records + appointments
     const [mr, ap] = await Promise.all([
       supabaseAdmin
@@ -225,12 +253,14 @@ export const searchMyPatients = createServerFn({ method: "GET" })
         .eq("doctor_profile_id", doctorProfileId)
         .order("visit_date", { ascending: false })
         .limit(500),
-      supabaseAdmin
-        .from("appointments")
-        .select("patient_id, scheduled_at")
-        .eq("doctor_id", doctorProfileId)
-        .order("scheduled_at", { ascending: false })
-        .limit(500),
+      doctorDetailsId
+        ? supabaseAdmin
+            .from("appointments")
+            .select("patient_id, scheduled_at")
+            .eq("doctor_id", doctorDetailsId)
+            .order("scheduled_at", { ascending: false })
+            .limit(500)
+        : Promise.resolve({ data: [] as { patient_id: string; scheduled_at: string }[] }),
     ]);
 
     const lastSeen = new Map<string, string>();
@@ -245,13 +275,24 @@ export const searchMyPatients = createServerFn({ method: "GET" })
       if (!lastSeen.has(id) || (lastSeen.get(id) ?? "") < date) lastSeen.set(id, date);
     }
 
-    const patientIds = Array.from(lastSeen.keys());
-    if (patientIds.length === 0) return [];
+    const derivedIds = Array.from(lastSeen.keys());
+
+    // Include doctor-managed (offline) patients — added/imported by this doctor,
+    // even before they have any records or appointments.
+    const { data: managed } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("managed_by_doctor", doctorProfileId)
+      .limit(2000);
+    const managedIds = (managed ?? []).map((m) => m.id as string);
+
+    const allIds = Array.from(new Set([...derivedIds, ...managedIds]));
+    if (allIds.length === 0) return [];
 
     const { data: profs } = await supabaseAdmin
       .from("profiles")
       .select("id, full_name, avatar_url, city")
-      .in("id", patientIds);
+      .in("id", allIds);
 
     const q = data.q.trim().toLowerCase();
     return (profs ?? [])
@@ -263,11 +304,231 @@ export const searchMyPatients = createServerFn({ method: "GET" })
         lastSeen: lastSeen.get(p.id as string) ?? null,
       }))
       .filter((p) =>
-        q
-          ? p.fullName.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)
-          : true,
+        q ? p.fullName.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) : true,
       )
       .sort((a, b) => (b.lastSeen ?? "").localeCompare(a.lastSeen ?? ""));
+  });
+
+// ============================================================
+// Doctor-managed (offline) patients: add one / bulk import
+// ============================================================
+
+const ManagedPatientSchema = z.object({
+  fullName: z.string().trim().min(1).max(120),
+  phone: z.string().trim().max(40).optional().default(""),
+  city: z.string().trim().max(80).optional().default(""),
+  dateOfBirth: z.string().trim().optional().default(""), // "YYYY-MM-DD" or ""
+});
+
+/**
+ * Welcome messages: linking a patient to a doctor (doctor_patients INSERT, or a
+ * profiles INSERT with managed_by_doctor) makes the database queue ONE
+ * "تم تسجيلك لدى د. فلان" WhatsApp/SMS with the patient's claim link
+ * (migration 20261103100000 §5). The server functions below only decide
+ * whether the doctor attested consent, and poke the sender so the message
+ * leaves immediately instead of waiting for the minute cron.
+ */
+async function cancelQueuedWelcome(patientIds: string[]): Promise<void> {
+  if (patientIds.length === 0) return;
+  await supabaseAdmin
+    .from("outbox_messages" as never)
+    .update({ status: "skipped", error: "doctor_declined_notification" } as never)
+    .in("patient_profile_id", patientIds)
+    .eq("template_key", "patient_welcome")
+    .eq("status", "queued");
+}
+
+async function countQueuedWelcome(patientIds: string[], since: string): Promise<number> {
+  if (patientIds.length === 0) return 0;
+  const { count } = await supabaseAdmin
+    .from("outbox_messages" as never)
+    .select("id", { count: "exact", head: true })
+    .in("patient_profile_id", patientIds)
+    .eq("template_key", "patient_welcome")
+    .gte("created_at", since);
+  return count ?? 0;
+}
+
+/** Add a single offline patient owned by the calling doctor. */
+export const addManagedPatient = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((x: unknown) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        /** Doctor confirmed the patient agreed to be contacted (default: send). */
+        notify: z.boolean().optional().default(true),
+      })
+      .merge(ManagedPatientSchema)
+      .parse(x),
+  )
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
+    const doctorProfileId = await getMyProfileId(data.userId);
+    if (!doctorProfileId) throw new Error("Doctor profile not found");
+
+    const startedAt = new Date().toISOString();
+    const phoneE164 = normalizePhone(data.phone);
+    const phone = phoneE164 ?? (data.phone.trim() || null);
+    let patientId: string | null = null;
+
+    // Dedup: reuse an existing UNCLAIMED (managed) profile with the same phone
+    // so multiple doctors share ONE patient identity (matches add_managed_patient).
+    if (phoneE164) {
+      const { data: existing } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("phone_e164" as never, phoneE164)
+        .is("user_id", null)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (existing) patientId = existing.id as string;
+    }
+
+    if (!patientId) {
+      const { data: prof, error } = await supabaseAdmin
+        .from("profiles")
+        .insert({
+          user_id: null,
+          managed_by_doctor: doctorProfileId,
+          full_name: data.fullName.trim(),
+          phone,
+          city: data.city.trim() || null,
+        })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      patientId = prof.id as string;
+
+      const dob = data.dateOfBirth.trim();
+      if (dob) {
+        await supabaseAdmin
+          .from("patient_details")
+          .insert({ profile_id: patientId, date_of_birth: dob });
+      }
+    }
+
+    // Link this doctor to the patient (idempotent). The INSERT trigger queues
+    // the welcome message; a no-op upsert (already linked) queues nothing.
+    await supabaseAdmin
+      .from("doctor_patients")
+      .upsert(
+        { doctor_profile_id: doctorProfileId, patient_profile_id: patientId },
+        { onConflict: "doctor_profile_id,patient_profile_id", ignoreDuplicates: true },
+      );
+
+    let queued = 0;
+    if (data.notify) {
+      queued = await countQueuedWelcome([patientId], startedAt);
+      if (queued > 0) void triggerOutboxDrain(5);
+    } else {
+      await cancelQueuedWelcome([patientId]);
+    }
+
+    return { id: patientId, queued, hasPhone: Boolean(phoneE164) };
+  });
+
+/** Bulk-import offline patients (e.g. parsed from a CSV of old patients). */
+export const importManagedPatients = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((x: unknown) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        patients: z.array(ManagedPatientSchema).min(1).max(1000),
+        /** Doctor attests the listed patients agreed to be contacted by them. */
+        consentAttested: z.literal(true),
+      })
+      .parse(x),
+  )
+  .handler(async ({ data, context }) => {
+    assertSelf(context.userId, data.userId);
+    const doctorProfileId = await getMyProfileId(data.userId);
+    if (!doctorProfileId) throw new Error("Doctor profile not found");
+
+    const startedAt = new Date().toISOString();
+    const cleaned = data.patients
+      .map((p) => {
+        const e164 = normalizePhone(p.phone);
+        return {
+          full_name: p.fullName.trim(),
+          phone: e164 ?? (p.phone.trim() || null),
+          phone_e164: e164,
+          city: p.city.trim() || null,
+        };
+      })
+      .filter((r) => r.full_name.length > 0);
+    if (cleaned.length === 0) return { inserted: 0, linked: 0, queued: 0, withoutPhone: 0 };
+
+    // Dedup inside the file (same number twice) and against existing
+    // UNCLAIMED profiles — those are LINKED, not duplicated.
+    const seen = new Set<string>();
+    const unique = cleaned.filter((r) => {
+      if (!r.phone_e164) return true;
+      if (seen.has(r.phone_e164)) return false;
+      seen.add(r.phone_e164);
+      return true;
+    });
+    const phones = unique.map((r) => r.phone_e164).filter((p): p is string => Boolean(p));
+    const existingByPhone = new Map<string, string>();
+    for (let i = 0; i < phones.length; i += 200) {
+      const slice = phones.slice(i, i + 200);
+      const { data: found } = await supabaseAdmin
+        .from("profiles")
+        .select("id, phone_e164")
+        .in("phone_e164" as never, slice)
+        .is("user_id", null)
+        .order("created_at", { ascending: true });
+      for (const f of (found ?? []) as unknown as Array<{ id: string; phone_e164: string }>) {
+        if (!existingByPhone.has(f.phone_e164)) existingByPhone.set(f.phone_e164, f.id);
+      }
+    }
+
+    const toLink = unique
+      .filter((r) => r.phone_e164 && existingByPhone.has(r.phone_e164))
+      .map((r) => existingByPhone.get(r.phone_e164!)!);
+    const toInsert = unique
+      .filter((r) => !(r.phone_e164 && existingByPhone.has(r.phone_e164)))
+      .map((r) => ({
+        user_id: null as string | null,
+        managed_by_doctor: doctorProfileId,
+        full_name: r.full_name,
+        phone: r.phone,
+        city: r.city,
+      }));
+
+    let inserted = 0;
+    const insertedIds: string[] = [];
+    for (let i = 0; i < toInsert.length; i += 200) {
+      const { data: rows, error } = await supabaseAdmin
+        .from("profiles")
+        .insert(toInsert.slice(i, i + 200))
+        .select("id");
+      if (error) throw new Error(error.message);
+      inserted += rows?.length ?? 0;
+      for (const r of rows ?? []) insertedIds.push(r.id as string);
+    }
+
+    if (toLink.length > 0) {
+      await supabaseAdmin.from("doctor_patients").upsert(
+        toLink.map((patient_profile_id) => ({
+          doctor_profile_id: doctorProfileId,
+          patient_profile_id,
+        })),
+        { onConflict: "doctor_profile_id,patient_profile_id", ignoreDuplicates: true },
+      );
+    }
+
+    const queued = await countQueuedWelcome([...insertedIds, ...toLink], startedAt);
+    if (queued > 0) void triggerOutboxDrain(25);
+
+    return {
+      inserted,
+      linked: toLink.length,
+      queued,
+      withoutPhone: unique.filter((r) => !r.phone_e164).length,
+    };
   });
 
 // ============================================================
@@ -347,6 +608,17 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
       return { ok: false as const, error: recErr?.message ?? "insert_failed" };
     }
 
+    // Writing the visit note completes the consultation: mark the linked
+    // appointment 'completed' so the accounting trigger posts revenue (no
+    // separate "close visit" step to forget). Idempotent + best-effort.
+    if (data.appointmentId) {
+      await supabaseAdmin
+        .from("appointments")
+        .update({ status: "completed" })
+        .eq("id", data.appointmentId)
+        .neq("status", "completed");
+    }
+
     let prescriptionId: string | null = null;
     if (data.prescription && data.prescription.items.length > 0) {
       const { data: rxNumRes } = await supabaseAdmin.rpc("next_prescription_number");
@@ -391,9 +663,7 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
 // ============================================================
 export const getPrescriptionsForRecord = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ medicalRecordId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ medicalRecordId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }): Promise<Prescription[]> => {
     // Authorize: caller must be patient, prescribing doctor, or admin.
     const { data: rec } = await supabaseAdmin
@@ -414,9 +684,7 @@ export const getPrescriptionsForRecord = createServerFn({ method: "GET" })
 
     const { data: rxs, error } = await supabaseAdmin
       .from("prescriptions")
-      .select(
-        "id, medical_record_id, prescription_number, notes, valid_until, status, created_at",
-      )
+      .select("id, medical_record_id, prescription_number, notes, valid_until, status, created_at")
       .eq("medical_record_id", data.medicalRecordId)
       .order("created_at", { ascending: false });
     if (error || !rxs || rxs.length === 0) return [];
@@ -460,9 +728,7 @@ export const getPrescriptionsForRecord = createServerFn({ method: "GET" })
 // ============================================================
 export const getPatientMedicalProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ patientProfileId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ patientProfileId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }) => {
     // Authorize: caller must be the patient, admin, or a treating doctor.
     const myProfileId = await getMyProfileId(context.userId);
@@ -560,9 +826,7 @@ export const verifyPrescription = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<PrescriptionVerification | null> => {
     const { data: rx } = await supabaseAdmin
       .from("prescriptions")
-      .select(
-        "id, prescription_number, status, valid_until, created_at, medical_record_id",
-      )
+      .select("id, prescription_number, status, valid_until, created_at, medical_record_id")
       .eq("prescription_number", data.prescriptionNumber)
       .maybeSingle();
     if (!rx) return null;
@@ -596,11 +860,7 @@ export const verifyPrescription = createServerFn({ method: "GET" })
 
     // Auto-mark expired if past valid_until
     let status = (rx.status as PrescriptionVerification["status"]) ?? "active";
-    if (
-      status === "active" &&
-      rx.valid_until &&
-      new Date(rx.valid_until as string) < new Date()
-    ) {
+    if (status === "active" && rx.valid_until && new Date(rx.valid_until as string) < new Date()) {
       status = "expired";
     }
 
@@ -611,11 +871,12 @@ export const verifyPrescription = createServerFn({ method: "GET" })
       validUntil: (rx.valid_until as string | null) ?? null,
       doctorName: (doctorProfRes.data?.full_name as string | null) ?? null,
       doctorLicense:
-        ((doctorDetailsRes.data as { syndicate_number: string | null } | null)?.syndicate_number as string | null) ?? null,
+        ((doctorDetailsRes.data as { syndicate_number: string | null } | null)?.syndicate_number as
+          | string
+          | null) ?? null,
       itemCount: count ?? 0,
     };
   });
-
 
 // ============================================================
 // Public-but-authorized prescription view (for /rx/$id print page)
@@ -661,9 +922,7 @@ export const getPrescriptionView = createServerFn({ method: "GET" })
     // 1. Load the prescription + record
     const { data: rx } = await supabaseAdmin
       .from("prescriptions")
-      .select(
-        "id, medical_record_id, prescription_number, notes, valid_until, status, created_at",
-      )
+      .select("id, medical_record_id, prescription_number, notes, valid_until, status, created_at")
       .eq("id", data.prescriptionId)
       .maybeSingle();
     if (!rx) return null;
@@ -765,9 +1024,7 @@ export const getPrescriptionView = createServerFn({ method: "GET" })
       patient: {
         name: (pPatient?.full_name as string | null) ?? null,
         allergies:
-          ((medProf as { allergies?: string[] } | null)?.allergies as
-            | string[]
-            | undefined) ?? [],
+          ((medProf as { allergies?: string[] } | null)?.allergies as string[] | undefined) ?? [],
       },
       doctor: {
         name: (pDoctor?.full_name as string | null) ?? null,
@@ -779,4 +1036,3 @@ export const getPrescriptionView = createServerFn({ method: "GET" })
       },
     };
   });
-

@@ -2,14 +2,16 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, Globe, Save, Copy, Check, ExternalLink } from "lucide-react";
+import { Loader2, Globe, Save, Copy, Check, ExternalLink, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { DoctorShell } from "@/components/doctor/DoctorNav";
+import { supabase } from "@/integrations/supabase/client";
 import { getMySoloSettings, updateSoloMode } from "@/lib/solo.functions";
 
 export const Route = createFileRoute("/doctor/solo")({
   head: () => ({
     meta: [
-      { title: "إعدادات Solo Mode — طبيبي" },
+      { title: "إعدادات Solo Mode — طبانا" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -17,7 +19,37 @@ export const Route = createFileRoute("/doctor/solo")({
 });
 
 function SoloSettingsPage() {
-  const { user, role, isLoading: authLoading } = useAuth();
+  const { user, profile, role, isLoading: authLoading } = useAuth();
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  // Upload a logo file to the public doctor-assets bucket and use its URL.
+  const uploadLogo = async (file: File) => {
+    if (!profile?.id) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      toast.error("الصيغة المدعومة: PNG أو JPG أو WebP");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("الحد الأقصى 2 ميجابايت");
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "png";
+      const path = `${profile.id}/solo-logo-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("doctor-assets")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("doctor-assets").getPublicUrl(path);
+      setLogoUrl(pub.publicUrl);
+      toast.success("تم رفع الشعار — لا تنسَ الحفظ");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "فشل الرفع");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
   const navigate = useNavigate();
   const fetchSettings = useServerFn(getMySoloSettings);
   const save = useServerFn(updateSoloMode);
@@ -67,18 +99,21 @@ function SoloSettingsPage() {
   }
 
   const subdomainUrl = slug ? `https://${slug}.mytabibi.com` : null;
+  // Path link works instantly for every doctor (no DNS setup) — the primary link.
+  const pathUrl = slug ? `https://mytabibi.com/d/${slug}` : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6" dir="rtl">
+    <DoctorShell>
+      <div dir="rtl">
       <div className="flex items-center gap-2 mb-2">
         <Globe className="h-6 w-6 text-primary" aria-hidden="true" />
         <h1 className="text-2xl font-bold">Solo Mode — صفحتك الخاصة</h1>
       </div>
       <p className="text-sm text-muted-foreground mb-6">
-        فعّل Solo Mode لتحصل على نطاق فرعي خاص بك
-        <strong> ({slug || "yourslug"}.mytabibi.com)</strong> يعرض ملفك فقط دون
-        أي روابط لأطباء آخرين، مع شعارك ولونك الخاص. مناسب لمشاركة QR code
-        داخل العيادة أو على الكروت.
+        فعّل Solo Mode لتحصل على صفحة خاصة بك
+        <strong> (mytabibi.com/d/{slug || "yourslug"})</strong> تعرض ملفك فقط دون
+        أي روابط لأطباء آخرين، مع شعارك ولونك الخاص، وحجز مباشر داخل نفس الصفحة.
+        مناسبة لمشاركة QR code داخل العيادة أو على الكروت — وتعمل فورًا بدون أي إعداد.
       </p>
 
       {!slug && (
@@ -94,18 +129,18 @@ function SoloSettingsPage() {
         </div>
       )}
 
-      {subdomainUrl && (
+      {pathUrl && (
         <div className="mb-6 rounded-xl border border-border bg-card p-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">رابطك الخاص</p>
-              <p className="font-mono text-sm font-semibold truncate">{subdomainUrl}</p>
+              <p className="text-xs text-muted-foreground">رابطك الخاص — يعمل فورًا ✅</p>
+              <p className="font-mono text-sm font-semibold truncate">{pathUrl}</p>
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={async () => {
-                  await navigator.clipboard.writeText(subdomainUrl);
+                  await navigator.clipboard.writeText(pathUrl);
                   setCopied(true);
                   toast.success("تم النسخ");
                   setTimeout(() => setCopied(false), 2000);
@@ -117,7 +152,7 @@ function SoloSettingsPage() {
                 نسخ
               </button>
               <a
-                href={subdomainUrl}
+                href={pathUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -126,6 +161,12 @@ function SoloSettingsPage() {
               </a>
             </div>
           </div>
+          {subdomainUrl && (
+            <p className="mt-3 border-t border-border pt-2 text-[11px] leading-relaxed text-muted-foreground">
+              نطاق فرعي متقدّم (اختياري): <span className="font-mono">{subdomainUrl}</span> — يتطلب
+              إعداد DNS في Cloudflare. الرابط بالأعلى يعمل بدون أي إعداد ونفس التصميم تمامًا.
+            </p>
+          )}
         </div>
       )}
 
@@ -183,16 +224,52 @@ function SoloSettingsPage() {
         </div>
 
         <div>
-          <label htmlFor="solo-logo-url" className="mb-1.5 block text-sm font-medium">
-            رابط الشعار (PNG / SVG ≥ 192×192)
+          <label className="mb-1.5 block text-sm font-medium">
+            شعار العيادة (PNG / JPG / WebP ≥ 192×192)
           </label>
+          <div className="flex items-center gap-3">
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="الشعار"
+                className="h-14 w-14 rounded-lg border border-border object-contain bg-background"
+              />
+            ) : (
+              <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground">
+                <Globe className="h-5 w-5" />
+              </div>
+            )}
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent">
+              {uploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {logoUrl ? "تغيير الشعار" : "رفع الشعار"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                disabled={uploadingLogo}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void uploadLogo(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {logoUrl && (
+              <button
+                type="button"
+                onClick={() => setLogoUrl("")}
+                className="text-xs text-muted-foreground hover:text-destructive"
+              >
+                إزالة
+              </button>
+            )}
+          </div>
           <input
-            id="solo-logo-url"
             type="url"
             value={logoUrl}
             onChange={(e) => setLogoUrl(e.target.value)}
-            placeholder="https://..."
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="أو الصق رابط شعار (يدعم SVG)"
+            className="mt-2 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
 
@@ -223,6 +300,7 @@ function SoloSettingsPage() {
           حفظ الإعدادات
         </button>
       </div>
-    </div>
+      </div>
+    </DoctorShell>
   );
 }

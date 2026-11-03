@@ -78,7 +78,12 @@ export const readMyPrivateFeedback = createServerFn({ method: "GET" })
         .eq("doctor_details_id", dd.id)
         .order("created_at", { ascending: false })
         .limit(data.limit);
-      return (meta ?? []).map((m) => ({ ...m, message: "[encrypted — install read fn]" }));
+      return (meta ?? []).map((m) => ({
+        ...m,
+        message: "[encrypted — install read fn]",
+        doctor_reply: null,
+        doctor_replied_at: null,
+      }));
     }
     return rows as Array<{
       id: string;
@@ -87,5 +92,40 @@ export const readMyPrivateFeedback = createServerFn({ method: "GET" })
       message: string;
       rating: number | null;
       created_at: string;
+      doctor_reply: string | null;
+      doctor_replied_at: string | null;
     }>;
+  });
+
+/**
+ * Doctor writes ONE private reply to a patient's feedback note. Only works for
+ * non-anonymous notes; the patient is notified in-app. Ownership is verified
+ * here (caller must own the doctor record) and again in the SQL function.
+ */
+export const replyToPrivateFeedback = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({
+      feedbackId: z.string().uuid(),
+      reply: z.string().min(1).max(2000),
+    }).parse,
+  )
+  .handler(async ({ data, context }) => {
+    const { data: dd, error: ddErr } = await supabaseAdmin
+      .from("doctor_details")
+      .select("id")
+      .eq("profile_id", context.userId)
+      .maybeSingle();
+    if (ddErr) throw new Error(ddErr.message);
+    if (!dd) throw new Error("Doctor profile not found");
+
+    const { error } = await (supabaseAdmin.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { message: string } | null }>)(
+      "reply_private_feedback_admin",
+      { p_feedback_id: data.feedbackId, p_doctor_details_id: dd.id, p_reply: data.reply },
+    );
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
   });

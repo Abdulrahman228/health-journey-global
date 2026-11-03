@@ -272,13 +272,13 @@ export const acceptConsultationProposal = createServerFn({ method: "POST" })
             unit_amount: req.fee_cents,
             product_data: {
               name: `كشف أونلاين — د. ${doctorName}`,
-              description: `Tabibi consultation ${req.id}`,
+              description: `Tebana consultation ${req.id}`,
             },
           },
         },
       ],
       payment_intent_data: {
-        description: `Tabibi consultation ${req.id}`,
+        description: `Tebana consultation ${req.id}`,
         metadata: {
           consultation_request_id: req.id,
           appointment_id: appt.id,

@@ -14,7 +14,7 @@ import { BadgeCheck, Check, Clock, ExternalLink, Loader2, Receipt, ShieldAlert, 
 export const Route = createFileRoute("/admin/subscription-requests")({
   head: () => ({
     meta: [
-      { title: "طلبات الاشتراك — Admin | طبيبي" },
+      { title: "طلبات الاشتراك — Admin | طبانا" },
       { name: "description", content: "مراجعة إيصالات الدفع اليدوي وتفعيل اشتراكات Gold." },
       { name: "robots", content: "noindex, nofollow" },
     ],

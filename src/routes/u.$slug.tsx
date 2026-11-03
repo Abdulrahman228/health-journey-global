@@ -10,7 +10,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
-import { buildMeta, buildSeoLinks, truncate } from "@/lib/seo";
+import { buildMeta, buildSeoLinks, siteConfig, truncate } from "@/lib/seo";
 import { jsonLdString, breadcrumbSchema } from "@/lib/schema";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ShareProfileButton } from "@/components/ShareProfileButton";
@@ -37,10 +37,10 @@ export const Route = createFileRoute("/u/$slug")({
   head: ({ params, loaderData }) => {
     const p = loaderData?.profile;
     const name = p?.fullName ?? "ملف";
-    const title = `${name} — طبيبي Tabibi`;
+    const title = `${name} — ${siteConfig.brand.ar} ${siteConfig.brand.en}`;
     const description = p?.bio
       ? truncate(p.bio, 160)
-      : `${name} — ملف شخصي على منصة طبيبي (Tabibi).`;
+      : `${name} — ملف شخصي على منصة طبانا (Tebana).`;
     const path = `/u/${params.slug}`;
 
     return {
@@ -152,7 +152,7 @@ function PatientPublicPage() {
                 <div className="rounded-xl bg-primary/10 px-3 py-2 text-center">
                   <HeartPulse className="mx-auto h-5 w-5 text-primary" />
                   <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-primary">
-                    {t("Tabibi ID", "هوية طبيبي")}
+                    {t("Tebana ID", "هوية طبانا")}
                   </div>
                 </div>
               </div>
@@ -274,8 +274,8 @@ function PatientPublicPage() {
 
         <p className="mt-8 text-center text-xs text-muted-foreground">
           {t(
-            "Powered by Tabibi (طبيبي) — sharable health identity.",
-            "هوية صحية قابلة للمشاركة — مدعومة بمنصة طبيبي (Tabibi).",
+            "Powered by Tebana (طبانا) — sharable health identity.",
+            "هوية صحية قابلة للمشاركة — مدعومة بمنصة طبانا (Tebana).",
           )}
         </p>
       </article>

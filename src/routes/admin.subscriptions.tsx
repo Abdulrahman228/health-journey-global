@@ -9,8 +9,8 @@ import { CreditCard, Loader2, Search, ShieldAlert, TrendingUp } from "lucide-rea
 export const Route = createFileRoute("/admin/subscriptions")({
   head: () => ({
     meta: [
-      { title: "إدارة الاشتراكات — Super Admin | طبيبي" },
-      { name: "description", content: "متابعة اشتراكات الأطباء والمدفوعات المتكررة في طبيبي." },
+      { title: "إدارة الاشتراكات — Super Admin | طبانا" },
+      { name: "description", content: "متابعة اشتراكات الأطباء والمدفوعات المتكررة في طبانا." },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),

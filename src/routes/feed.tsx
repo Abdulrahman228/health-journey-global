@@ -9,9 +9,9 @@ import { useLanguage } from "@/hooks/useLanguage";
 export const Route = createFileRoute("/feed")({
   head: () => ({
     meta: [
-      { title: "المجتمع الطبي — Tabibi" },
+      { title: "المجتمع الطبي — Tebana" },
       { name: "description", content: "شبكة تواصل طبية: نصائح من الأطباء، استفسارات المرضى، والبحث عن الأدوية الناقصة." },
-      { property: "og:title", content: "المجتمع الطبي — Tabibi" },
+      { property: "og:title", content: "المجتمع الطبي — Tebana" },
       { property: "og:description", content: "نصائح من أطباء موثّقين، أسئلة المرضى، والبحث عن أدوية ناقصة." },
     ],
   }),
@@ -27,7 +27,7 @@ const filterTabs: { key: PostType | "all"; labelEn: string; labelAr: string; ico
 
 function FeedPage() {
   const { t, language } = useLanguage();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, role } = useAuth();
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [reactedIds, setReactedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -71,13 +71,15 @@ function FeedPage() {
               )}
             </p>
           </div>
-          <Link
-            to="/feed/new"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            {t("New post", "بوست جديد")}
-          </Link>
+          {(role === "doctor" || role === "admin") && (
+            <Link
+              to="/feed/new"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              {t("New post", "بوست جديد")}
+            </Link>
+          )}
         </div>
 
         {/* Search */}

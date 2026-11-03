@@ -274,13 +274,13 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
             unit_amount: amountMinor,
             product_data: {
               name: `كشف د. ${data.doctorName}`,
-              description: `Tabibi appointment ${data.appointmentId}`,
+              description: `Tebana appointment ${data.appointmentId}`,
             },
           },
         },
       ],
       payment_intent_data: {
-        description: `Tabibi appointment ${data.appointmentId}`,
+        description: `Tebana appointment ${data.appointmentId}`,
         metadata: {
           appointment_id: data.appointmentId,
           ...(userId && { userId }),

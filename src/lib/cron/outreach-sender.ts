@@ -8,7 +8,7 @@ const SEND_HOUR_UTC = 9; // ~11:00 in Egypt (UTC+2) — daytime, higher answer r
 // The Meta-approved template the doctor must have registered. Body variables:
 //   {{1}} = doctor full name,  {{2}} = claim link
 // Suggested Arabic body (register this in WhatsApp Manager):
-//   "د. {{1}}، أنشأنا لك ملفاً مجانياً على طبيبي لإدارة طابور عيادتك وحجوزاتك.
+//   "د. {{1}}، أنشأنا لك ملفاً مجانياً على طبانا لإدارة طابور عيادتك وحجوزاتك.
 //    فعّل ملفك خلال دقيقتين: {{2}}
 //    لإلغاء الاشتراك وحذف بياناتك، رد بكلمة: إلغاء"
 const OUTREACH_TEMPLATE = "claim_profile_intro";

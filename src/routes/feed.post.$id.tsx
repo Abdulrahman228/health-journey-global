@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 
 export const Route = createFileRoute("/feed/post/$id")({
-  head: () => ({ meta: [{ title: "بوست — Tabibi" }] }),
+  head: () => ({ meta: [{ title: "بوست — Tebana" }] }),
   component: PostPage,
   notFoundComponent: () => (
     <div className="mx-auto max-w-2xl px-4 py-20 text-center">

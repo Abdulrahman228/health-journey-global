@@ -1,6 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { trackingRateLimit } from "./_rate-limit";
+
+const SESSION_HASH_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
 async function getDoctorIdAndTier(
   userId: string,
@@ -30,13 +33,15 @@ export const listMySlots = createServerFn({ method: "GET" })
 
     const { data: slots, error } = await supabaseAdmin
       .from("sponsored_slots")
-      .select(`
+      .select(
+        `
         id, status, monthly_budget_cents, daily_cap_cents, cpc_bid_cents,
         spent_total_cents, spent_today_cents, starts_at, ends_at, created_at,
         governorate_id, city_id, specialty,
         governorate:governorate_id (name_ar, name_en),
         city:city_id (name_ar, name_en)
-      `)
+      `,
+      )
       .eq("doctor_id", doctorId)
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -135,15 +140,13 @@ export const upsertSponsoredSlot = createServerFn({ method: "POST" })
 // ---------------------------------------------------------------------------
 export const setSlotStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (data: { slotId: string; status: "active" | "paused" | "cancelled" }) => {
-      if (!data.slotId) throw new Error("slotId required");
-      if (!["active", "paused", "cancelled"].includes(data.status)) {
-        throw new Error("Invalid status");
-      }
-      return data;
-    },
-  )
+  .inputValidator((data: { slotId: string; status: "active" | "paused" | "cancelled" }) => {
+    if (!data.slotId) throw new Error("slotId required");
+    if (!["active", "paused", "cancelled"].includes(data.status)) {
+      throw new Error("Invalid status");
+    }
+    return data;
+  })
   .handler(async ({ data, context }) => {
     const { doctorId } = await getDoctorIdAndTier(context.userId);
     const { error } = await supabaseAdmin
@@ -159,6 +162,7 @@ export const setSlotStatus = createServerFn({ method: "POST" })
 // Public: track impression / click. Server-side enforces budget cap.
 // ---------------------------------------------------------------------------
 export const trackSponsoredEvent = createServerFn({ method: "POST" })
+  .middleware([trackingRateLimit])
   .inputValidator(
     (data: {
       slotId: string;
@@ -176,16 +180,38 @@ export const trackSponsoredEvent = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { data: slot, error } = await supabaseAdmin
       .from("sponsored_slots")
-      .select("id, doctor_id, status, cpc_bid_cents, monthly_budget_cents, daily_cap_cents, spent_total_cents, spent_today_cents, spent_today_date")
+      .select(
+        "id, doctor_id, status, cpc_bid_cents, monthly_budget_cents, daily_cap_cents, spent_total_cents, spent_today_cents, spent_today_date",
+      )
       .eq("id", data.slotId)
       .maybeSingle();
     if (error || !slot) return { ok: false };
     if (slot.status !== "active") return { ok: false };
 
-    const cost =
-      data.eventType === "click" || data.eventType === "book"
-        ? slot.cpc_bid_cents
-        : 0;
+    let cost = data.eventType === "click" || data.eventType === "book" ? slot.cpc_bid_cents : 0;
+
+    // Billing guard (2026-11-02 audit): this endpoint is public, so a script
+    // could drain a sponsor's budget with fake clicks. A click/book is billable
+    // only when it carries a well-formed session hash AND that session has not
+    // already been billed for this slot today. Everything else is still
+    // recorded, just at zero cost.
+    if (cost > 0) {
+      const sessionHash = data.sessionHash ?? "";
+      if (!SESSION_HASH_RE.test(sessionHash)) {
+        cost = 0;
+      } else {
+        const dayStart = new Date();
+        dayStart.setUTCHours(0, 0, 0, 0);
+        const { count } = await supabaseAdmin
+          .from("sponsored_impressions")
+          .select("id", { count: "exact", head: true })
+          .eq("slot_id", slot.id)
+          .eq("session_hash", sessionHash)
+          .gt("cost_cents", 0)
+          .gte("occurred_at", dayStart.toISOString());
+        if ((count ?? 0) > 0) cost = 0;
+      }
+    }
 
     // Reset daily counter if needed
     const today = new Date().toISOString().slice(0, 10);

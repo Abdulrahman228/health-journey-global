@@ -231,8 +231,8 @@ export const adminGrantSubscription = createServerFn({ method: "POST" })
           title: "تم تفعيل باقة Gold لك 🎉",
           body:
             data.months == null
-              ? "تم منحك اشتراك Gold مدى الحياة من إدارة طبيبي."
-              : `تم منحك اشتراك Gold مجانًا لمدة ${data.months} شهر من إدارة طبيبي.`,
+              ? "تم منحك اشتراك Gold مدى الحياة من إدارة طبانا."
+              : `تم منحك اشتراك Gold مجانًا لمدة ${data.months} شهر من إدارة طبانا.`,
           link: "/dashboard",
           metadata: { plan_code: data.planCode, months: data.months },
         });

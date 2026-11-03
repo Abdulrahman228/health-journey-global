@@ -21,6 +21,11 @@ export function normalizeArabicText(text: string): string {
       .replace(/[آأإٱ]/g, "ا")
       // Taa Marbuta ة(U+0629) → Haa ه(U+0647).
       .replace(/ة/g, "ه")
+      // Alif Maqsura ى(U+0649) → Yaa ي(U+064A) — so مصطفى/مصطفي يتطابقان.
+      .replace(/ى/g, "ي")
+      // Hamza carriers: ؤ(U+0624)→و ، ئ(U+0626)→ي.
+      .replace(/ؤ/g, "و")
+      .replace(/ئ/g, "ي")
       .toLowerCase()
       .replace(/\s+/g, " ")
       .trim()

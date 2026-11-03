@@ -19,7 +19,7 @@ import {
 export const Route = createFileRoute("/nearby")({
   head: () => ({
     meta: buildMeta({
-      title: "أطباء قريبون منك — البحث الجغرافي | طبيبي",
+      title: "أطباء قريبون منك — البحث الجغرافي | طبانا",
       description:
         "اعثر على أقرب الأطباء الموثّقين حولك في الخليج ومصر. خريطة حيّة، ترتيب حسب المسافة، وحجز فوري.",
       path: "/nearby",

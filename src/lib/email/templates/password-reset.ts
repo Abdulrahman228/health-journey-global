@@ -19,7 +19,7 @@ export function buildPasswordResetEmail(p: PasswordResetEmailPayload): {
   subject: string;
   html: string;
 } {
-  const subject = "إعادة تعيين كلمة المرور — طبيبي";
+  const subject = "إعادة تعيين كلمة المرور — طبانا";
   const greeting = p.recipientName
     ? `السلام عليكم ${escapeHtml(p.recipientName)}،`
     : "السلام عليكم،";
@@ -38,7 +38,7 @@ export function buildPasswordResetEmail(p: PasswordResetEmailPayload): {
       <td style="background:#ffffff;border-radius:12px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
         <div style="text-align:center;margin-bottom:24px;">
           <a href="${SITE_URL}" style="font-size:24px;font-weight:700;color:#0d9488;text-decoration:none;">
-            طبيبي
+            طبانا
           </a>
           <div style="color:#6b7280;font-size:14px;margin-top:4px;">mytabibi.com</div>
         </div>
@@ -49,7 +49,7 @@ export function buildPasswordResetEmail(p: PasswordResetEmailPayload): {
 
         <p style="margin:0 0 12px 0;font-size:15px;">${greeting}</p>
         <p style="margin:0 0 20px 0;font-size:15px;color:#4b5563;line-height:1.7;">
-          استلمنا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك على منصة طبيبي.
+          استلمنا طلباً لإعادة تعيين كلمة المرور الخاصة بحسابك على منصة طبانا.
           اضغط على الزر التالي لإنشاء كلمة مرور جديدة:
         </p>
 
@@ -80,7 +80,7 @@ export function buildPasswordResetEmail(p: PasswordResetEmailPayload): {
         <p style="margin:32px 0 0 0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
           إذا كنت تشك في طلب غير مصرح به، تواصل معنا فوراً على
           <a href="mailto:support@mytabibi.com" style="color:#0d9488;">support@mytabibi.com</a><br>
-          منصة طبيبي · ${SITE_URL}
+          منصة طبانا · ${SITE_URL}
         </p>
       </td>
     </tr>

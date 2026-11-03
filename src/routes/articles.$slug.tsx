@@ -21,12 +21,12 @@ export const Route = createFileRoute("/articles/$slug")({
   head: ({ params, loaderData }) => {
     const a = loaderData?.article ?? null;
     const path = `/articles/${params.slug}`;
-    const title = a ? `${a.title} | طبيبي` : "مقال طبي | طبيبي";
+    const title = a ? `${a.title} | طبانا` : "مقال طبي | طبانا";
     const description = a?.excerpt
       ? truncate(a.excerpt, 160)
       : a
         ? truncate(a.bodyMd.replace(/[#*_>\-]/g, " "), 160)
-        : "محتوى طبي موثوق من أطباء طبيبي.";
+        : "محتوى طبي موثوق من أطباء طبانا.";
     const image = a?.coverImage ?? undefined;
 
     const scripts: Array<{ type: string; children: string }> = [];

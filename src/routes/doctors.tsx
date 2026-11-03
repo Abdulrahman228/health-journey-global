@@ -19,9 +19,9 @@ const DEMO_DOCTOR_NAMES = new Set(["Dr. Test", "د. تجربة الطبيب"]);
 export const Route = createFileRoute("/doctors")({
   head: () => ({
     meta: buildMeta({
-      title: "ابحث عن طبيب أونلاين — 2,500+ طبيب موثّق | طبيبي",
+      title: "ابحث عن طبيب أونلاين — 2,500+ طبيب موثّق | طبانا",
       description:
-        "تصفّح أفضل الأطباء حسب التخصص والمدينة والتقييم. احجز موعدك حضورياً أو عبر فيديو خلال دقائق على منصة طبيبي.",
+        "تصفّح أفضل الأطباء حسب التخصص والمدينة والتقييم. احجز موعدك حضورياً أو عبر فيديو خلال دقائق على منصة طبانا.",
       path: "/doctors",
       keywords: [
         "ابحث عن طبيب",
@@ -533,11 +533,31 @@ function DoctorsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : filtered.length === 0 && seededFiltered.length === 0 ? (
-          <div className="text-center py-20 border border-dashed border-border rounded-xl">
+          <div className="text-center py-16 border border-dashed border-border rounded-xl px-4">
             <Stethoscope className="mx-auto h-12 w-12 text-muted-foreground" />
-            <p className="mt-4 text-muted-foreground">
-              {t("No doctors match your search yet.", "لا يوجد أطباء يطابقون بحثك بعد.")}
+            <p className="mt-4 font-medium text-foreground">
+              {t("No doctors match these filters.", "لا يوجد أطباء بهذه الفلاتر.")}
             </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("Try widening your search — clear the filters to see everyone.", "جرّب توسيع البحث — امسح الفلاتر لعرض كل الأطباء.")}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setSpecialty("");
+                setCity("");
+                setMinFee("");
+                setMaxFee("");
+                setDayFilter("");
+                setMaxDistanceKm("");
+                setSort("rating");
+              }}
+              className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              {t("Clear filters & show all", "مسح الفلاتر وعرض الكل")}
+            </button>
           </div>
         ) : (
           <>
@@ -588,7 +608,7 @@ function SeededDoctorCard({ doctor }: { doctor: SeededDoctor }) {
           <div className="flex flex-wrap items-center gap-1.5">
             <h3 className="truncate font-semibold text-foreground">{name}</h3>
             <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-              {t("Not on Tabibi yet", "غير مُفعّل")}
+              {t("Not on Tebana yet", "غير مُفعّل")}
             </span>
           </div>
           {doctor.specialty && <p className="truncate text-sm text-muted-foreground">{doctor.specialty}</p>}

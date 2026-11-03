@@ -5,14 +5,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
-import { Calendar, Clock, Loader2, X, CheckCircle2, Video, Building2, User as UserIcon, Stethoscope, ReceiptText } from "lucide-react";
+import { Calendar, Clock, Loader2, X, CheckCircle2, Video, Building2, User as UserIcon, Stethoscope, ReceiptText, Star } from "lucide-react";
 import { toast } from "sonner";
 import { ConsultationsInbox } from "@/components/ConsultationsInbox";
+import { PatientShell } from "@/components/patient/PatientNav";
+import { isOnlineVisit } from "@/lib/appointment-type";
 export const Route = createFileRoute("/appointments")({
   head: () => ({
     meta: [
-      { title: "My Appointments — Tabibi" },
-      { name: "description", content: "Manage your appointments on Tabibi." },
+      { title: "My Appointments — Tebana" },
+      { name: "description", content: "Manage your appointments on Tebana." },
     ],
   }),
   component: AppointmentsPage,
@@ -219,7 +221,8 @@ function AppointmentsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+    <PatientShell>
+      <div>
       <h1 className="text-3xl font-bold text-foreground mb-2">{t("My Appointments", "مواعيدي")}</h1>
       <p className="text-muted-foreground mb-8">
         {role === "doctor"
@@ -266,6 +269,7 @@ function AppointmentsPage() {
         <ConsultationsInbox />
       </div>
     </div>
+    </PatientShell>
   );
 }
 
@@ -301,8 +305,8 @@ function Section({
           return (
             <div key={a.id} className="bg-card border border-border rounded-xl p-5 flex items-start justify-between gap-4 flex-wrap">
               <div className="flex items-start gap-4 min-w-0 flex-1">
-                <div className={`h-12 w-12 rounded-lg flex items-center justify-center shrink-0 ${a.appointment_type === "video" ? "bg-teal/10 text-teal" : "bg-primary/10 text-primary"}`}>
-                  {a.appointment_type === "video" ? <Video className="h-6 w-6" /> : <Building2 className="h-6 w-6" />}
+                <div className={`h-12 w-12 rounded-lg flex items-center justify-center shrink-0 ${isOnlineVisit(a.appointment_type) ? "bg-teal/10 text-teal" : "bg-primary/10 text-primary"}`}>
+                  {isOnlineVisit(a.appointment_type) ? <Video className="h-6 w-6" /> : <Building2 className="h-6 w-6" />}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-foreground font-semibold">
@@ -340,7 +344,7 @@ function Section({
                       {t("Receipt", "الإيصال")}
                     </Link>
                   )}
-                {a.appointment_type === "video" && a.status === "confirmed" && !isPast && (
+                {isOnlineVisit(a.appointment_type) && a.status === "confirmed" && !isPast && (
                   <Link
                     to="/consultation/$id"
                     params={{ id: a.id }}
@@ -375,7 +379,18 @@ function Section({
                     <X className="h-4 w-4" />
                   </button>
                 )}
-                {a.status === "completed" && <CheckCircle2 className="h-5 w-5 text-teal" />}
+                {a.status === "completed" && !a.iAmDoctor && (
+                  <Link
+                    to="/doctor/$id"
+                    params={{ id: a.doctor_id }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/50 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-300"
+                    title={t("Rate this doctor", "قيّم الطبيب")}
+                  >
+                    <Star className="h-4 w-4" />
+                    {t("Rate", "قيّم")}
+                  </Link>
+                )}
+                {a.status === "completed" && a.iAmDoctor && <CheckCircle2 className="h-5 w-5 text-teal" />}
               </div>
             </div>
           );

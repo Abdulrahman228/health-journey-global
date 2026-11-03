@@ -1,11 +1,13 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.mytabibi.app",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_YOUR_RELEASE_SIGNING_SHA256_FINGERPRINT"
+        "12:7D:79:98:EC:2D:A0:14:DE:3C:F3:50:A7:C1:31:80:81:13:4D:2D:B2:91:C4:00:E2:9B:C3:EC:CB:6C:B7:D7"
       ]
     }
   }

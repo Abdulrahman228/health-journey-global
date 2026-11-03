@@ -1,361 +1,234 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { toast } from "sonner";
-import {
-  BadgeCheck,
-  Ban,
-  Building2,
-  Loader2,
-  MapPin,
-  Phone,
-  ShieldCheck,
-  Stethoscope,
-  UserCheck,
-} from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { UserCheck, Loader2, ShieldCheck, LogIn, AlertTriangle, Smartphone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
-import { getClaimableListing, claimDoctorProfile, optOutListing } from "@/lib/claim.functions";
 
 export const Route = createFileRoute("/claim/$token")({
-  head: () => ({
-    meta: [
-      { title: "فعّل ملفك على طبيبي — Claim your profile" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
-  }),
   component: ClaimPage,
+  head: () => ({ meta: [{ title: "استلام ملفك الطبي — Tebana" }] }),
 });
+
+interface Preview {
+  doctor_name: string | null;
+  patient_name: string | null;
+  valid: boolean;
+}
+
+const ERROR_AR: Record<string, string> = {
+  invalid_or_expired: "هذا الرابط غير صالح أو منتهي الصلاحية.",
+  already_claimed: "تم استلام هذا الملف بالفعل بحساب آخر.",
+  account_has_history: "حسابك الحالي يحتوي على سجل طبي. تواصل مع الدعم لدمج الحسابات بأمان.",
+  not_authenticated: "برجاء تسجيل الدخول أولاً.",
+  doctor_account: "هذا الرابط مخصص للمرضى — سجّل الدخول بحساب المريض صاحب الرقم.",
+};
+
+// Optional store links (set VITE_APP_STORE_URL / VITE_PLAY_STORE_URL to show them).
+const APP_STORE_URL = (import.meta.env.VITE_APP_STORE_URL as string | undefined) || "";
+const PLAY_STORE_URL = (import.meta.env.VITE_PLAY_STORE_URL as string | undefined) || "";
+
+function AppBadges({ t }: { t: (en: string, ar: string) => string }) {
+  if (!APP_STORE_URL && !PLAY_STORE_URL) return null;
+  return (
+    <div className="mt-5 rounded-xl border border-border bg-muted/40 p-3">
+      <p className="mb-2 flex items-center justify-center gap-1.5 text-xs font-medium text-foreground">
+        <Smartphone className="h-4 w-4 text-primary" aria-hidden="true" />
+        {t("Get the app to follow your care anywhere", "حمّل التطبيق لمتابعة رعايتك في أي وقت")}
+      </p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {PLAY_STORE_URL && (
+          <a
+            href={PLAY_STORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+          >
+            Google Play
+          </a>
+        )}
+        {APP_STORE_URL && (
+          <a
+            href={APP_STORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+          >
+            App Store
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ClaimPage() {
   const { token } = Route.useParams();
-  const { t, isRTL } = useLanguage();
+  const { t } = useLanguage();
+  const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
-  const claim = useServerFn(claimDoctorProfile);
-  const optOut = useServerFn(optOutListing);
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [nameSeeded, setNameSeeded] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Reject / opt-out flow
-  const [showReject, setShowReject] = useState(false);
-  const [rejectReason, setRejectReason] = useState<"not_me" | "not_interested" | "other">("not_me");
-  const [rejectNote, setRejectNote] = useState("");
-  const [rejectBusy, setRejectBusy] = useState(false);
-  const [rejected, setRejected] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.rpc("preview_claim", { p_token: token });
+      setPreview((data?.[0] as Preview) ?? null);
+      setLoading(false);
+    })();
+  }, [token]);
 
-  const submitReject = async () => {
-    setRejectBusy(true);
-    try {
-      await optOut({ data: { token, reason: rejectReason, note: rejectNote.trim() || undefined } });
-      setRejected(true);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setRejectBusy(false);
-    }
-  };
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["claimable", token],
-    queryFn: async () => {
-      const res = await getClaimableListing({ data: { token } });
-      if (res.found && !res.alreadyClaimed && res.listing && !nameSeeded) {
-        setFullName(res.listing.fullName);
-        setNameSeeded(true);
-      }
-      return res;
-    },
-  });
-
-  const submit = async () => {
-    setBusy(true);
-    try {
-      await claim({ data: { token, email: email.trim(), password, fullName: fullName.trim(), phone: phone.trim() } });
-      // Establish the session so the doctor lands authenticated on verification.
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+  // Signed in with the same verified phone? The profile was adopted
+  // automatically at sign-up (adopt_managed_profile_by_phone); claiming the
+  // token is then a no-op that confirms ownership — do it silently.
+  useEffect(() => {
+    if (isLoading || loading || !isAuthenticated || !preview || preview.valid || done) return;
+    (async () => {
+      const { data, error: rpcErr } = await supabase.rpc("claim_managed_profile", {
+        p_token: token,
       });
-      toast.success(t("Profile claimed! Let's verify your license.", "تم تفعيل ملفك! لنؤكد ترخيصك الآن."));
-      if (signInErr) {
-        navigate({ to: "/login" });
-      } else {
-        navigate({ to: "/doctor/verification" });
-      }
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
+      if (!rpcErr && data) setDone(true);
+    })();
+  }, [isLoading, loading, isAuthenticated, preview, token, done]);
+
+  const handleClaim = async () => {
+    setClaiming(true);
+    setError(null);
+    const { error: rpcErr } = await supabase.rpc("claim_managed_profile", { p_token: token });
+    setClaiming(false);
+    if (rpcErr) {
+      setError(ERROR_AR[rpcErr.message] ?? rpcErr.message);
+      return;
     }
+    setDone(true);
+    // give useAuth a moment, then send them to their records
+    setTimeout(() => navigate({ to: "/profile/medical-history" }), 1500);
   };
 
-  if (isLoading) {
+  const loginHref = `/login?redirect=${encodeURIComponent(`/claim/${token}`)}`;
+  const signupHref = `/signup?redirect=${encodeURIComponent(`/claim/${token}`)}`;
+
+  if (loading || isLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="mx-auto flex max-w-md items-center justify-center px-4 py-24">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
 
-  // Invalid / expired token.
-  if (!data || !data.found) {
-    return (
-      <div className="mx-auto max-w-md px-4 py-24 text-center" dir="rtl">
-        <Stethoscope className="mx-auto h-12 w-12 text-muted-foreground" />
-        <h1 className="mt-4 text-xl font-bold">{t("Invalid claim link", "رابط غير صالح")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t(
-            "This claim link is invalid or has expired. If you're a doctor, you can join directly.",
-            "رابط المطالبة غير صالح أو منتهي الصلاحية. إذا كنت طبيباً يمكنك الانضمام مباشرةً.",
-          )}
-        </p>
-        <Link
-          to="/join-doctor"
-          className="mt-5 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          {t("Join as a doctor", "انضم كطبيب")}
-        </Link>
-      </div>
-    );
-  }
-
-  // Already claimed by someone.
-  if (data.alreadyClaimed) {
-    return (
-      <div className="mx-auto max-w-md px-4 py-24 text-center" dir="rtl">
-        <BadgeCheck className="mx-auto h-12 w-12 text-primary" />
-        <h1 className="mt-4 text-xl font-bold">{t("Already claimed", "تم التفعيل مسبقاً")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t("This profile has already been claimed. Please log in.", "تم تفعيل هذا الملف بالفعل. يرجى تسجيل الدخول.")}
-        </p>
-        <Link
-          to="/login"
-          className="mt-5 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          {t("Log in", "تسجيل الدخول")}
-        </Link>
-      </div>
-    );
-  }
-
-  // Declined — the listing is removed and no further contact will happen.
-  if (rejected) {
-    return (
-      <div className="mx-auto max-w-md px-4 py-24 text-center" dir="rtl">
-        <BadgeCheck className="mx-auto h-12 w-12 text-primary" />
-        <h1 className="mt-4 text-xl font-bold">{t("Done", "تم")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t(
-            "We've removed this listing and will not contact you again. Thank you.",
-            "أزلنا هذا الملف من الدليل ولن نتواصل معك مجدداً. شكراً لك.",
-          )}
-        </p>
-      </div>
-    );
-  }
-
-  const listing = data.listing!;
+  const invalid = !preview || !preview.valid;
 
   return (
-    <div className="mx-auto w-full max-w-lg px-4 py-10 sm:px-6" dir={isRTL ? "rtl" : "ltr"}>
-      <div className="text-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-          <UserCheck className="h-3.5 w-3.5" /> {t("Claim your profile", "فعّل ملفك المجاني")}
-        </span>
-        <h1 className="mt-3 text-2xl font-bold text-foreground">
-          {t("Is this you, doctor?", "هل هذا ملفك يا دكتور؟")}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t(
-            "Claim your free Tabibi profile to manage your clinic queue and bookings.",
-            "فعّل ملفك المجاني على طبيبي لإدارة طابور عيادتك وحجوزاتك.",
-          )}
-        </p>
-      </div>
-
-      {/* The seeded listing card */}
-      <div className="mt-6 rounded-2xl border border-border bg-card p-5">
-        <h2 className="text-lg font-bold text-foreground">{listing.fullName}</h2>
-        {listing.specialty && (
-          <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Stethoscope className="h-4 w-4" /> {listing.specialty}
-          </p>
-        )}
-        {(listing.city || listing.address) && (
-          <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-            <MapPin className="h-4 w-4" /> {[listing.city, listing.address].filter(Boolean).join(" · ")}
-          </p>
-        )}
-        {listing.phoneHint && (
-          <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground" dir="ltr">
-            <Phone className="h-4 w-4" /> {listing.phoneHint}
-          </p>
-        )}
-      </div>
-
-      {/* Claim form */}
-      <div className="mt-5 space-y-3 rounded-2xl border border-border bg-card p-5">
-        <Field label={t("Full name", "الاسم بالكامل")}>
-          <input
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-          />
-        </Field>
-
-        {listing.hasPhone && (
-          <Field
-            label={t("Confirm your clinic phone", "أكّد رقم هاتف العيادة")}
-            hint={t("Enter the number this profile is listed under.", "أدخل الرقم المسجّل لهذا الملف للتحقق من هويتك.")}
-          >
-            <input
-              inputMode="tel"
-              dir="ltr"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="01xxxxxxxxx"
-              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-            />
-          </Field>
-        )}
-        {!listing.hasPhone && (
-          <Field label={t("Clinic phone", "رقم هاتف العيادة")}>
-            <input
-              inputMode="tel"
-              dir="ltr"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="01xxxxxxxxx"
-              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-            />
-          </Field>
-        )}
-
-        <Field label={t("Email", "البريد الإلكتروني")}>
-          <input
-            type="email"
-            dir="ltr"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-          />
-        </Field>
-
-        <Field label={t("Password", "كلمة المرور")} hint={t("At least 10 characters, with a letter and a number.", "10 أحرف على الأقل، تحتوي على حرف ورقم.")}>
-          <input
-            type="password"
-            dir="ltr"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-          />
-        </Field>
-
-        <button
-          type="button"
-          onClick={submit}
-          disabled={busy || !email || !password || !fullName || !phone}
-          className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-          {t("Claim my profile", "تفعيل ملفي")}
-        </button>
-
-        <p className="flex items-start gap-1.5 pt-1 text-xs text-muted-foreground">
-          <Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          {t(
-            "After claiming, upload your medical license to unlock online bookings.",
-            "بعد التفعيل، ارفع ترخيص مزاولة المهنة لتفعيل الحجوزات الإلكترونية.",
-          )}
-        </p>
-      </div>
-
-      {/* Reject / opt-out */}
-      {!showReject ? (
-        <button
-          type="button"
-          onClick={() => setShowReject(true)}
-          className="mx-auto mt-4 flex items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-        >
-          <Ban className="h-3.5 w-3.5" />
-          {t("This isn't me / I don't want to join", "هذا ليس أنا / لا أريد الانضمام")}
-        </button>
-      ) : (
-        <div className="mt-4 space-y-3 rounded-2xl border border-border bg-muted/30 p-5">
-          <h3 className="text-sm font-bold text-foreground">
-            {t("Remove this listing", "إزالة هذا الملف من الدليل")}
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {t("Please tell us why (optional):", "من فضلك أخبرنا بالسبب:")}
-          </p>
-
-          <div className="space-y-2">
-            {[
-              { key: "not_me" as const, label: t("I'm not this doctor", "لست هذا الطبيب") },
-              { key: "not_interested" as const, label: t("I don't want to join", "لا أريد الانضمام") },
-              { key: "other" as const, label: t("Another reason", "سبب آخر") },
-            ].map((opt) => (
-              <label key={opt.key} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-                <input
-                  type="radio"
-                  name="reject-reason"
-                  checked={rejectReason === opt.key}
-                  onChange={() => setRejectReason(opt.key)}
-                  className="h-4 w-4 accent-primary"
-                />
-                {opt.label}
-              </label>
-            ))}
-          </div>
-
-          {rejectReason === "other" && (
-            <textarea
-              value={rejectNote}
-              onChange={(e) => setRejectNote(e.target.value)}
-              rows={2}
-              maxLength={300}
-              placeholder={t("Write your reason…", "اكتب سببك…")}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-            />
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={submitReject}
-              disabled={rejectBusy}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground transition hover:bg-destructive/90 disabled:opacity-60"
+    <div className="mx-auto max-w-md px-4 py-16">
+      <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+        {done ? (
+          <>
+            <ShieldCheck className="mx-auto h-14 w-14 text-emerald-500" />
+            <h1 className="mt-4 text-2xl font-bold text-foreground">
+              {t("Linked!", "تم الاستلام!")}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t(
+                "Your profile and full medical history are now on your account.",
+                "تم ربط ملفك وكامل تاريخك الطبي بحسابك.",
+              )}
+            </p>
+            <AppBadges t={t} />
+          </>
+        ) : invalid ? (
+          <>
+            <AlertTriangle className="mx-auto h-14 w-14 text-amber-500" />
+            <h1 className="mt-4 text-xl font-bold text-foreground">
+              {t("Link unavailable", "الرابط غير متاح")}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t(
+                "This invitation is invalid, expired, or already used.",
+                "هذه الدعوة غير صالحة أو منتهية أو مُستخدمة بالفعل.",
+              )}
+            </p>
+            <Link
+              to="/"
+              className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
             >
-              {rejectBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-              {t("Remove & don't contact me", "أزل ملفي ولا تتواصل معي")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowReject(false)}
-              disabled={rejectBusy}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-60"
-            >
-              {t("Cancel", "إلغاء")}
-            </button>
-          </div>
-        </div>
-      )}
+              {t("Go to home", "الذهاب للرئيسية")}
+            </Link>
+          </>
+        ) : (
+          <>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+              <UserCheck className="h-7 w-7 text-primary" />
+            </div>
+            <h1 className="mt-4 text-xl font-bold text-foreground">
+              {t("You've been registered", "تم تسجيلك")}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {preview?.doctor_name
+                ? t(
+                    `Dr. ${preview.doctor_name} registered you on Tebana. Claim your profile to keep your visits, prescriptions and results.`,
+                    `قام د. ${preview.doctor_name} بتسجيلك على طبانا. استلم ملفك لتحتفظ بزياراتك ووصفاتك ونتائجك.`,
+                  )
+                : t(
+                    "Claim your profile to keep your medical history.",
+                    "استلم ملفك لتحتفظ بتاريخك الطبي.",
+                  )}
+            </p>
+            {!isAuthenticated && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t(
+                  "Tip: sign up with the mobile number your doctor has for you and the file links automatically.",
+                  "نصيحة: سجّل برقم الموبايل المسجّل لدى طبيبك وسيُربط ملفك تلقائياً.",
+                )}
+              </p>
+            )}
+            {preview?.patient_name && (
+              <p className="mt-1 text-sm font-medium text-foreground">{preview.patient_name}</p>
+            )}
+
+            {error && (
+              <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                {error}
+              </p>
+            )}
+
+            {isAuthenticated ? (
+              <button
+                onClick={handleClaim}
+                disabled={claiming}
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+              >
+                {claiming ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4" />
+                )}
+                {t("Claim my profile", "استلام ملفي")}
+              </button>
+            ) : (
+              <div className="mt-6 space-y-2">
+                <a
+                  href={signupHref}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  <UserCheck className="h-4 w-4" />
+                  {t("Create account & claim", "إنشاء حساب واستلام")}
+                </a>
+                <a
+                  href={loginHref}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium hover:bg-accent"
+                >
+                  <LogIn className="h-4 w-4" />
+                  {t("I already have an account", "لدي حساب بالفعل")}
+                </a>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
-  );
-}
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-foreground">{label}</span>
-      {children}
-      {hint && <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>}
-    </label>
   );
 }

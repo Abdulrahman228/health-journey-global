@@ -1,27 +1,40 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
+import { isOnlineVisit } from "@/lib/appointment-type";
 import { ArrowLeft, Loader2, Video } from "lucide-react";
+
+// Client-only: the LiveKit SDK is loaded in a lazy chunk so it never executes
+// during SSR on the Cloudflare Worker.
+const ConsultationRoom = lazy(() => import("@/components/ConsultationRoom"));
 
 export const Route = createFileRoute("/consultation/$id")({
   head: () => ({
     meta: [
-      { title: "Video Consultation — Tabibi" },
-      { name: "description", content: "Secure video consultation room on Tabibi." },
+      { title: "Video Consultation — Tebana" },
+      { name: "description", content: "Secure video consultation room on Tebana." },
+      { name: "robots", content: "noindex, nofollow" },
     ],
   }),
   component: ConsultationPage,
 });
 
+interface LiveKitCreds {
+  token: string;
+  wsUrl: string;
+}
+
 function ConsultationPage() {
   const { id } = Route.useParams();
   const { t } = useLanguage();
-  const { user, profile, isLoading: authLoading } = useAuth();
+  const { user, profile, role: userRole, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [mounted, setMounted] = useState(false);
 
+  useEffect(() => setMounted(true), []);
   useEffect(() => {
     if (!authLoading && !user) navigate({ to: "/login" });
   }, [authLoading, user, navigate]);
@@ -40,7 +53,54 @@ function ConsultationPage() {
     },
   });
 
-  if (authLoading || isLoading) {
+  // Doctors: appointments store doctor_details.id, NOT profile.id — so resolve
+  // the doctor's doctor_details.id before matching them to appt.doctor_id.
+  const { data: doctorDetailsId } = useQuery({
+    queryKey: ["my-doctor-details-id", profile?.id],
+    enabled: !!profile?.id && userRole === "doctor",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("doctor_details")
+        .select("id")
+        .eq("profile_id", profile!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.id as string | undefined) ?? null;
+    },
+  });
+
+  const isDoctorHere = !!appt && !!doctorDetailsId && doctorDetailsId === appt.doctor_id;
+  const isParticipant = !!appt && (profile?.id === appt.patient_id || isDoctorHere);
+  const isVideo = isOnlineVisit(appt?.appointment_type);
+  const isCancelled = appt?.status === "cancelled";
+  const role: "doctor" | "patient" = isDoctorHere ? "doctor" : "patient";
+
+  // LiveKit access token. Room name = the appointment id so the web and the
+  // mobile apps join the SAME room (the apps also use the raw appointment id).
+  const {
+    data: creds,
+    isLoading: credsLoading,
+    error: credsError,
+  } = useQuery<LiveKitCreds>({
+    queryKey: ["livekit-token", id],
+    enabled: !!appt && isVideo && isParticipant && !isCancelled,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("livekit-token", {
+        body: {
+          roomName: id,
+          participantName: profile?.full_name ?? user?.email ?? "Guest",
+          role,
+        },
+      });
+      if (error) throw error;
+      return data as LiveKitCreds;
+    },
+  });
+
+  // Wait for the doctor_details.id to resolve before deciding authorization,
+  // otherwise a doctor briefly sees the "not authorized" screen.
+  const resolvingDoctor = userRole === "doctor" && doctorDetailsId === undefined;
+  if (authLoading || isLoading || resolvingDoctor) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -56,9 +116,6 @@ function ConsultationPage() {
     );
   }
 
-  const isParticipant =
-    profile?.id === appt.patient_id || profile?.id === appt.doctor_id;
-
   if (!isParticipant) {
     return (
       <div className="text-center py-20 px-4">
@@ -72,7 +129,7 @@ function ConsultationPage() {
     );
   }
 
-  if (appt.appointment_type !== "video") {
+  if (!isVideo) {
     return (
       <div className="text-center py-20 px-4">
         <p className="text-muted-foreground">
@@ -82,17 +139,13 @@ function ConsultationPage() {
     );
   }
 
-  if (appt.status === "cancelled") {
+  if (isCancelled) {
     return (
       <div className="text-center py-20 px-4">
         <p className="text-muted-foreground">{t("This appointment has been cancelled.", "تم إلغاء هذا الموعد.")}</p>
       </div>
     );
   }
-
-  const roomName = `Tabibi-${id}`;
-  const displayName = encodeURIComponent(profile?.full_name ?? user?.email ?? "Guest");
-  const jitsiUrl = `https://meet.jit.si/${roomName}#userInfo.displayName=%22${displayName}%22&config.prejoinPageEnabled=true`;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -113,12 +166,34 @@ function ConsultationPage() {
       </div>
 
       <div className="flex-1 bg-black">
-        <iframe
-          src={jitsiUrl}
-          allow="camera; microphone; fullscreen; display-capture; autoplay"
-          className="w-full h-[calc(100vh-57px)] border-0"
-          title="Video consultation"
-        />
+        {!mounted || credsLoading ? (
+          <div className="flex items-center justify-center h-[calc(100vh-57px)]">
+            <Loader2 className="h-8 w-8 animate-spin text-white/80" />
+          </div>
+        ) : credsError || !creds?.token || !creds?.wsUrl ? (
+          <div className="flex flex-col items-center justify-center h-[calc(100vh-57px)] gap-3 px-4 text-center">
+            <p className="text-white/80">
+              {t("Could not start the session. Please try again.", "تعذّر بدء الجلسة. حاول مرة أخرى.")}
+            </p>
+            <Link to="/appointments" className="text-primary hover:underline">
+              {t("Back to appointments", "العودة للمواعيد")}
+            </Link>
+          </div>
+        ) : (
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center h-[calc(100vh-57px)]">
+                <Loader2 className="h-8 w-8 animate-spin text-white/80" />
+              </div>
+            }
+          >
+            <ConsultationRoom
+              wsUrl={creds.wsUrl}
+              token={creds.token}
+              onLeave={() => navigate({ to: "/appointments" })}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   );

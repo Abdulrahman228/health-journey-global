@@ -16,24 +16,24 @@ import {
   Globe,
   BookOpen,
 } from "lucide-react";
-import { buildMeta, buildSeoLinks } from "@/lib/seo";
+import { buildMeta, buildSeoLinks, siteConfig } from "@/lib/seo";
 import { faqSchema, jsonLdString } from "@/lib/schema";
 import heroMedicalTeamImage from "@/assets/hero-medical-team.png";
 import { HeroHierarchicalSearch } from "@/components/HeroHierarchicalSearch";
 
 const HOMEPAGE_FAQ = [
   {
-    question: "كيف أحجز موعد مع طبيب على طبيبي؟",
+    question: "كيف أحجز موعد مع طبيب على طبانا؟",
     answer:
       "ابحث عن الطبيب المناسب عن طريق التخصص أو المدينة، ثم اختر الموعد المتاح، وأكد الحجز خلال دقائق. ستصلك رسالة تأكيد فورية على البريد الإلكتروني والرسائل النصية.",
   },
   {
     question: "هل أستطيع الاستشارة أونلاين بالفيديو؟",
     answer:
-      "نعم. منصة طبيبي توفر استشارات فيديو آمنة ومشفّرة مع أطباء معتمدين، بدون الحاجة لتثبيت أي تطبيق. تكفي متصفح حديث على الهاتف أو الكمبيوتر.",
+      "نعم. منصة طبانا توفر استشارات فيديو آمنة ومشفّرة مع أطباء معتمدين، بدون الحاجة لتثبيت أي تطبيق. تكفي متصفح حديث على الهاتف أو الكمبيوتر.",
   },
   {
-    question: "هل الأطباء على طبيبي موثوقون ومرخّصون؟",
+    question: "هل الأطباء على طبانا موثوقون ومرخّصون؟",
     answer:
       "كل طبيب على المنصة يمر بمرحلة تحقق صارمة من الترخيص والشهادات قبل عرض ملفه. تظهر شارة \"موثّق\" بجانب اسم الطبيب الذي اكتمل التحقق منه.",
   },
@@ -48,7 +48,7 @@ const HOMEPAGE_FAQ = [
       "نعم. كل سجلاتك مشفّرة بمعايير HIPAA وتُحفظ بأمان في خوادم مؤمّنة. لا يطّلع عليها سوى الطبيب الذي تختار مشاركتها معه، ويمكنك حذفها في أي وقت.",
   },
   {
-    question: "في أي دول يعمل تطبيق طبيبي؟",
+    question: "في أي دول يعمل تطبيق طبانا؟",
     answer:
       "نخدم حالياً مرضى وأطباء في مصر والسعودية والإمارات وقطر والكويت والبحرين وعُمان والأردن، ونتوسع باستمرار لخدمة المزيد من الدول العربية.",
   },
@@ -57,9 +57,9 @@ const HOMEPAGE_FAQ = [
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: buildMeta({
-      title: "احجز موعد طبيب أونلاين 24/7 — 2,500+ طبيب موثّق | طبيبي",
+      title: "احجز موعد طبيب أونلاين 24/7 — 2,500+ طبيب موثّق | طبانا",
       description:
-        "احجز موعدك مع أفضل الأطباء في الوطن العربي خلال دقائق — استشارة فيديو آمنة، أسعار شفافة، تأكيد فوري. جرّب طبيبي مجاناً اليوم.",
+        "احجز موعدك مع أفضل الأطباء في الوطن العربي خلال دقائق — استشارة فيديو آمنة، أسعار شفافة، تأكيد فوري. جرّب طبانا مجاناً اليوم.",
       path: "/",
       keywords: [
         "حجز موعد طبيب",
@@ -68,7 +68,7 @@ export const Route = createFileRoute("/")({
         "أطباء معتمدون مصر",
         "تطبيب عن بعد",
         "كشف أونلاين",
-        "Tabibi",
+        siteConfig.brand.en,
       ],
     }),
     links: buildSeoLinks("/"),
@@ -117,14 +117,14 @@ function HeroSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRT
             </div>
             <h1 className="arabic-elegant mt-6 text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
               {t(
-                "Tabibi — Book your trusted doctor in minutes. Video consultations & in-person visits",
-                "طبيبي — احجز طبيبك الموثّق في دقائق، استشارات فيديو ومواعيد حضورية"
+                "Tebana — Book your trusted doctor in minutes. Video consultations & in-person visits",
+                "طبانا — احجز طبيبك الموثّق في دقائق، استشارات فيديو ومواعيد حضورية"
               )}
             </h1>
             <p className="mt-6 text-lg leading-8 text-muted-foreground">
               {t(
-                "Tabibi connects you with 2,500+ licensed doctors across the Arab world — book in-person visits or secure video consultations, compare prices, read genuine reviews, and manage your medical records on one trusted platform.",
-                "منصة طبيبي تربطك بأكثر من 2,500 طبيب مرخّص في الوطن العربي — احجز كشف حضوري أو استشارة فيديو آمنة، قارن الأسعار، اقرأ تقييمات حقيقية، وأدر سجلك الطبي على منصة موثوقة واحدة."
+                "Tebana connects you with 2,500+ licensed doctors across the Arab world — book in-person visits or secure video consultations, compare prices, read genuine reviews, and manage your medical records on one trusted platform.",
+                "منصة طبانا تربطك بأكثر من 2,500 طبيب مرخّص في الوطن العربي — احجز كشف حضوري أو استشارة فيديو آمنة، قارن الأسعار، اقرأ تقييمات حقيقية، وأدر سجلك الطبي على منصة موثوقة واحدة."
               )}
             </p>
 
@@ -268,8 +268,8 @@ function FeaturesSection({ t, isRTL }: { t: (en: string, ar: string) => string; 
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
             {t(
-              "From finding the right doctor to managing your health records, Tabibi simplifies your healthcare journey.",
-              "من إيجاد الطبيب المناسب إلى إدارة سجلاتك الصحية، طبيبي تبسّط رحلتك الصحية."
+              "From finding the right doctor to managing your health records, Tebana simplifies your healthcare journey.",
+              "من إيجاد الطبيب المناسب إلى إدارة سجلاتك الصحية، منصة طبانا تبسّط رحلتك الصحية."
             )}
           </p>
         </div>
@@ -337,7 +337,7 @@ function HowItWorksSection({ t, isRTL }: { t: (en: string, ar: string) => string
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            {t("How Tabibi Works", "كيف يعمل طبيبي")}
+            {t("How Tebana Works", "كيف تعمل منصة طبانا")}
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
             {t(
@@ -532,8 +532,8 @@ function CTASection({ t, isRTL }: { t: (en: string, ar: string) => string; isRTL
             </h2>
             <p className="mt-4 text-lg text-primary-foreground/80">
               {t(
-                "Join thousands of patients and doctors who trust Tabibi for better healthcare.",
-                "انضم لآلاف المرضى والأطباء الذين يثقون بطبيبي لرعاية صحية أفضل."
+                "Join thousands of patients and doctors who trust Tebana for better healthcare.",
+                "انضم لآلاف المرضى والأطباء الذين يثقون بطبانا لرعاية صحية أفضل."
               )}
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-4">

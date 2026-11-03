@@ -16,11 +16,11 @@ import { AlertTriangle, CheckCircle2, Clock, Loader2, ShieldCheck, XCircle } fro
 export const Route = createFileRoute("/rx/verify/$number")({
   head: ({ params }) => ({
     meta: [
-      { title: `التحقق من الوصفة ${params.number} | طبيبي` },
+      { title: `التحقق من الوصفة ${params.number} | طبانا` },
       {
         name: "description",
         content:
-          "تحقّق من صحة الوصفة الطبية الصادرة عبر منصة طبيبي. صفحة موثوقة للصيدليات والمرضى.",
+          "تحقّق من صحة الوصفة الطبية الصادرة عبر منصة طبانا. صفحة موثوقة للصيدليات والمرضى.",
       },
       { name: "robots", content: "noindex, nofollow" },
     ],
@@ -64,7 +64,7 @@ function VerifyRxPage() {
         <ShieldCheck className="mx-auto h-12 w-12 text-primary" aria-hidden="true" />
         <h1 className="mt-3 text-2xl font-bold">التحقق من وصفة طبية</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          منصة طبيبي · Tabibi Health
+          منصة طبانا · Tebana
         </p>
       </header>
 

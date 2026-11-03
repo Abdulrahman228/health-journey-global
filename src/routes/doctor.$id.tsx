@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { TierBadge } from "@/components/TierBadge";
 import { BookingCard } from "@/components/booking/BookingCard";
-import { buildMeta, buildSeoLinks, truncate } from "@/lib/seo";
+import { buildMeta, buildSeoLinks, siteConfig, truncate } from "@/lib/seo";
 import { physicianSchema, breadcrumbSchema, medicalClinicSchema, reviewSchema, jsonLdString } from "@/lib/schema";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { loadDoctorForSeo, type DoctorSeoData } from "@/lib/seo.functions";
@@ -24,16 +24,16 @@ import { listEligibleAppointments, submitReview, type EligibleAppointment } from
  *   keyword (احجز/طبيب + specialty) + name + city + brand, ≤ 60 chars.
  */
 function buildDoctorTitle(d: DoctorSeoData | null): string {
-  if (!d || !d.name) return "ملف الطبيب — احجز موعدك الآن | طبيبي";
+  if (!d || !d.name) return "ملف الطبيب — احجز موعدك الآن | طبانا";
   const drName = d.name.startsWith("د.") || d.name.startsWith("Dr") ? d.name : `د. ${d.name}`;
   const spec = d.specialty ? ` ${d.specialty}` : "";
   const city = d.city ? ` — ${d.city}` : "";
-  return `${drName}${spec}${city} | احجز موعد | طبيبي`;
+  return `${drName}${spec}${city} | احجز موعد | طبانا`;
 }
 
 function buildDoctorDescription(d: DoctorSeoData | null): string {
   if (!d || !d.name) {
-    return "تعرّف على خبرات الطبيب وتقييمات المرضى وأسعار الكشف، واحجز موعدك حضورياً أو عبر فيديو في دقائق على منصة طبيبي.";
+    return "تعرّف على خبرات الطبيب وتقييمات المرضى وأسعار الكشف، واحجز موعدك حضورياً أو عبر فيديو في دقائق على منصة طبانا.";
   }
   const drName = d.name.startsWith("د.") || d.name.startsWith("Dr") ? d.name : `د. ${d.name}`;
   const exp = d.yearsExperience ? `${d.yearsExperience}+ سنة خبرة` : "طبيب موثّق";
@@ -44,7 +44,7 @@ function buildDoctorDescription(d: DoctorSeoData | null): string {
     typeof d.rating === "number" && d.reviewCount > 0
       ? ` تقييم ${d.rating.toFixed(1)}/5 من ${d.reviewCount} مراجعة.`
       : "";
-  return `${drName}${spec}${city} — ${exp}.${rating}${video} احجز موعدك الآن على طبيبي.`;
+  return `${drName}${spec}${city} — ${exp}.${rating}${video} احجز موعدك الآن على طبانا.`;
 }
 
 export const Route = createFileRoute("/doctor/$id")({
@@ -143,7 +143,7 @@ export const Route = createFileRoute("/doctor/$id")({
         image,
         type: "profile",
         keywords: d?.specialty
-          ? [d.specialty, "حجز موعد طبيب", "طبيب أونلاين", d.city || "", "طبيبي"].filter(Boolean)
+          ? [d.specialty, "حجز موعد طبيب", "طبيب أونلاين", d.city || "", siteConfig.brand.ar].filter(Boolean)
           : undefined,
       }),
       links: buildSeoLinks(path),
@@ -369,7 +369,7 @@ function DoctorDetailPage() {
           {t("Back to doctors", "العودة لقائمة الأطباء")}
         </Link>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 pb-24 lg:grid-cols-3 lg:pb-0">
           {/* Profile column */}
           <div className="lg:col-span-2 space-y-6">
             <div className={`relative overflow-hidden rounded-2xl bg-card p-6 ${isGold ? "border-2 border-amber-300 shadow-lg" : "border border-border"}`}>
@@ -562,7 +562,7 @@ function DoctorDetailPage() {
           </div>
 
           {/* Booking column */}
-          <div className="lg:col-span-1">
+          <div id="book" className="scroll-mt-24 lg:col-span-1">
             <BookingCard
               doctorId={id}
               doctorName={name}
@@ -594,6 +594,29 @@ function DoctorDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Mobile-only sticky booking bar — booking is otherwise buried below the
+          profile on small screens; this keeps the primary action always reachable. */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">{t("Consultation fee", "سعر الكشف")}</p>
+            <p className="truncate text-sm font-bold text-foreground">
+              {Number(feeDecision?.fee ?? doctor.consultation_fee ?? 0).toLocaleString("ar-EG")}{" "}
+              {feeDecision?.currency || (doctor.currency ?? "EGP")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              document.getElementById("book")?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            className="shrink-0 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+          >
+            {t("Book now", "احجز الآن")}
+          </button>
         </div>
       </div>
     </div>

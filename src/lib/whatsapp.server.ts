@@ -96,11 +96,16 @@ export async function sendWhatsAppTemplate(opts: {
  * body using WHATSAPP_APP_SECRET (HMAC-SHA256). Returns true when no secret is
  * configured (so setup/testing isn't blocked) — set the secret in production.
  */
-export async function verifyWhatsAppSignature(rawBody: string, signatureHeader: string | null): Promise<boolean> {
+export async function verifyWhatsAppSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+): Promise<boolean> {
   const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (!appSecret) {
-    console.warn("[whatsapp] WHATSAPP_APP_SECRET not set — skipping signature check");
-    return true;
+    // Fail CLOSED (2026-11-02 audit): an unsigned webhook must never be able
+    // to opt doctors out of outreach or rewrite delivery statuses.
+    console.error("[whatsapp] WHATSAPP_APP_SECRET not set — rejecting unsigned webhook");
+    return false;
   }
   if (!signatureHeader?.startsWith("sha256=")) return false;
   const expected = signatureHeader.slice("sha256=".length);

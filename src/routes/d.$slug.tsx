@@ -1,4 +1,5 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, notFound } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Calendar,
@@ -24,6 +25,7 @@ import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Button } from "@/components/ui/button";
 import { loadProfileBySlug } from "@/lib/profile.functions";
 import RequestConsultationModal from "@/components/RequestConsultationModal";
+import { BookingCard } from "@/components/booking/BookingCard";
 
 export const Route = createFileRoute("/d/$slug")({
   loader: async ({ params }) => {
@@ -36,16 +38,16 @@ export const Route = createFileRoute("/d/$slug")({
     if (!p || !p.doctor) {
       return {
         meta: buildMeta({
-          title: "طبيب — طبيبي Tabibi",
-          description: "صفحة طبيب على منصة طبيبي.",
+          title: "طبيب — طبانا Tebana",
+          description: "صفحة طبيب على منصة طبانا.",
           path: `/d/${params.slug}`,
         }),
       };
     }
     const name = p.fullName ?? "طبيب";
     const drName = name.startsWith("د.") || name.startsWith("Dr") ? name : `د. ${name}`;
-    const title = `${drName}${p.doctor.specialty ? " " + p.doctor.specialty : ""}${p.city ? " — " + p.city : ""} | احجز موعد | طبيبي`;
-    const description = `${drName}${p.doctor.specialty ? "، تخصص " + p.doctor.specialty : ""}${p.city ? " في " + p.city : ""}. ${p.doctor.telemedicineEnabled ? "كشف فيديو متاح. " : ""}احجز موعدك الآن على طبيبي (Tabibi).`;
+    const title = `${drName}${p.doctor.specialty ? " " + p.doctor.specialty : ""}${p.city ? " — " + p.city : ""} | احجز موعد | طبانا`;
+    const description = `${drName}${p.doctor.specialty ? "، تخصص " + p.doctor.specialty : ""}${p.city ? " في " + p.city : ""}. ${p.doctor.telemedicineEnabled ? "كشف فيديو متاح. " : ""}احجز موعدك الآن على طبانا (Tebana).`;
     const path = `/d/${params.slug}`;
 
     return {
@@ -65,8 +67,8 @@ export const Route = createFileRoute("/d/$slug")({
             p.doctor.specialty ?? "",
             p.city ?? "",
             "حجز موعد",
-            "Tabibi",
-            "طبيبي",
+            siteConfig.brand.en,
+            siteConfig.brand.ar,
           ].filter(Boolean),
         }),
       ],
@@ -118,6 +120,14 @@ function DoctorPublicPage() {
   const name = profile.fullName ?? t("Doctor", "طبيب");
   const drName = name.startsWith("د.") || name.startsWith("Dr") ? name : `د. ${name}`;
   const path = `/d/${profile.slug}`;
+
+  // The white-label header's "احجز موعد" opens this page with ?book=1 — scroll to
+  // the in-page booking section so booking never leaves the branded page.
+  useEffect(() => {
+    if (typeof window !== "undefined" && /[?&]book=1/.test(window.location.search)) {
+      setTimeout(() => document.getElementById("book")?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  }, []);
 
   // Load clinics for the location list.
   const { data: clinics = [] } = useQuery({
@@ -220,10 +230,10 @@ function DoctorPublicPage() {
                 </div>
               </div>
               <Button asChild size="lg" className="mt-4 w-full sm:mt-0 sm:w-auto">
-                <Link to="/doctor/$id" params={{ id: profile.doctor!.id }}>
+                <a href="#book">
                   <Calendar className="me-2 h-5 w-5" />
                   {t("Book appointment", "احجز موعد الآن")}
-                </Link>
+                </a>
               </Button>
             </div>
             {/* Online consultation request CTA */}
@@ -249,6 +259,18 @@ function DoctorPublicPage() {
             </div>
           </div>
         </header>
+
+        {/* In-page booking — keeps the whole flow on the branded page */}
+        <section id="book" className="mt-6 scroll-mt-24">
+          <BookingCard
+            doctorId={profile.doctor!.id}
+            doctorName={drName}
+            consultationFee={profile.doctor!.consultationFee ?? 0}
+            currency={profile.doctor!.currency ?? "EGP"}
+            isVerified={profile.doctor!.isVerified}
+            telemedicineEnabled={profile.doctor!.telemedicineEnabled}
+          />
+        </section>
 
         {/* Bio */}
         {profile.bio && (
@@ -303,8 +325,8 @@ function DoctorPublicPage() {
         {/* Footer note */}
         <p className="mt-8 text-center text-xs text-muted-foreground">
           {t(
-            `Powered by Tabibi (طبيبي) — share this page using the button above.`,
-            `صفحة على منصة طبيبي (Tabibi) — شارك هذه الصفحة باستخدام زر المشاركة أعلاه.`,
+            `Powered by Tebana (طبانا) — share this page using the button above.`,
+            `صفحة على منصة طبانا (Tebana) — شارك هذه الصفحة باستخدام زر المشاركة أعلاه.`,
           )}
         </p>
       </article>

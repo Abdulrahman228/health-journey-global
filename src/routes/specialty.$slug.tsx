@@ -10,7 +10,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Star, MapPin, BadgeCheck, Stethoscope, ArrowRight, Video } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
-import { buildMeta, buildSeoLinks, canonicalUrl } from "@/lib/seo";
+import { buildMeta, buildSeoLinks, canonicalUrl, siteConfig } from "@/lib/seo";
 import {
   breadcrumbSchema,
   faqSchema,
@@ -23,33 +23,33 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CITIES } from "@/lib/cities";
 
 function buildSpecialtyTitle(s: SpecialtySeoData | null, slug: string): string {
-  if (!s) return `أفضل أطباء ${slug} | طبيبي`;
+  if (!s) return `أفضل أطباء ${slug} | طبانا`;
   const count = s.doctorCount > 0 ? `+${s.doctorCount} طبيب` : "أطباء موثّقون";
-  return `أفضل أطباء ${s.nameAr} — ${count} | طبيبي`;
+  return `أفضل أطباء ${s.nameAr} — ${count} | طبانا`;
 }
 
 function buildSpecialtyDescription(s: SpecialtySeoData | null): string {
   if (!s) {
-    return "تصفّح أفضل الأطباء حسب التخصص واحجز موعدك أونلاين على منصة طبيبي.";
+    return "تصفّح أفضل الأطباء حسب التخصص واحجز موعدك أونلاين على منصة طبانا.";
   }
   const count = s.doctorCount > 0 ? `${s.doctorCount}+ طبيب موثّق` : "نخبة من الأطباء الموثّقين";
-  return `${count} في تخصص ${s.nameAr} (${s.nameEn}). قارن التقييمات والأسعار واحجز موعدك حضورياً أو عبر فيديو في دقائق على طبيبي.`;
+  return `${count} في تخصص ${s.nameAr} (${s.nameEn}). قارن التقييمات والأسعار واحجز موعدك حضورياً أو عبر فيديو في دقائق على طبانا.`;
 }
 
 function specialtyFaq(s: SpecialtySeoData) {
   return [
     {
-      question: `كم تكلفة الكشف عند أطباء ${s.nameAr} على طبيبي؟`,
-      answer: `الأسعار تختلف بين الأطباء، ويظهر سعر الكشف بوضوح في ملف كل طبيب قبل الحجز. على طبيبي حالياً ${s.doctorCount}+ طبيب ${s.nameAr} موثّق بأسعار شفافة بدون رسوم خفية.`,
+      question: `كم تكلفة الكشف عند أطباء ${s.nameAr} على طبانا؟`,
+      answer: `الأسعار تختلف بين الأطباء، ويظهر سعر الكشف بوضوح في ملف كل طبيب قبل الحجز. على طبانا حالياً ${s.doctorCount}+ طبيب ${s.nameAr} موثّق بأسعار شفافة بدون رسوم خفية.`,
     },
     {
       question: `هل أستطيع الاستشارة أونلاين بالفيديو مع طبيب ${s.nameAr}؟`,
-      answer: `نعم — كثير من أطباء ${s.nameAr} على طبيبي يقدّمون استشارات فيديو آمنة ومشفّرة، وتظهر علامة "كشف أون لاين" بجانب اسم كل طبيب يدعم الميزة.`,
+      answer: `نعم — كثير من أطباء ${s.nameAr} على طبانا يقدّمون استشارات فيديو آمنة ومشفّرة، وتظهر علامة "كشف أون لاين" بجانب اسم كل طبيب يدعم الميزة.`,
     },
     {
       question: `كيف أختار أفضل طبيب ${s.nameAr}؟`,
       answer:
-        "راجع تقييمات المرضى السابقين، عدد سنوات الخبرة، شهاداته، والعيادات التي يعمل بها، ثم قارن سعر الكشف. كل الأطباء على طبيبي يمرّون بمرحلة تحقق صارمة من الترخيص.",
+        "راجع تقييمات المرضى السابقين، عدد سنوات الخبرة، شهاداته، والعيادات التي يعمل بها، ثم قارن سعر الكشف. كل الأطباء على طبانا يمرّون بمرحلة تحقق صارمة من الترخيص.",
     },
     {
       question: `هل بياناتي الصحية آمنة عند الحجز مع طبيب ${s.nameAr}؟`,
@@ -127,7 +127,7 @@ export const Route = createFileRoute("/specialty/$slug")({
               `${s.nameEn} doctor`,
               "حجز موعد طبيب",
               "طبيب أونلاين",
-              "طبيبي",
+              siteConfig.brand.ar,
             ]
           : undefined,
       }),
@@ -182,8 +182,8 @@ function SpecialtyPillarPage() {
               <p className="mt-1 text-muted-foreground">
                 {specialty.doctorCount > 0
                   ? t(
-                      `${specialty.doctorCount}+ verified ${specialty.nameEn} doctors on Tabibi`,
-                      `+${specialty.doctorCount} طبيب ${specialty.nameAr} موثّق على طبيبي`,
+                      `${specialty.doctorCount}+ verified ${specialty.nameEn} doctors on Tebana`,
+                      `+${specialty.doctorCount} طبيب ${specialty.nameAr} موثّق على طبانا`,
                     )
                   : t("Verified doctors at your fingertips", "أطباء موثّقون بين يديك")}
               </p>
@@ -268,8 +268,8 @@ function SpecialtyPillarPage() {
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {t(
-                `Not what you were looking for? See all verified doctors across every medical specialty on Tabibi.`,
-                "لم تجد ما تبحث عنه؟ تصفّح كل الأطباء الموثّقين عبر جميع التخصصات الطبية على طبيبي.",
+                `Not what you were looking for? See all verified doctors across every medical specialty on Tebana.`,
+                "لم تجد ما تبحث عنه؟ تصفّح كل الأطباء الموثّقين عبر جميع التخصصات الطبية على طبانا.",
               )}
             </p>
             <Link
