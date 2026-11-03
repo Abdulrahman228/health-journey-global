@@ -1,5 +1,5 @@
-# ============================================================================
-# Tebana — deploy the web app to Cloudflare Workers WITHOUT GitHub.
+﻿# ============================================================================
+# Tebana - deploy the web app to Cloudflare Workers WITHOUT GitHub.
 #
 # Uses the Cloudflare API token saved in C:\lovable\.cf_token (verified 2026-11-03:
 # it authenticates as your Cloudflare account). Builds, deploys, purges nothing
@@ -14,7 +14,7 @@ $ErrorActionPreference = "Continue"
 $root = "C:\lovable\health-journey-global"
 Set-Location $root
 
-# Token: file is "CLOUDFLARE_API_TOKEN=<token>" (one line) — strip the key name.
+# Token: file is "CLOUDFLARE_API_TOKEN=<token>" (one line) - strip the key name.
 $line = (Get-Content "C:\lovable\.cf_token" -Raw).Trim()
 $env:CLOUDFLARE_API_TOKEN = ($line -replace '^CLOUDFLARE_API_TOKEN=', '').Trim()
 if (-not $env:CLOUDFLARE_API_TOKEN) { Write-Host "No Cloudflare token found in C:\lovable\.cf_token" -ForegroundColor Red; exit 1 }
@@ -35,7 +35,7 @@ Start-Sleep -Seconds 10
 try {
   $html = (Invoke-WebRequest -Uri "https://mytabibi.com/login" -UseBasicParsing -TimeoutSec 30).Content
   if ($html -match "otp-phone") { Write-Host "LIVE: new login page is up." -ForegroundColor Green }
-  else { Write-Host "Deployed, but the cached page may take a minute — open the site in a private window." -ForegroundColor Yellow }
+  else { Write-Host "Deployed, but the cached page may take a minute - open the site in a private window." -ForegroundColor Yellow }
 } catch { Write-Host "Could not fetch the site for verification: $($_.Exception.Message)" -ForegroundColor Yellow }
 
 Write-Host "`nDONE - tell Claude 'تم النشر' so it re-verifies." -ForegroundColor Green

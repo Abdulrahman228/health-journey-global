@@ -1,5 +1,5 @@
-# ============================================================================
-# Tebana — 2026-11-03 release: phone-first identity + unified messaging,
+﻿# ============================================================================
+# Tebana - 2026-11-03 release: phone-first identity + unified messaging,
 # AI reference library, Paymob appointment payments.
 #
 # What it does (idempotent, safe to re-run):
@@ -113,7 +113,7 @@ B) Messaging channel secrets (at least ONE of these, WhatsApp recommended):
      npx supabase@3.0.0 secrets set WHATSAPP_TOKEN=... WHATSAPP_PHONE_NUMBER_ID=... --remote=$ref --yes
      npx supabase@3.0.0 secrets set TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_FROM=+1... --remote=$ref --yes
    WhatsApp needs the templates "patient_welcome" and "otp_code" approved in Meta
-   WhatsApp Manager — exact texts are in supabase/MESSAGING_AI_PAYMENTS_2026-11-03.md
+   WhatsApp Manager - exact texts are in supabase/MESSAGING_AI_PAYMENTS_2026-11-03.md
 
 C) Paymob (when the merchant account is ready):
      npx supabase@3.0.0 secrets set PAYMOB_INTEGRATION_ID=... PAYMOB_IFRAME_ID=... --remote=$ref --yes
