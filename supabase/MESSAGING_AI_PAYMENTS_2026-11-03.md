@@ -81,3 +81,18 @@ Cost per analysis ≈ $0.01–0.03 (small model + embedding + main model); budge
 3. Doctor → مرضائي → إضافة مريض with a phone → `outbox_messages` row `queued` → `sent` once a provider is configured.
 4. Patient signs up with that number → row in `doctor_patients` points at a profile with `user_id` set; doctor gets the "أكمل مريضك تسجيله" notification.
 5. Visit screen → اقترح بالذكاء الاصطناعي → answer shows the evidence badge; after `medlineplus` ingestion it cites references.
+
+## 7. Deployment note (found 2026-11-03 while pushing)
+
+GitHub Actions on this repo has been **locked for a billing issue** since at least commit `55b39ee`
+(every CI/Deploy run fails in 3 s with "The job was not started because your account is locked due to a
+billing issue"), so pushes to `main` have NOT been deploying. Until GitHub billing is fixed, deploy by hand:
+
+```pwsh
+cd C:\lovable\health-journey-global
+npx wrangler login        # once — opens the browser (the old token in C:\lovable\.cf_token no longer verifies)
+npm run build
+npx wrangler deploy
+```
+Fix the GitHub side at https://github.com/settings/billing (or the org's billing page) → then every push to
+`main` deploys automatically again.
