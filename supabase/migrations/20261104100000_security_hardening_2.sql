@@ -39,8 +39,10 @@ DROP FUNCTION IF EXISTS public.handle_new_doctor_trial();
 -- ----------------------------------------------------------------------------
 -- §2 Visit pricing + follow-up reminders (correct columns, app-consistent values)
 -- ----------------------------------------------------------------------------
+-- Keep the live signature (p_scheduled_at DEFAULT now()): CREATE OR REPLACE
+-- cannot drop a parameter default (42P13).
 CREATE OR REPLACE FUNCTION public.preview_visit_pricing(
-  p_doctor_id uuid, p_patient_id uuid, p_scheduled_at timestamp with time zone
+  p_doctor_id uuid, p_patient_id uuid, p_scheduled_at timestamp with time zone DEFAULT now()
 )
 RETURNS TABLE (visit_type text, fee numeric)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
@@ -195,8 +197,11 @@ BEGIN
          'get_outreach_candidates', 'opt_out_scraped_by_phone', '_notify',
          '_user_id_from_profile', '_user_id_from_doctor_details', '_caller_doctor_id',
          'grant_doctor_trial_if_absent', 'record_coupon_redemption',
-         'get_due_followup_reminders', 'has_active_subscription', 'has_plan',
-         'is_super_admin', 'suggest_unique_slug'
+         'get_due_followup_reminders', 'has_active_subscription', 'has_plan'
+         -- NOT is_super_admin: the "Super Admins read medical records" policy calls
+         -- it as the querying user; revoking EXECUTE would break medical_records
+         -- for everyone. NOT suggest_unique_slug: the doctor's public-page editor
+         -- calls it from the browser (it is in the logged-in list below).
        )
   LOOP
     EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', r.sig);
@@ -223,7 +228,7 @@ BEGIN
          'set_shared_care_consent', 'start_visit', 'submit_appointment_receipt',
          'submit_private_feedback', 'attribute_referral', 'ensure_referral_code',
          'request_patient_invite', 'adopt_managed_profile_by_phone', 'set_my_messaging_opt_out',
-         'rate_ai_consultation', 'touch_short_link'
+         'rate_ai_consultation', 'touch_short_link', 'suggest_unique_slug'
        )
   LOOP
     EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon', r.sig);
