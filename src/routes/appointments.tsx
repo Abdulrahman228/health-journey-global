@@ -46,6 +46,8 @@ interface EnrichedAppointment {
   iAmDoctor: boolean;
   currency: string;
   payment_status: string | null;
+  /** Set when the patient uploaded a transfer receipt that admins have not confirmed yet. */
+  receipt_pending: boolean;
 }
 
 type T = (en: string, ar: string) => string;
@@ -68,7 +70,6 @@ function statusLabel(status: string, t: T): string {
 function paymentLabel(status: string, t: T): string {
   const map: Record<string, [string, string]> = {
     unpaid: ["Unpaid", "غير مدفوع"],
-    pending_review: ["Receipt under review", "الإيصال قيد المراجعة"],
     paid: ["Paid", "مدفوع"],
     refunded: ["Refunded", "مسترد"],
     partially_refunded: ["Partially refunded", "مسترد جزئياً"],
@@ -173,6 +174,9 @@ function AppointmentsPage() {
           counterpart_subtitle: iAmDoctor ? null : (doc?.specialty ?? null),
           currency: doc?.currency ?? "EGP",
           payment_status: (a.payment_status as string | null) ?? null,
+          receipt_pending:
+            !!(a as { payment_receipt_url?: string | null }).payment_receipt_url &&
+            a.payment_status === "unpaid",
         };
       });
     },
@@ -412,7 +416,10 @@ function Section({
                     <span className="text-muted-foreground">{formatPrice(a.fee, a.currency)}</span>
                     {a.fee > 0 && a.payment_status && !a.iAmDoctor && (
                       <span className="text-xs text-muted-foreground">
-                        · {paymentLabel(a.payment_status, t)}
+                        ·{" "}
+                        {a.receipt_pending
+                          ? t("Receipt under review", "الإيصال قيد المراجعة")
+                          : paymentLabel(a.payment_status, t)}
                       </span>
                     )}
                   </div>
@@ -437,7 +444,8 @@ function Section({
                   )}
                 {!a.iAmDoctor &&
                   a.fee > 0 &&
-                  (a.payment_status === "unpaid" || a.payment_status === "pending_review") &&
+                  a.payment_status === "unpaid" &&
+                  !a.receipt_pending &&
                   !["cancelled", "completed", "no_show"].includes(a.status) &&
                   !isPast && (
                     <Link
@@ -445,9 +453,7 @@ function Section({
                       search={{ amount: Math.round(a.fee), ref: a.id }}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
                     >
-                      {a.payment_status === "pending_review"
-                        ? t("Receipt under review", "الإيصال قيد المراجعة")
-                        : t("Pay", "ادفع")}
+                      {t("Pay", "ادفع")}
                     </Link>
                   )}
                 {!a.iAmDoctor &&
