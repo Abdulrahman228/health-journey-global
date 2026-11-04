@@ -118,6 +118,14 @@ function NearbyDoctorsPage() {
     },
   });
 
+  // ?specialty= arrives as a SLUG from the hero search, but search_doctors_nearby
+  // compares the specialty NAME — resolve it once the list has loaded.
+  useEffect(() => {
+    if (!specialty || specialties.length === 0) return;
+    const match = specialties.find((s) => s.slug === specialty);
+    if (match) setSpecialty(language === "ar" ? match.name_ar : match.name_en);
+  }, [specialties, specialty, language]);
+
   const {
     data: rows = [],
     isLoading,
