@@ -10,6 +10,10 @@
 --
 -- Also:
 --   * online bookings charged the in-clinic fee -> now the online fee.
+--   * slot length: the functions read avg_consultation_minutes (default 15) while
+--     the Android hours editor saves slot_duration_minutes (the web writes both),
+--     so a doctor who chose 30-minute visits got 15-minute slots. Prefer
+--     slot_duration_minutes.
 --   * doctor_details defaults of consultation_fee = 1, rating = 1 and
 --     years_experience = 1 made every new doctor show "1 EGP · 1 year · 1.0 star".
 --     Defaults dropped; ratings without any review are cleared.
@@ -61,7 +65,7 @@ BEGIN
     RAISE EXCEPTION 'Clinic closed on this date' USING ERRCODE = '23514';
   END IF;
 
-  SELECT s.start_time, s.end_time, COALESCE(s.avg_consultation_minutes, 15) AS step
+  SELECT s.start_time, s.end_time, COALESCE(s.slot_duration_minutes, s.avg_consultation_minutes, 15) AS step
     INTO v_sched
     FROM public.clinic_schedules s
     JOIN public.clinics c ON c.id = s.clinic_id
@@ -164,12 +168,12 @@ BEGIN
 
   SELECT s.start_time,
          s.end_time,
-         COALESCE(s.avg_consultation_minutes, 15)              AS avg_min,
+         COALESCE(s.slot_duration_minutes, s.avg_consultation_minutes, 15)              AS avg_min,
          COALESCE(
            s.max_patients_per_day,
            GREATEST(1,
              (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60
-              / COALESCE(s.avg_consultation_minutes, 15))::INTEGER
+              / COALESCE(s.slot_duration_minutes, s.avg_consultation_minutes, 15))::INTEGER
            )
          )                                                     AS cap
     INTO v_schedule
@@ -248,7 +252,7 @@ BEGIN
     RETURN;
   END IF;
 
-  SELECT s.start_time, s.end_time, COALESCE(s.avg_consultation_minutes, 15) AS step
+  SELECT s.start_time, s.end_time, COALESCE(s.slot_duration_minutes, s.avg_consultation_minutes, 15) AS step
     INTO v_sched
     FROM public.clinic_schedules s
     JOIN public.clinics c ON c.id = s.clinic_id
@@ -308,12 +312,12 @@ BEGIN
              c.city        AS clinic_city,
              s.start_time,
              s.end_time,
-             COALESCE(s.avg_consultation_minutes, 15)      AS avg_minutes,
+             COALESCE(s.slot_duration_minutes, s.avg_consultation_minutes, 15)      AS avg_minutes,
              COALESCE(
                s.max_patients_per_day,
                GREATEST(1,
                  (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60
-                  / COALESCE(s.avg_consultation_minutes, 15))::INTEGER
+                  / COALESCE(s.slot_duration_minutes, s.avg_consultation_minutes, 15))::INTEGER
                )
              )            AS max_patients
         FROM public.clinic_schedules s
