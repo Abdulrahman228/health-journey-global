@@ -184,35 +184,53 @@ function DoctorsPage() {
         (d.id ?? "").toLowerCase().startsWith("bbbb") ||
         DEMO_DOCTOR_NAMES.has((d.profiles?.full_name ?? "").trim());
 
-      const { data, error } = await supabase
+      // doctor_details has no FK that PostgREST can follow to clinics, so the
+      // old single embed always failed and fell back to "no clinics" (day filter,
+      // distance sort and clinic city never worked). Three plain queries instead,
+      // public columns only (anon column privileges, 2026-11-04).
+      const { data: docs, error } = await supabase
         .from("doctor_details")
-        .select(
-          "*, profiles!doctor_details_profile_id_fkey(id, full_name, city, avatar_url), clinics(id, doctor_id, city, lat, lng, consultation_fee, currency, clinic_schedules(day_of_week))",
-        )
-        .order("rating", { ascending: false })
+        .select(PUBLIC_DOCTOR_COLUMNS)
+        .order("rating", { ascending: false, nullsFirst: false })
         .limit(200);
-      if (error) {
-        // Public columns only — sensitive verification/licence fields are not
-        // readable by anonymous visitors (column privileges, 2026-11-04).
-        const { data: d2, error: e2 } = await supabase
-          .from("doctor_details")
-          .select(PUBLIC_DOCTOR_COLUMNS)
-          .limit(200);
-        if (e2) throw e2;
-        const ids = (d2 || []).map((d) => d.profile_id).filter((x): x is string => !!x);
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, full_name, city, avatar_url")
-          .in("id", ids);
-        return (d2 || [])
-          .map((d) => ({
-            ...d,
-            profiles: profs?.find((p) => p.id === d.profile_id) ?? null,
-            clinics: [],
-          }))
-          .filter((d) => !isDemoDoctor(d)) as DoctorRow[];
+      if (error) throw error;
+      const rows = docs ?? [];
+      const profileIds = rows.map((d) => d.profile_id).filter((x): x is string => !!x);
+      const doctorIds = rows.map((d) => d.id);
+      const [{ data: profs }, { data: clinicRows }] = await Promise.all([
+        profileIds.length
+          ? supabase.from("profiles").select("id, full_name, city, avatar_url").in("id", profileIds)
+          : Promise.resolve({
+              data: [] as Array<{
+                id: string;
+                full_name: string | null;
+                city: string | null;
+                avatar_url: string | null;
+              }>,
+            }),
+        doctorIds.length
+          ? supabase
+              .from("clinics")
+              .select(
+                "id, doctor_id, city, lat, lng, consultation_fee, currency, clinic_schedules(day_of_week)",
+              )
+              .in("doctor_id", doctorIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+      const profMap = new Map((profs ?? []).map((p) => [p.id, p]));
+      const clinicsByDoctor = new Map<string, unknown[]>();
+      for (const c of (clinicRows ?? []) as Array<{ doctor_id: string }>) {
+        const list = clinicsByDoctor.get(c.doctor_id) ?? [];
+        list.push(c);
+        clinicsByDoctor.set(c.doctor_id, list);
       }
-      return (data as unknown as DoctorRow[]).filter((d) => !isDemoDoctor(d));
+      return rows
+        .map((d) => ({
+          ...d,
+          profiles: (d.profile_id && profMap.get(d.profile_id)) || null,
+          clinics: clinicsByDoctor.get(d.id) ?? [],
+        }))
+        .filter((d) => !isDemoDoctor(d)) as unknown as DoctorRow[];
     },
   });
 
