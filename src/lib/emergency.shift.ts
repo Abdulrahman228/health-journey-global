@@ -46,16 +46,24 @@ export const triggerEmergencyShift = createServerFn({ method: "POST" })
       throw new Error("Forbidden: not your clinic queue");
     }
 
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (clinic day)
     const shiftMs = data.delayMinutes * 60_000;
 
-    // Upcoming (not-yet-served) appointments for this doctor today.
+    // Clinic day in Egypt (UTC+2 / UTC+3 in summer) — not the UTC date.
+    const now = new Date();
+    const cairoDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(now); // YYYY-MM-DD
+    const dayStart = new Date(`${cairoDay}T00:00:00+02:00`).toISOString();
+    const dayEnd = new Date(`${cairoDay}T23:59:59+02:00`).toISOString();
+
+    // Upcoming (not-yet-served) appointments for this doctor today — same
+    // window and statuses the live queue uses.
     const { data: appts, error } = await supabaseAdmin
       .from("appointments")
       .select("id, patient_id, estimated_start_at")
       .eq("doctor_id", data.doctorId)
-      .eq("appointment_date", today)
-      .in("status", ["waiting", "called"]);
+      .gte("scheduled_at", dayStart)
+      .lte("scheduled_at", dayEnd)
+      .is("started_at", null)
+      .in("status", ["waiting", "called", "pending", "confirmed"]);
     if (error) throw new Error(error.message);
     if (!appts || appts.length === 0) return { ok: true as const, shifted: 0 };
 

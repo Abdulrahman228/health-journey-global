@@ -1,15 +1,14 @@
 /**
  * Phase 7 — Online consultation request workflow.
  *
- * Patient submits → doctor proposes (slot + fee) → patient accepts (paid via Stripe)
+ * Patient submits → doctor proposes (slot + fee) → patient accepts (paid via /pay)
  * or rejects (no charge).
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { type StripeEnv, createStripeClient } from "@/lib/stripe.server";
-import { getStripeEnvironment } from "@/lib/stripe";
+import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
 
 type ConsultationStatus =
   | "pending_doctor"
@@ -37,11 +36,14 @@ export const submitConsultationRequest = createServerFn({ method: "POST" })
     }).parse,
   )
   .handler(async ({ data, context }) => {
+    // consultation_requests.patient_id is a PROFILE id, not the auth user id.
+    const patientProfileId = await getProfileIdForUser(context.userId);
+    if (!patientProfileId) throw new Error("أكمل ملفك الشخصي أولاً");
     // Block duplicates: one open request per (patient, doctor) at a time.
     const { data: existing } = await supabaseAdmin
       .from("consultation_requests")
       .select("id, status")
-      .eq("patient_id", context.userId)
+      .eq("patient_id", patientProfileId)
       .eq("doctor_details_id", data.doctorDetailsId)
       .in("status", ["pending_doctor", "proposed", "accepted"])
       .maybeSingle();
@@ -52,7 +54,7 @@ export const submitConsultationRequest = createServerFn({ method: "POST" })
     const { data: row, error } = await supabaseAdmin
       .from("consultation_requests")
       .insert({
-        patient_id: context.userId,
+        patient_id: patientProfileId,
         doctor_details_id: data.doctorDetailsId,
         reason: data.reason,
         preferred_dates: data.preferredDates ?? null,
@@ -98,7 +100,8 @@ export const proposeConsultationSlot = createServerFn({ method: "POST" })
       .eq("id", req.doctor_details_id as string)
       .maybeSingle();
     const dd = ddRaw as { id: string; profile_id: string | null } | null;
-    if (!dd || dd.profile_id !== context.userId) {
+    const me = await getDoctorForUser(context.userId);
+    if (!dd || !me || dd.id !== me.doctorDetailsId) {
       throw new Error("غير مصرح");
     }
 
@@ -144,9 +147,11 @@ export const doctorRejectRequest = createServerFn({ method: "POST" })
       .select("id, status, doctor_details_id")
       .eq("id", data.requestId)
       .maybeSingle();
-    const req = reqRaw as
-      | { id: string; status: ConsultationStatus; doctor_details_id: string }
-      | null;
+    const req = reqRaw as {
+      id: string;
+      status: ConsultationStatus;
+      doctor_details_id: string;
+    } | null;
     if (!req) throw new Error("الطلب غير موجود");
     if (!["pending_doctor", "proposed"].includes(req.status)) {
       throw new Error("لا يمكن رفض طلب في هذه الحالة");
@@ -158,7 +163,8 @@ export const doctorRejectRequest = createServerFn({ method: "POST" })
       .eq("id", req.doctor_details_id)
       .maybeSingle();
     const dd = ddRaw as { profile_id: string | null } | null;
-    if (!dd || dd.profile_id !== context.userId) throw new Error("غير مصرح");
+    const me = await getDoctorForUser(context.userId);
+    if (!dd || !me || dd.profile_id !== me.profileId) throw new Error("غير مصرح");
 
     const { error } = await supabaseAdmin
       .from("consultation_requests")
@@ -173,7 +179,7 @@ export const doctorRejectRequest = createServerFn({ method: "POST" })
   });
 
 // ---------------------------------------------------------------------------
-// Patient: accept the proposed slot — creates appointment + Stripe checkout
+// Patient: accept the proposed slot — creates the appointment + payment link
 // ---------------------------------------------------------------------------
 export const acceptConsultationProposal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -193,21 +199,19 @@ export const acceptConsultationProposal = createServerFn({ method: "POST" })
       )
       .eq("id", data.requestId)
       .maybeSingle();
-    const req = reqRaw as
-      | {
-          id: string;
-          status: ConsultationStatus;
-          patient_id: string;
-          doctor_details_id: string;
-          proposed_slot: string | null;
-          proposed_duration_minutes: number | null;
-          fee_cents: number | null;
-          currency: string;
-          expires_at: string | null;
-        }
-      | null;
+    const req = reqRaw as {
+      id: string;
+      status: ConsultationStatus;
+      patient_id: string;
+      doctor_details_id: string;
+      proposed_slot: string | null;
+      proposed_duration_minutes: number | null;
+      fee_cents: number | null;
+      currency: string;
+      expires_at: string | null;
+    } | null;
     if (!req) throw new Error("الطلب غير موجود");
-    if (req.patient_id !== context.userId) throw new Error("غير مصرح");
+    if (req.patient_id !== (await getProfileIdForUser(context.userId))) throw new Error("غير مصرح");
     if (req.status !== "proposed") throw new Error("لا يمكن قبول طلب في هذه الحالة");
     if (!req.proposed_slot || !req.fee_cents) throw new Error("بيانات الاقتراح ناقصة");
     if (req.expires_at && new Date(req.expires_at).getTime() < Date.now()) {
@@ -224,12 +228,13 @@ export const acceptConsultationProposal = createServerFn({ method: "POST" })
       .select("profile_id, profiles!inner(full_name)")
       .eq("id", req.doctor_details_id)
       .maybeSingle();
-    const dd = ddRaw as
-      | { profile_id: string; profiles: { full_name: string | null } | null }
-      | null;
+    const dd = ddRaw as {
+      profile_id: string;
+      profiles: { full_name: string | null } | null;
+    } | null;
     const doctorName = dd?.profiles?.full_name ?? "طبيب";
 
-    // Create appointment row in 'pending' status; webhook will flip to confirmed.
+    // Create appointment row in 'pending' status; payment confirmation flips it.
     const { data: apptRaw, error: apptErr } = await supabaseAdmin
       .from("appointments")
       .insert({
@@ -240,6 +245,9 @@ export const acceptConsultationProposal = createServerFn({ method: "POST" })
         appointment_type: "online",
         status: "pending",
         fee: (req.fee_cents ?? 0) / 100,
+        currency: req.currency || "EGP",
+        payment_status: "unpaid",
+        payment_method: "online",
       })
       .select("id")
       .single();
@@ -256,43 +264,12 @@ export const acceptConsultationProposal = createServerFn({ method: "POST" })
       })
       .eq("id", req.id);
 
-    // Create Stripe checkout (hosted redirect) for the consultation fee.
-    const env: StripeEnv = getStripeEnvironment();
-    const stripe = createStripeClient(env);
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      success_url: data.returnUrl,
-      cancel_url: data.cancelUrl,
-      ...(data.customerEmail && { customer_email: data.customerEmail }),
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: req.currency.toLowerCase(),
-            unit_amount: req.fee_cents,
-            product_data: {
-              name: `كشف أونلاين — د. ${doctorName}`,
-              description: `Tebana consultation ${req.id}`,
-            },
-          },
-        },
-      ],
-      payment_intent_data: {
-        description: `Tebana consultation ${req.id}`,
-        metadata: {
-          consultation_request_id: req.id,
-          appointment_id: appt.id,
-          userId: context.userId,
-        },
-      },
-      metadata: {
-        consultation_request_id: req.id,
-        appointment_id: appt.id,
-        userId: context.userId,
-      },
-    });
-
-    return { url: session.url, appointmentId: appt.id };
+    // Payment is settled through the platform's manual-transfer / Paymob flow
+    // (/pay shows the amount + reference; the webhook or admin confirms it).
+    const amount = Math.round((req.fee_cents ?? 0) / 100);
+    void data.returnUrl;
+    void data.cancelUrl;
+    return { url: `/pay?amount=${amount}&ref=${appt.id}`, appointmentId: appt.id };
   });
 
 // ---------------------------------------------------------------------------
@@ -312,11 +289,9 @@ export const rejectConsultationProposal = createServerFn({ method: "POST" })
       .select("id, patient_id, status")
       .eq("id", data.requestId)
       .maybeSingle();
-    const req = reqRaw as
-      | { id: string; patient_id: string; status: ConsultationStatus }
-      | null;
+    const req = reqRaw as { id: string; patient_id: string; status: ConsultationStatus } | null;
     if (!req) throw new Error("الطلب غير موجود");
-    if (req.patient_id !== context.userId) throw new Error("غير مصرح");
+    if (req.patient_id !== (await getProfileIdForUser(context.userId))) throw new Error("غير مصرح");
     if (req.status !== "proposed") throw new Error("لا يمكن رفض طلب في هذه الحالة");
 
     const { error } = await supabaseAdmin
@@ -343,11 +318,9 @@ export const cancelConsultationRequest = createServerFn({ method: "POST" })
       .select("id, patient_id, status")
       .eq("id", data.requestId)
       .maybeSingle();
-    const req = reqRaw as
-      | { id: string; patient_id: string; status: ConsultationStatus }
-      | null;
+    const req = reqRaw as { id: string; patient_id: string; status: ConsultationStatus } | null;
     if (!req) throw new Error("الطلب غير موجود");
-    if (req.patient_id !== context.userId) throw new Error("غير مصرح");
+    if (req.patient_id !== (await getProfileIdForUser(context.userId))) throw new Error("غير مصرح");
     if (req.status !== "pending_doctor") throw new Error("الطلب لا يمكن إلغاؤه الآن");
 
     const { error } = await supabaseAdmin
@@ -370,18 +343,17 @@ export const listMyConsultationRequests = createServerFn({ method: "GET" })
       .select(
         "id, status, reason, consultation_type, proposed_slot, proposed_duration_minutes, fee_cents, currency, doctor_note, expires_at, created_at, doctor_details_id",
       )
-      .eq("patient_id", context.userId)
+      .eq(
+        "patient_id",
+        (await getProfileIdForUser(context.userId)) ?? "00000000-0000-0000-0000-000000000000",
+      )
       .order("created_at", { ascending: false })
       .limit(50);
     const asPatient = (asPatientRaw ?? []) as Array<Record<string, unknown>>;
 
     // If user is a doctor, fetch as doctor too.
-    const { data: ddRaw } = await supabaseAdmin
-      .from("doctor_details")
-      .select("id")
-      .eq("profile_id", context.userId)
-      .maybeSingle();
-    const dd = ddRaw as { id: string } | null;
+    const me = await getDoctorForUser(context.userId);
+    const dd = me ? { id: me.doctorDetailsId } : null;
     let asDoctor: Array<Record<string, unknown>> = [];
     if (dd) {
       // Hydrate patient name for inbox display

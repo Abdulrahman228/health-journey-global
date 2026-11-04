@@ -50,6 +50,8 @@ import { z } from "zod";
 
 const searchSchema = z.object({
   patientId: z.string().uuid().optional(),
+  /** When the visit is started from the queue, saving it completes this appointment. */
+  appointmentId: z.string().uuid().optional(),
 });
 
 export const Route = createFileRoute("/dashboard/visit/new")({
@@ -94,7 +96,7 @@ const FREQ_OPTIONS = [
 const ROUTE_OPTIONS = ["فموي", "حقن وريدي", "حقن عضلي", "موضعي", "بخّاخ", "تحت اللسان"];
 
 function NewVisitPage() {
-  const { patientId } = Route.useSearch();
+  const { patientId, appointmentId: appointmentIdParam } = Route.useSearch();
   const { user, profile, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [patient, setPatient] = useState<{
@@ -286,44 +288,63 @@ function NewVisitPage() {
       }))
       .filter((r) => r.drugName && r.dosage && r.frequency && r.duration);
 
-    const res = await createMedicalRecord({
-      data: {
-        userId: user.id,
-        patientProfileId: patientId,
-        visitType,
-        chiefComplaint,
-        historyPresentIllness: hpi,
-        physicalExamination: exam,
-        diagnosis: diagnosisText
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        icd10Codes: icdText
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        vitals: Object.keys(vitals).length > 0 ? vitals : undefined,
-        treatmentPlan: plan,
-        recommendedTests: testsText
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        followUpDays: followUpDays ? Number(followUpDays) : null,
-        privateNotes,
-        prescription:
-          cleanRx.length > 0
-            ? {
-                notes: rxNotes,
-                validDays: Number(rxValidDays) || 30,
-                items: cleanRx,
-              }
-            : null,
-      },
-    });
+    let res: Awaited<ReturnType<typeof createMedicalRecord>>;
+    try {
+      res = await createMedicalRecord({
+        data: {
+          userId: user.id,
+          patientProfileId: patientId,
+          appointmentId: appointmentIdParam ?? null,
+          visitType,
+          chiefComplaint,
+          historyPresentIllness: hpi,
+          physicalExamination: exam,
+          diagnosis: diagnosisText
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          icd10Codes: icdText
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          vitals: Object.keys(vitals).length > 0 ? vitals : undefined,
+          treatmentPlan: plan,
+          recommendedTests: testsText
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          followUpDays: followUpDays ? Number(followUpDays) : null,
+          privateNotes,
+          prescription:
+            cleanRx.length > 0
+              ? {
+                  notes: rxNotes,
+                  validDays: Number(rxValidDays) || 30,
+                  items: cleanRx,
+                }
+              : null,
+        },
+      });
+    } catch (e) {
+      setSaving(false);
+      toast.error("فشل حفظ الزيارة: " + (e instanceof Error ? e.message : "خطأ غير متوقع"));
+      return;
+    }
 
     setSaving(false);
     if (!res.ok) {
-      toast.error("فشل حفظ الزيارة: " + res.error);
+      const err = String(res.error ?? "");
+      if (err.startsWith("visit_saved_prescription_failed")) {
+        toast.error("تم حفظ الزيارة لكن فشل حفظ الروشتة — أضفها من ملف المريض");
+        navigate({ to: "/dashboard/patient/$id", params: { id: patientId } });
+        return;
+      }
+      const map: Record<string, string> = {
+        not_your_patient: "هذا المريض غير مرتبط بحسابك (لا يوجد موعد أو ربط)",
+        not_a_doctor: "هذه الميزة للأطباء فقط",
+        unauth: "غير مصرح",
+      };
+      toast.error("فشل حفظ الزيارة: " + (map[err] ?? err));
       return;
     }
     toast.success("تم حفظ الزيارة");

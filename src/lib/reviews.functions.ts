@@ -12,7 +12,7 @@ async function assertAdmin(userId: string) {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
+    .in("role", ["admin", "super_admin"])
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("forbidden");
@@ -157,7 +157,7 @@ export const adminListReviews = createServerFn({ method: "GET" })
          patient:profiles!reviews_patient_id_fkey ( id, full_name ),
          doctor:doctor_details!reviews_doctor_id_fkey (
            id, profile:profiles!doctor_details_profile_id_fkey ( id, full_name )
-         )`
+         )`,
       )
       .order("created_at", { ascending: false })
       .limit(data.limit);
@@ -172,11 +172,9 @@ export const adminListReviews = createServerFn({ method: "GET" })
       createdAt: r.created_at as string,
       moderatedAt: r.moderated_at as string | null,
       notes: r.moderation_notes as string | null,
-      patientName:
-        (r.patient as { full_name?: string } | null)?.full_name ?? "—",
+      patientName: (r.patient as { full_name?: string } | null)?.full_name ?? "—",
       doctorName:
-        ((r.doctor as { profile?: { full_name?: string } } | null)?.profile
-          ?.full_name) ?? "—",
+        (r.doctor as { profile?: { full_name?: string } } | null)?.profile?.full_name ?? "—",
     }));
   });
 
@@ -305,8 +303,7 @@ export const doctorListMyReviews = createServerFn({ method: "GET" })
       doctorResponse: (r.doctor_response as string | null) ?? null,
       createdAt: r.created_at as string,
       decidedAt: (r.doctor_decided_at as string | null) ?? null,
-      patientName:
-        (r.patient as { full_name?: string } | null)?.full_name ?? "—",
+      patientName: (r.patient as { full_name?: string } | null)?.full_name ?? "—",
       appointmentId: (r.appointment_id as string | null) ?? null,
     }));
   });

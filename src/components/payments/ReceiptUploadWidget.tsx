@@ -91,11 +91,9 @@ export function ReceiptUploadWidget({ planCode }: { planCode: ManualGoldPlanCode
         .upload(path, file, { contentType: file.type, upsert: false });
       if (upErr) throw new Error("فشل الرفع، يرجى المحاولة مرة أخرى");
 
-      const { data: pub } = supabase.storage.from("receipts").getPublicUrl(path);
-      const receiptUrl = pub?.publicUrl;
-      if (!receiptUrl) throw new Error("فشل الرفع، يرجى المحاولة مرة أخرى");
-
-      await submit({ data: { planCode, receiptUrl } });
+      // The receipts bucket is PRIVATE (2026-11-04): store the object path; the
+      // admin page signs a short-lived URL when it needs to show the image.
+      await submit({ data: { planCode, receiptUrl: path } });
       setPhase("done");
     } catch (e) {
       setPhase("idle");
@@ -117,7 +115,8 @@ export function ReceiptUploadWidget({ planCode }: { planCode: ManualGoldPlanCode
         </h3>
         <p className="mx-auto mt-2 flex max-w-md items-center justify-center gap-1.5 text-sm text-green-800 dark:text-green-300">
           <ShieldCheck className="h-4 w-4 shrink-0" />
-          تم تفعيل مزايا Gold مؤقتاً على حسابك الآن. سيراجع فريقنا الإيصال خلال 24 ساعة لتأكيد اشتراكك.
+          تم تفعيل مزايا Gold مؤقتاً على حسابك الآن. سيراجع فريقنا الإيصال خلال 24 ساعة لتأكيد
+          اشتراكك.
         </p>
       </section>
     );
@@ -162,8 +161,12 @@ export function ReceiptUploadWidget({ planCode }: { planCode: ManualGoldPlanCode
         {file ? (
           <>
             <FileImage className="h-8 w-8 text-primary" />
-            <p className="mt-2 max-w-full truncate text-sm font-medium text-foreground">{file.name}</p>
-            <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} ميجابايت</p>
+            <p className="mt-2 max-w-full truncate text-sm font-medium text-foreground">
+              {file.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {(file.size / 1024 / 1024).toFixed(2)} ميجابايت
+            </p>
             <button
               type="button"
               onClick={(e) => {
@@ -180,7 +183,9 @@ export function ReceiptUploadWidget({ planCode }: { planCode: ManualGoldPlanCode
         ) : (
           <>
             <UploadCloud className="h-8 w-8 text-muted-foreground" />
-            <p className="mt-2 text-sm font-medium text-foreground">اسحب الصورة هنا أو اضغط للاختيار</p>
+            <p className="mt-2 text-sm font-medium text-foreground">
+              اسحب الصورة هنا أو اضغط للاختيار
+            </p>
             <p className="text-xs text-muted-foreground">JPG أو PNG — بحد أقصى 5 ميجابايت</p>
           </>
         )}
@@ -194,7 +199,10 @@ export function ReceiptUploadWidget({ planCode }: { planCode: ManualGoldPlanCode
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+        <p
+          className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
           {error}
         </p>
       )}

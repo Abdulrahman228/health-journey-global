@@ -27,7 +27,7 @@ export function EmergencyShiftButton({ doctorId }: { doctorId: string }) {
     setBusy(true);
     try {
       const res = await shift({ data: { doctorId, delayMinutes: minutes } });
-      setActive(true);
+      if (res.shifted > 0) setActive(true);
       toast.success(
         t(
           `Delayed ${res.shifted} appointment(s) by ${minutes} min`,
@@ -87,7 +87,10 @@ export function EmergencyShiftButton({ doctorId }: { doctorId: string }) {
 
             <div className="space-y-4 p-5">
               <div className="flex gap-2 rounded-lg bg-muted/50 p-3 text-sm">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
+                <AlertTriangle
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-500"
+                  aria-hidden="true"
+                />
                 <p className="text-muted-foreground">
                   {t(
                     "Delay all waiting patients today by the minutes below and notify them.",
@@ -125,7 +128,11 @@ export function EmergencyShiftButton({ doctorId }: { doctorId: string }) {
                 disabled={busy}
                 className="inline-flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-white hover:bg-destructive/90 disabled:opacity-60"
               >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Siren className="h-4 w-4" />}
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Siren className="h-4 w-4" />
+                )}
                 {t("Confirm shift", "تأكيد الترحيل")}
               </button>
             </footer>

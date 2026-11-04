@@ -18,6 +18,7 @@ import {
   Users,
   Wallet,
   BookOpen,
+  UserPlus,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { siteConfig } from "@/lib/seo";
@@ -41,6 +42,7 @@ const items: NavItem[] = [
   { to: "/admin", label: "لوحة القيادة", icon: LayoutDashboard, exact: true },
   { to: "/admin/doctors", label: "الأطباء", icon: Users },
   { to: "/admin/seed-directory", label: "استيراد الدليل", icon: UploadCloud },
+  { to: "/admin/onboarding", label: "تهيئة طبيب", icon: UserPlus },
   { to: "/admin/patients", label: "المرضى", icon: UserRound },
   { to: "/admin/subscriptions", label: "الاشتراكات", icon: CreditCard },
   { to: "/admin/subscription-requests", label: "طلبات الاشتراك", icon: ClipboardCheck },

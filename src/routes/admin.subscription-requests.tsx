@@ -9,7 +9,16 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { adminReviewManualSubscription } from "@/lib/admin/financial";
 import { manualAccessExpiresAt } from "@/lib/subscriptions.access";
-import { BadgeCheck, Check, Clock, ExternalLink, Loader2, Receipt, ShieldAlert, X } from "lucide-react";
+import {
+  BadgeCheck,
+  Check,
+  Clock,
+  ExternalLink,
+  Loader2,
+  Receipt,
+  ShieldAlert,
+  X,
+} from "lucide-react";
 
 export const Route = createFileRoute("/admin/subscription-requests")({
   head: () => ({
@@ -26,13 +35,27 @@ type RequestRow = {
   id: string;
   user_id: string;
   plan_code: string | null;
-  access_status: string;
+  access_status: string | null;
   access_granted_at: string | null;
   receipt_url: string | null;
   created_at: string;
   doctorName: string | null;
   city: string | null;
+  /** Signed, short-lived link to the receipt (bucket is private). */
+  receiptHref: string | null;
 };
+
+/** Legacy rows hold a public URL; new rows hold the object path. Both → signed URL. */
+async function resolveReceiptHref(value: string | null): Promise<string | null> {
+  if (!value) return null;
+  let path = value;
+  const marker = "/object/public/receipts/";
+  const i = value.indexOf(marker);
+  if (i >= 0) path = decodeURIComponent(value.slice(i + marker.length));
+  else if (/^https?:\/\//i.test(value)) return value;
+  const { data } = await supabase.storage.from("receipts").createSignedUrl(path, 3600);
+  return data?.signedUrl ?? null;
+}
 
 const PLAN_LABEL: Record<string, string> = {
   doctor_gold_monthly: "Gold شهري",
@@ -64,13 +87,15 @@ function SubscriptionRequestsPage() {
       : { data: [] as { user_id: string; full_name: string | null; city: string | null }[] };
     const profByUser = new Map((profiles ?? []).map((p) => [p.user_id, p]));
 
-    setRows(
-      (subs ?? []).map((s) => ({
+    const withLinks = await Promise.all(
+      (subs ?? []).map(async (s) => ({
         ...s,
         doctorName: profByUser.get(s.user_id)?.full_name ?? null,
         city: profByUser.get(s.user_id)?.city ?? null,
+        receiptHref: await resolveReceiptHref(s.receipt_url),
       })),
     );
+    setRows(withLinks);
     setLoading(false);
   }, []);
 
@@ -98,7 +123,7 @@ function SubscriptionRequestsPage() {
     }
   };
 
-  if (authLoading || roleLoading || loading) {
+  if (authLoading || roleLoading || (isAdmin && loading)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -120,7 +145,8 @@ function SubscriptionRequestsPage() {
       <header className="mb-6">
         <h1 className="text-3xl font-bold">طلبات الاشتراك</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          مراجعة إيصالات الدفع اليدوي. الأطباء حصلوا على مزايا Gold مؤقتاً — راجع خلال 24 ساعة قبل انتهاء صلاحية الوصول.
+          مراجعة إيصالات الدفع اليدوي. الأطباء حصلوا على مزايا Gold مؤقتاً — راجع خلال 24 ساعة قبل
+          انتهاء صلاحية الوصول.
         </p>
       </header>
 
@@ -147,9 +173,9 @@ function SubscriptionRequestsPage() {
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                {r.receipt_url && (
+                {r.receiptHref && (
                   <a
-                    href={r.receipt_url}
+                    href={r.receiptHref}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
@@ -165,7 +191,11 @@ function SubscriptionRequestsPage() {
                   onClick={() => decide(r.id, "reject")}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-2 text-sm font-semibold text-destructive hover:bg-destructive/10 disabled:opacity-60"
                 >
-                  {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                  {busyId === r.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <X className="h-4 w-4" />
+                  )}
                   رفض
                 </button>
                 <button
@@ -174,7 +204,11 @@ function SubscriptionRequestsPage() {
                   onClick={() => decide(r.id, "approve")}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                 >
-                  {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  {busyId === r.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
                   تفعيل
                 </button>
               </div>
@@ -188,7 +222,10 @@ function SubscriptionRequestsPage() {
 
 /** Small "expires in Nh" hint driven by the 24h manual grace window. */
 function ExpiryHint({ grantedAt }: { grantedAt: string | null }) {
-  const expiresAt = manualAccessExpiresAt({ access_status: "pending", access_granted_at: grantedAt });
+  const expiresAt = manualAccessExpiresAt({
+    access_status: "pending",
+    access_granted_at: grantedAt,
+  });
   if (!expiresAt) return null;
   const msLeft = expiresAt.getTime() - Date.now();
   const expired = msLeft <= 0;
@@ -202,7 +239,9 @@ function ExpiryHint({ grantedAt }: { grantedAt: string | null }) {
       }
     >
       <Clock className="h-3.5 w-3.5" />
-      {expired ? "انتهت صلاحية الوصول المؤقت" : `يتبقّى على انتهاء الوصول المؤقت: ${hours}س ${mins}د`}
+      {expired
+        ? "انتهت صلاحية الوصول المؤقت"
+        : `يتبقّى على انتهاء الوصول المؤقت: ${hours}س ${mins}د`}
     </p>
   );
 }

@@ -65,6 +65,13 @@ function safeRedirect(): string | null {
   return rp && rp.startsWith("/") && !rp.startsWith("//") ? rp : null;
 }
 
+/** ?role=doctor|patient pre-selects the role and skips the chooser. */
+function presetRole(): Role | null {
+  if (typeof window === "undefined") return null;
+  const r = new URLSearchParams(window.location.search).get("role");
+  return r === "doctor" || r === "patient" ? r : null;
+}
+
 const inputClass =
   "w-full rounded-lg border border-input bg-background py-2.5 pe-4 ps-10 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20";
 
@@ -74,9 +81,10 @@ function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<"role" | "form">("role");
+  const preset = presetRole();
+  const [step, setStep] = useState<"role" | "form">(preset ? "form" : "role");
   const [method, setMethod] = useState<Method>("phone");
-  const [role, setRole] = useState<Role>("patient");
+  const [role, setRole] = useState<Role>(preset ?? "patient");
 
   // Phone sign-up fields (outside the OTP form so the two forms never nest).
   const [phoneName, setPhoneName] = useState("");
@@ -100,7 +108,7 @@ function SignupPage() {
     formState: { errors },
   } = useForm<SignupForm>({
     resolver: zodResolver(signupSchema),
-    defaultValues: { role: "patient" },
+    defaultValues: { role: preset ?? "patient" },
   });
 
   // If already signed in, honor a safe relative ?redirect= (claim flow).

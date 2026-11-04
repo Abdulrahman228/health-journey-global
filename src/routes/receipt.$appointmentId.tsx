@@ -18,10 +18,7 @@ import { AlertTriangle, Loader2, Mail, Printer, ShieldCheck } from "lucide-react
 
 export const Route = createFileRoute("/receipt/$appointmentId")({
   head: () => ({
-    meta: [
-      { title: "إيصال دفع | طبانا" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
+    meta: [{ title: "إيصال دفع | طبانا" }, { name: "robots", content: "noindex, nofollow" }],
   }),
   component: ReceiptPage,
 });
@@ -236,10 +233,10 @@ function ReceiptPage() {
         {/* Header */}
         <header className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
           <div>
-            <div className="text-lg font-extrabold tracking-tight">{siteConfig.brand.ar} · {siteConfig.brand.en}</div>
-            <div className="mt-0.5 text-xs text-slate-600">
-              منصة الرعاية الصحية الموحّدة
+            <div className="text-lg font-extrabold tracking-tight">
+              {siteConfig.brand.ar} · {siteConfig.brand.en}
             </div>
+            <div className="mt-0.5 text-xs text-slate-600">منصة الرعاية الصحية الموحّدة</div>
             <div className="mt-4 text-xs text-slate-500">
               {siteConfig.organization.legalName} · مسجلة في جمهورية مصر العربية
             </div>
@@ -285,9 +282,7 @@ function ReceiptPage() {
               </div>
               <div className="text-end">
                 <div className="text-xs text-slate-500">موعد الزيارة</div>
-                <div className="mt-0.5 font-semibold">
-                  {formatDateTimeAr(data.scheduledAt)}
-                </div>
+                <div className="mt-0.5 font-semibold">{formatDateTimeAr(data.scheduledAt)}</div>
               </div>
             </div>
           </div>
@@ -315,9 +310,7 @@ function ReceiptPage() {
               </tr>
               {data.couponDiscount > 0 && (
                 <tr className="border-b border-slate-200 text-emerald-700">
-                  <td className="py-2">
-                    خصم كود {data.couponCode ?? ""}
-                  </td>
+                  <td className="py-2">خصم كود {data.couponCode ?? ""}</td>
                   <td className="py-2 text-end font-semibold">
                     − {formatMoney(data.couponDiscount, data.currency)}
                   </td>
@@ -353,7 +346,13 @@ function ReceiptPage() {
           <div>
             <div className="text-slate-500">طريقة الدفع</div>
             <div className="mt-0.5 font-semibold">
-              {data.paymentProvider === "stripe" ? "بطاقة بنكية (Stripe)" : data.paymentProvider}
+              {data.paymentProvider === "stripe"
+                ? "بطاقة بنكية (Stripe)"
+                : data.paymentProvider === "paymob"
+                  ? "دفع إلكتروني (Paymob)"
+                  : data.paymentProvider === "manual_transfer"
+                    ? "تحويل يدوي (InstaPay / فودافون كاش / بنك)"
+                    : data.paymentProvider}
             </div>
           </div>
           {data.paymentReference && (
@@ -378,8 +377,8 @@ function ReceiptPage() {
             <div className="flex items-start gap-1.5">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>
-                هذا الإيصال صادر إلكترونياً من منصة طبانا. يُستخدم كإثبات دفع غير
-                ضريبي. الفاتورة الضريبية الإلكترونية (ETA) — إن وجبت — تصدر منفصلة.
+                هذا الإيصال صادر إلكترونياً من منصة طبانا. يُستخدم كإثبات دفع غير ضريبي. الفاتورة
+                الضريبية الإلكترونية (ETA) — إن وجبت — تصدر منفصلة.
               </span>
             </div>
             <div className="mt-3 text-slate-500">

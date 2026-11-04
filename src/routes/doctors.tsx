@@ -4,9 +4,20 @@ import { useQuery } from "@tanstack/react-query";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
+import { PUBLIC_DOCTOR_COLUMNS, PUBLIC_PROFILE_COLUMNS } from "@/lib/public-columns";
 import { haversineKm } from "@/lib/distance";
 import { normalizeArabicText } from "@/lib/arabic";
-import { Search, MapPin, Star, Stethoscope, BadgeCheck, Loader2, SlidersHorizontal, Navigation, Phone } from "lucide-react";
+import {
+  Search,
+  MapPin,
+  Star,
+  Stethoscope,
+  BadgeCheck,
+  Loader2,
+  SlidersHorizontal,
+  Navigation,
+  Phone,
+} from "lucide-react";
 import { buildMeta, buildSeoLinks } from "@/lib/seo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SponsoredDoctorsRow } from "@/components/doctors/SponsoredDoctorsRow";
@@ -63,7 +74,12 @@ type DoctorRow = {
   rating: number | null;
   is_verified: boolean | null;
   profile_id: string;
-  profiles: { id: string; full_name: string | null; city: string | null; avatar_url: string | null } | null;
+  profiles: {
+    id: string;
+    full_name: string | null;
+    city: string | null;
+    avatar_url: string | null;
+  } | null;
   clinics?: Clinic[];
 };
 
@@ -176,9 +192,14 @@ function DoctorsPage() {
         .order("rating", { ascending: false })
         .limit(200);
       if (error) {
-        const { data: d2, error: e2 } = await supabase.from("doctor_details").select("*").limit(200);
+        // Public columns only — sensitive verification/licence fields are not
+        // readable by anonymous visitors (column privileges, 2026-11-04).
+        const { data: d2, error: e2 } = await supabase
+          .from("doctor_details")
+          .select(PUBLIC_DOCTOR_COLUMNS)
+          .limit(200);
         if (e2) throw e2;
-        const ids = (d2 || []).map((d) => d.profile_id);
+        const ids = (d2 || []).map((d) => d.profile_id).filter((x): x is string => !!x);
         const { data: profs } = await supabase
           .from("profiles")
           .select("id, full_name, city, avatar_url")
@@ -272,10 +293,9 @@ function DoctorsPage() {
     const out = enriched.filter((d) => {
       const name = normalizeArabicText(d.profiles?.full_name ?? "");
       const matchesSearch =
-        !q ||
-        name.includes(q) ||
-        normalizeArabicText(d.specialty ?? "").includes(q);
-      const matchesSpec = !specialty || d.specialty === specialty;
+        !q || name.includes(q) || normalizeArabicText(d.specialty ?? "").includes(q);
+      const matchesSpec =
+        !specialty || normalizeArabicText(d.specialty ?? "") === normalizeArabicText(specialty);
       const matchesCity =
         !city ||
         (d.profiles?.city ?? "").toLowerCase().includes(city.toLowerCase()) ||
@@ -290,7 +310,8 @@ function DoctorsPage() {
     });
 
     out.sort((a, b) => {
-      if (sort === "price_asc") return Number(a.consultation_fee ?? 0) - Number(b.consultation_fee ?? 0);
+      if (sort === "price_asc")
+        return Number(a.consultation_fee ?? 0) - Number(b.consultation_fee ?? 0);
       if (sort === "distance") {
         const ad = a._distance ?? Infinity;
         const bd = b._distance ?? Infinity;
@@ -344,36 +365,36 @@ function DoctorsPage() {
               {t("Refine results", "تصفية النتائج")}
             </h2>
             <div className="grid gap-3 md:grid-cols-3 bg-card p-4 rounded-xl shadow-sm border border-border">
-            <div className="relative">
-              <Search className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-muted-foreground" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("Doctor name or specialty", "اسم الطبيب أو التخصص")}
-                className="w-full ps-10 pe-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <select
-              value={specialty}
-              onChange={(e) => setSpecialty(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">{t("All specialties", "كل التخصصات")}</option>
-              {specialties.map((s) => (
-                <option key={s.id} value={language === "ar" ? s.name_ar : s.name_en}>
-                  {language === "ar" ? s.name_ar : s.name_en}
-                </option>
-              ))}
-            </select>
-            <div className="relative">
-              <MapPin className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-muted-foreground" />
-              <input
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder={t("City (e.g. Cairo)", "المدينة (مثال: القاهرة)")}
-                className="w-full ps-10 pe-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
+              <div className="relative">
+                <Search className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t("Doctor name or specialty", "اسم الطبيب أو التخصص")}
+                  className="w-full ps-10 pe-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <select
+                value={specialty}
+                onChange={(e) => setSpecialty(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">{t("All specialties", "كل التخصصات")}</option>
+                {specialties.map((s) => (
+                  <option key={s.id} value={language === "ar" ? s.name_ar : s.name_en}>
+                    {language === "ar" ? s.name_ar : s.name_en}
+                  </option>
+                ))}
+              </select>
+              <div className="relative">
+                <MapPin className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-muted-foreground" />
+                <input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder={t("City (e.g. Cairo)", "المدينة (مثال: القاهرة)")}
+                  className="w-full ps-10 pe-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
             </div>
           </div>
 
@@ -389,7 +410,9 @@ function DoctorsPage() {
             <button
               onClick={requestLocation}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition ${
-                userLoc ? "bg-primary text-primary-foreground border-primary" : "border-border bg-card hover:border-primary/50"
+                userLoc
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border bg-card hover:border-primary/50"
               }`}
             >
               <Navigation className="h-4 w-4" />
@@ -439,7 +462,9 @@ function DoctorsPage() {
                 </label>
                 <select
                   value={dayFilter}
-                  onChange={(e) => setDayFilter(e.target.value === "" ? "" : Number(e.target.value))}
+                  onChange={(e) =>
+                    setDayFilter(e.target.value === "" ? "" : Number(e.target.value))
+                  }
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
                 >
                   <option value="">{t("Any day", "أي يوم")}</option>
@@ -502,7 +527,9 @@ function DoctorsPage() {
           <button
             onClick={() => setSpecialty("")}
             className={`px-4 py-2 rounded-full text-sm whitespace-nowrap border transition ${
-              !specialty ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:border-primary/50"
+              !specialty
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card border-border hover:border-primary/50"
             }`}
           >
             {t("All", "الكل")}
@@ -515,7 +542,9 @@ function DoctorsPage() {
                 key={s.id}
                 onClick={() => setSpecialty(label)}
                 className={`px-4 py-2 rounded-full text-sm whitespace-nowrap border transition ${
-                  active ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:border-primary/50"
+                  active
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card border-border hover:border-primary/50"
                 }`}
               >
                 {label}
@@ -539,7 +568,10 @@ function DoctorsPage() {
               {t("No doctors match these filters.", "لا يوجد أطباء بهذه الفلاتر.")}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t("Try widening your search — clear the filters to see everyone.", "جرّب توسيع البحث — امسح الفلاتر لعرض كل الأطباء.")}
+              {t(
+                "Try widening your search — clear the filters to see everyone.",
+                "جرّب توسيع البحث — امسح الفلاتر لعرض كل الأطباء.",
+              )}
             </p>
             <button
               type="button"
@@ -611,10 +643,13 @@ function SeededDoctorCard({ doctor }: { doctor: SeededDoctor }) {
               {t("Not on Tebana yet", "غير مُفعّل")}
             </span>
           </div>
-          {doctor.specialty && <p className="truncate text-sm text-muted-foreground">{doctor.specialty}</p>}
+          {doctor.specialty && (
+            <p className="truncate text-sm text-muted-foreground">{doctor.specialty}</p>
+          )}
           {(doctor.city || doctor.address) && (
             <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-              <MapPin className="h-3 w-3" /> {[doctor.city, doctor.address].filter(Boolean).join(" · ")}
+              <MapPin className="h-3 w-3" />{" "}
+              {[doctor.city, doctor.address].filter(Boolean).join(" · ")}
             </p>
           )}
           {doctor.external_rating != null && (
@@ -649,7 +684,13 @@ function SeededDoctorCard({ doctor }: { doctor: SeededDoctor }) {
   );
 }
 
-function DoctorCard({ doctor, tier }: { doctor: DoctorRow & { _distance?: number | null }; tier?: DoctorTier }) {
+function DoctorCard({
+  doctor,
+  tier,
+}: {
+  doctor: DoctorRow & { _distance?: number | null };
+  tier?: DoctorTier;
+}) {
   const { t } = useLanguage();
   const { formatPrice } = useCurrency();
   const name = doctor.profiles?.full_name ?? t("Doctor", "طبيب");

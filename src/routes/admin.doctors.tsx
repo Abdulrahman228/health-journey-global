@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { AdminShell } from "@/components/admin/AdminNav";
+import { adminVerifyDoctor } from "@/lib/admin/clinical";
 import { pingIndexNow } from "@/lib/indexnow.functions";
 import { siteConfig } from "@/lib/seo";
 import {
@@ -40,11 +41,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ClinicsManager } from "@/components/dashboard/ClinicsManager";
-import {
-  adminCreateDoctor,
-  adminDeleteDoctor,
-  adminGetDoctorQueue,
-} from "@/lib/admin.functions";
+import { adminCreateDoctor, adminDeleteDoctor, adminGetDoctorQueue } from "@/lib/admin.functions";
 import { adminGrantSubscription } from "@/lib/admin/financial";
 
 export const Route = createFileRoute("/admin/doctors")({
@@ -125,9 +122,7 @@ function AdminDoctorsPage() {
       .from("profiles")
       .select("id, full_name, avatar_url, city")
       .in("id", profileIds);
-    const byId = new Map(
-      (profiles ?? []).map((p) => [p.id, p as DoctorRow["profile"]]),
-    );
+    const byId = new Map((profiles ?? []).map((p) => [p.id, p as DoctorRow["profile"]]));
     setRows(
       (data as DoctorRow[]).map((d) => ({
         ...d,
@@ -180,15 +175,12 @@ function AdminDoctorsPage() {
     async (row: DoctorRow) => {
       setVerifyingId(row.id);
       const next = !row.is_verified;
-      const { error } = await supabase
-        .from("doctor_details")
-        .update({
-          is_verified: next,
-          verification_status: next ? "approved" : "pending",
-        })
-        .eq("id", row.id);
-      if (error) {
-        toast.error("فشل التحديث: " + error.message);
+      try {
+        await adminVerifyDoctor({
+          data: { doctorDetailsId: row.id, decision: next ? "approve" : "reject" },
+        });
+      } catch (e) {
+        toast.error("فشل التحديث: " + (e instanceof Error ? e.message : String(e)));
         setVerifyingId(null);
         return;
       }
@@ -253,8 +245,10 @@ function AdminDoctorsPage() {
   // Prevent body scroll behind any open modal
   useEffect(() => {
     const anyOpen = !!edit || showCreate || !!queueModal;
-    document.body.style.overflow = anyOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    document.body.style.overflow = anyOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [edit, showCreate, queueModal]);
 
   // Gate
@@ -271,9 +265,7 @@ function AdminDoctorsPage() {
       <div className="mx-auto max-w-md px-4 py-24 text-center">
         <ShieldAlert className="mx-auto h-12 w-12 text-destructive" />
         <h1 className="mt-4 text-xl font-bold">صلاحيات غير كافية</h1>
-        <p className="mt-2 text-muted-foreground">
-          هذه الصفحة مخصصة لمشرفي المنصة فقط.
-        </p>
+        <p className="mt-2 text-muted-foreground">هذه الصفحة مخصصة لمشرفي المنصة فقط.</p>
       </div>
     );
   }
@@ -307,8 +299,7 @@ function AdminDoctorsPage() {
                   : "border-border bg-card text-foreground hover:bg-muted")
               }
             >
-              {f === "all" ? "الكل" : f === "pending" ? "بانتظار التوثيق" : "موثّق"}{" "}
-              ({counts[f]})
+              {f === "all" ? "الكل" : f === "pending" ? "بانتظار التوثيق" : "موثّق"} ({counts[f]})
             </button>
           ))}
         </div>
@@ -351,155 +342,145 @@ function AdminDoctorsPage() {
             <tbody>
               {filtered.map((r) => (
                 <Fragment key={r.id}>
-                <tr
-                  className="border-b border-border last:border-0 hover:bg-muted/30"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {r.profile?.avatar_url ? (
-                        <img
-                          src={r.profile.avatar_url}
-                          alt=""
-                          width={36}
-                          height={36}
-                          loading="lazy"
-                          decoding="async"
-                          className="h-9 w-9 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
-                          <Stethoscope className="h-4 w-4 text-primary" />
-                        </div>
-                      )}
-                      <div>
-                        <div className="font-semibold">
-                          {r.profile?.full_name ?? "—"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {r.id.slice(0, 8)}…
+                  <tr className="border-b border-border last:border-0 hover:bg-muted/30">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {r.profile?.avatar_url ? (
+                          <img
+                            src={r.profile.avatar_url}
+                            alt=""
+                            width={36}
+                            height={36}
+                            loading="lazy"
+                            decoding="async"
+                            className="h-9 w-9 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+                            <Stethoscope className="h-4 w-4 text-primary" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-semibold">{r.profile?.full_name ?? "—"}</div>
+                          <div className="text-xs text-muted-foreground">{r.id.slice(0, 8)}…</div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">{r.specialty ?? "—"}</td>
-                  <td className="px-4 py-3">{r.profile?.city ?? "—"}</td>
-                  <td className="px-4 py-3">{r.consultation_fee ?? "—"}</td>
-                  <td className="px-4 py-3">{r.years_experience ?? "—"}</td>
-                  <td className="px-4 py-3">{r.rating?.toFixed(1) ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {r.is_verified ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                        <CheckCircle2 className="h-3 w-3" />
-                        معتمد
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                        {r.verification_status === "rejected" ? "مرفوض" : "بانتظار"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleVerify(r)}
-                        disabled={!!verifyingId}
-                        className={
-                          "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition disabled:opacity-60 " +
-                          (r.is_verified
-                            ? "border-border text-foreground hover:bg-muted"
-                            : "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700")
-                        }
-                      >
-                        {verifyingId === r.id && <Loader2 className="h-3 w-3 animate-spin" />}
-                        {r.is_verified ? "إيقاف الاعتماد" : "اعتماد"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(r)}
-                        className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
-                      >
-                        تحرير
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpanded(expanded === r.id ? null : r.id)
-                        }
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
-                      >
-                        {expanded === r.id ? (
-                          <ChevronUp className="h-3 w-3" />
-                        ) : (
-                          <ChevronDown className="h-3 w-3" />
-                        )}
-                        العيادات
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQueueModal({
-                            doctorId: r.id,
-                            doctorName: r.profile?.full_name ?? r.id,
-                          })
-                        }
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
-                      >
-                        <Users className="h-3 w-3" /> الطابور
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setGrantTarget({
-                            profileId: r.profile_id,
-                            name: r.profile?.full_name ?? r.id,
-                          })
-                        }
-                        className="inline-flex items-center gap-1 rounded-md border border-amber-500 bg-amber-500 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-amber-600"
-                      >
-                        <Crown className="h-3 w-3" /> منح Gold
-                      </button>
-                      <a
-                        href={`/doctor/${r.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
-                      >
-                        <ExternalLink className="h-3 w-3" /> الصفحة
-                      </a>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (
-                            !window.confirm(
-                              `حذف الطبيب ${r.profile?.full_name ?? r.id} وكل بياناته؟ لا يمكن التراجع.`,
-                            )
-                          )
-                            return;
-                          try {
-                            await adminDeleteDoctor({ data: { doctorId: r.id } });
-                            toast.success("تم حذف الطبيب");
-                            load();
-                          } catch (e) {
-                            toast.error(
-                              "فشل الحذف: " + (e as Error).message,
-                            );
+                    </td>
+                    <td className="px-4 py-3">{r.specialty ?? "—"}</td>
+                    <td className="px-4 py-3">{r.profile?.city ?? "—"}</td>
+                    <td className="px-4 py-3">{r.consultation_fee ?? "—"}</td>
+                    <td className="px-4 py-3">{r.years_experience ?? "—"}</td>
+                    <td className="px-4 py-3">{r.rating?.toFixed(1) ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      {r.is_verified ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                          <CheckCircle2 className="h-3 w-3" />
+                          معتمد
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                          {r.verification_status === "rejected" ? "مرفوض" : "بانتظار"}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleVerify(r)}
+                          disabled={!!verifyingId}
+                          className={
+                            "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition disabled:opacity-60 " +
+                            (r.is_verified
+                              ? "border-border text-foreground hover:bg-muted"
+                              : "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700")
                           }
-                        }}
-                        className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                {expanded === r.id && (
-                  <tr className="border-b border-border bg-muted/20">
-                    <td colSpan={8} className="px-4 py-4">
-                      <ClinicsManager doctorDetailsId={r.id} />
+                        >
+                          {verifyingId === r.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {r.is_verified ? "إيقاف الاعتماد" : "اعتماد"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(r)}
+                          className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                        >
+                          تحرير
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExpanded(expanded === r.id ? null : r.id)}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                        >
+                          {expanded === r.id ? (
+                            <ChevronUp className="h-3 w-3" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" />
+                          )}
+                          العيادات
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQueueModal({
+                              doctorId: r.id,
+                              doctorName: r.profile?.full_name ?? r.id,
+                            })
+                          }
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                        >
+                          <Users className="h-3 w-3" /> الطابور
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setGrantTarget({
+                              profileId: r.profile_id,
+                              name: r.profile?.full_name ?? r.id,
+                            })
+                          }
+                          className="inline-flex items-center gap-1 rounded-md border border-amber-500 bg-amber-500 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-amber-600"
+                        >
+                          <Crown className="h-3 w-3" /> منح Gold
+                        </button>
+                        <a
+                          href={`/doctor/${r.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                        >
+                          <ExternalLink className="h-3 w-3" /> الصفحة
+                        </a>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                `حذف الطبيب ${r.profile?.full_name ?? r.id} وكل بياناته؟ لا يمكن التراجع.`,
+                              )
+                            )
+                              return;
+                            try {
+                              await adminDeleteDoctor({ data: { doctorId: r.id } });
+                              toast.success("تم حذف الطبيب");
+                              load();
+                            } catch (e) {
+                              toast.error("فشل الحذف: " + (e as Error).message);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                )}
+                  {expanded === r.id && (
+                    <tr className="border-b border-border bg-muted/20">
+                      <td colSpan={8} className="px-4 py-4">
+                        <ClinicsManager doctorDetailsId={r.id} />
+                      </td>
+                    </tr>
+                  )}
                 </Fragment>
               ))}
             </tbody>
@@ -516,7 +497,10 @@ function AdminDoctorsPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={() => setEdit(null)}
         >
-          <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="flex items-center justify-between border-b border-border px-5 py-3">
               <h2 className="text-lg font-bold">تحرير بيانات الطبيب</h2>
               <button
@@ -535,9 +519,7 @@ function AdminDoctorsPage() {
                   <input
                     type="text"
                     value={edit.specialty}
-                    onChange={(e) =>
-                      setEdit({ ...edit, specialty: e.target.value })
-                    }
+                    onChange={(e) => setEdit({ ...edit, specialty: e.target.value })}
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                   />
                 </label>
@@ -546,9 +528,7 @@ function AdminDoctorsPage() {
                   <input
                     type="text"
                     value={edit.clinic_name}
-                    onChange={(e) =>
-                      setEdit({ ...edit, clinic_name: e.target.value })
-                    }
+                    onChange={(e) => setEdit({ ...edit, clinic_name: e.target.value })}
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                   />
                 </label>
@@ -557,9 +537,7 @@ function AdminDoctorsPage() {
                   <input
                     type="text"
                     value={edit.clinic_address}
-                    onChange={(e) =>
-                      setEdit({ ...edit, clinic_address: e.target.value })
-                    }
+                    onChange={(e) => setEdit({ ...edit, clinic_address: e.target.value })}
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                   />
                 </label>
@@ -594,9 +572,7 @@ function AdminDoctorsPage() {
                   />
                 </label>
                 <label className="block sm:col-span-2">
-                  <span className="text-sm font-medium">
-                    نبذة قصيرة (تظهر في ملف الطبيب)
-                  </span>
+                  <span className="text-sm font-medium">نبذة قصيرة (تظهر في ملف الطبيب)</span>
                   <textarea
                     rows={5}
                     value={edit.bio}
@@ -664,13 +640,7 @@ function AdminDoctorsPage() {
 // =====================================================================
 // Create Doctor modal — calls server fn adminCreateDoctor
 // =====================================================================
-function CreateDoctorModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => void;
-}) {
+function CreateDoctorModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -694,7 +664,10 @@ function CreateDoctorModal({
     else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = "بريد إلكتروني غير صحيح";
     if (form.password.length < 8) errs.password = "8 أحرف على الأقل";
     if (!form.specialty.trim()) errs.specialty = "مطلوب";
-    if (Object.keys(errs).length) { setErrors(errs); return; }
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
+    }
     setErrors({});
     setBusy(true);
     try {
@@ -716,7 +689,10 @@ function CreateDoctorModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="w-full max-w-2xl overflow-hidden rounded-xl bg-card shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-lg font-bold">إضافة طبيب جديد</h2>
           <button
@@ -770,17 +746,13 @@ function CreateDoctorModal({
               label="سعر الكشف"
               type="number"
               value={String(form.consultationFee)}
-              onChange={(v) =>
-                setForm({ ...form, consultationFee: Number(v) || 0 })
-              }
+              onChange={(v) => setForm({ ...form, consultationFee: Number(v) || 0 })}
             />
             <Field
               label="سنوات الخبرة"
               type="number"
               value={String(form.yearsExperience)}
-              onChange={(v) =>
-                setForm({ ...form, yearsExperience: Number(v) || 0 })
-              }
+              onChange={(v) => setForm({ ...form, yearsExperience: Number(v) || 0 })}
             />
           </div>
           <label className="block">
@@ -797,9 +769,7 @@ function CreateDoctorModal({
               <input
                 type="checkbox"
                 checked={form.telemedicineEnabled}
-                onChange={(e) =>
-                  setForm({ ...form, telemedicineEnabled: e.target.checked })
-                }
+                onChange={(e) => setForm({ ...form, telemedicineEnabled: e.target.checked })}
               />
               يقبل الاستشارات عن بُعد
             </label>
@@ -807,16 +777,13 @@ function CreateDoctorModal({
               <input
                 type="checkbox"
                 checked={form.isVerified}
-                onChange={(e) =>
-                  setForm({ ...form, isVerified: e.target.checked })
-                }
+                onChange={(e) => setForm({ ...form, isVerified: e.target.checked })}
               />
               توثيق فوري
             </label>
           </div>
           <p className="text-xs text-muted-foreground">
-            بعد الإنشاء افتح صف الطبيب من &quot;العيادات&quot; لإضافة عيادة + جدول
-            مواعيد.
+            بعد الإنشاء افتح صف الطبيب من &quot;العيادات&quot; لإضافة عيادة + جدول مواعيد.
           </p>
         </div>
         <footer className="flex justify-end gap-2 border-t border-border px-5 py-3">
@@ -833,11 +800,7 @@ function CreateDoctorModal({
             disabled={busy}
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
           >
-            {busy ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             إنشاء
           </button>
         </footer>
@@ -957,45 +920,43 @@ function QueueModal({
             </div>
           ) : (
             <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-muted-foreground">
-                <tr className="border-b border-border">
-                  <th className="px-2 py-2 text-start">#</th>
-                  <th className="px-2 py-2 text-start">المريض</th>
-                  <th className="px-2 py-2 text-start">هاتف</th>
-                  <th className="px-2 py-2 text-start">العيادة</th>
-                  <th className="px-2 py-2 text-start">الوقت المقدّر</th>
-                  <th className="px-2 py-2 text-start">الرسوم</th>
-                  <th className="px-2 py-2 text-start">الحالة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-border last:border-0">
-                    <td className="px-2 py-2 font-bold">{r.queue_number ?? "—"}</td>
-                    <td className="px-2 py-2">{r.patient?.full_name ?? "—"}</td>
-                    <td className="px-2 py-2 font-mono text-xs">
-                      {r.patient?.phone ?? "—"}
-                    </td>
-                    <td className="px-2 py-2">{r.clinic?.name ?? "—"}</td>
-                    <td className="px-2 py-2 text-xs">
-                      {r.estimated_start_at
-                        ? new Date(r.estimated_start_at).toLocaleTimeString(
-                            "ar-EG",
-                            { hour: "2-digit", minute: "2-digit" },
-                          )
-                        : "—"}
-                    </td>
-                    <td className="px-2 py-2">{r.fee ?? "—"}</td>
-                    <td className="px-2 py-2">
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
-                        {r.status}
-                      </span>
-                    </td>
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase text-muted-foreground">
+                  <tr className="border-b border-border">
+                    <th className="px-2 py-2 text-start">#</th>
+                    <th className="px-2 py-2 text-start">المريض</th>
+                    <th className="px-2 py-2 text-start">هاتف</th>
+                    <th className="px-2 py-2 text-start">العيادة</th>
+                    <th className="px-2 py-2 text-start">الوقت المقدّر</th>
+                    <th className="px-2 py-2 text-start">الرسوم</th>
+                    <th className="px-2 py-2 text-start">الحالة</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="border-b border-border last:border-0">
+                      <td className="px-2 py-2 font-bold">{r.queue_number ?? "—"}</td>
+                      <td className="px-2 py-2">{r.patient?.full_name ?? "—"}</td>
+                      <td className="px-2 py-2 font-mono text-xs">{r.patient?.phone ?? "—"}</td>
+                      <td className="px-2 py-2">{r.clinic?.name ?? "—"}</td>
+                      <td className="px-2 py-2 text-xs">
+                        {r.estimated_start_at
+                          ? new Date(r.estimated_start_at).toLocaleTimeString("ar-EG", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "—"}
+                      </td>
+                      <td className="px-2 py-2">{r.fee ?? "—"}</td>
+                      <td className="px-2 py-2">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                          {r.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -1058,8 +1019,9 @@ function GrantGoldModal({
           <Crown className="h-5 w-5 text-amber-500" /> منح Gold مجانًا
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          اختر مدة منح باقة Gold للطبيب <span className="font-semibold text-foreground">{doctorName}</span>.
-          تُفعّل فورًا ويظهر أثرها في التطبيق والويب.
+          اختر مدة منح باقة Gold للطبيب{" "}
+          <span className="font-semibold text-foreground">{doctorName}</span>. تُفعّل فورًا ويظهر
+          أثرها في التطبيق والويب.
         </p>
         <div className="grid grid-cols-2 gap-2">
           {OPTIONS.map((o) => (
@@ -1092,4 +1054,3 @@ function GrantGoldModal({
     </div>
   );
 }
-

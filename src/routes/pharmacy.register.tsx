@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { Building2, Upload, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -12,7 +12,11 @@ export const Route = createFileRoute("/pharmacy/register")({
   head: () => ({
     meta: [
       { title: "Register your pharmacy chain | Tebana" },
-      { name: "description", content: "Register your pharmacy chain on Tebana and help patients find missing medications." },
+      {
+        name: "description",
+        content:
+          "Register your pharmacy chain on Tebana and help patients find missing medications.",
+      },
     ],
   }),
 });
@@ -31,9 +35,9 @@ function PharmacyRegisterPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (!isLoading && !isAuthenticated) {
-    throw redirect({ to: "/login" });
-  }
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) navigate({ to: "/login" });
+  }, [isLoading, isAuthenticated, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,9 +72,17 @@ function PharmacyRegisterPage() {
       });
 
       // Assign pharmacy role
-      await supabase.from("user_roles").upsert({ user_id: user.id, role: "pharmacy" });
+      const { error: roleErr } = await supabase
+        .from("user_roles")
+        .upsert(
+          { user_id: user.id, role: "pharmacy" },
+          { onConflict: "user_id,role", ignoreDuplicates: true },
+        );
+      if (roleErr) throw new Error(roleErr.message);
 
-      toast.success(t("Submitted! We'll review your chain shortly.", "تم الإرسال! سنراجع سلسلتك قريباً."));
+      toast.success(
+        t("Submitted! We'll review your chain shortly.", "تم الإرسال! سنراجع سلسلتك قريباً."),
+      );
       navigate({ to: "/pharmacy/dashboard" });
       void chainId;
     } catch (err) {
@@ -82,127 +94,138 @@ function PharmacyRegisterPage() {
 
   return (
     <div>
-        <section className="border-b border-border bg-linear-to-br from-teal/10 via-background to-background">
-          <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-10">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-teal/15 text-teal">
-                <Building2 className="h-7 w-7" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                  {t("Register your pharmacy chain", "سجّل سلسلة صيدلياتك")}
-                </h1>
-                <p className="mt-2 text-muted-foreground">
-                  {t(
-                    "Add your chain and branches, then list which rare medications are in stock. Patients searching for missing drugs will find you.",
-                    "أضف سلسلتك وفروعها، ثم انشر الأدوية النادرة المتوفرة لديك. المرضى الباحثون عن أدوية ناقصة سيجدونك.",
-                  )}
-                </p>
-              </div>
+      <section className="border-b border-border bg-linear-to-br from-teal/10 via-background to-background">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-10">
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-teal/15 text-teal">
+              <Building2 className="h-7 w-7" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                {t("Register your pharmacy chain", "سجّل سلسلة صيدلياتك")}
+              </h1>
+              <p className="mt-2 text-muted-foreground">
+                {t(
+                  "Add your chain and branches, then list which rare medications are in stock. Patients searching for missing drugs will find you.",
+                  "أضف سلسلتك وفروعها، ثم انشر الأدوية النادرة المتوفرة لديك. المرضى الباحثون عن أدوية ناقصة سيجدونك.",
+                )}
+              </p>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-          <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
-            <ShieldCheck className="inline h-4 w-4 me-1" />
-            {t(
-              "Your chain will be reviewed by our team before going live. You'll be notified once approved.",
-              "سيتم مراجعة سلسلتك من قبل فريقنا قبل تفعيلها. ستصلك إشعار بمجرد الموافقة.",
-            )}
+      <section className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
+          <ShieldCheck className="inline h-4 w-4 me-1" />
+          {t(
+            "Your chain will be reviewed by our team before going live. You'll be notified once approved.",
+            "سيتم مراجعة سلسلتك من قبل فريقنا قبل تفعيلها. ستصلك إشعار بمجرد الموافقة.",
+          )}
+        </div>
+
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-5 rounded-2xl border border-border bg-card p-6"
+        >
+          <Field label={t("Chain name (English)", "اسم السلسلة (إنجليزي) *")} required>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="El Ezaby Pharmacy"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </Field>
+
+          <Field label={t("Chain name (Arabic)", "اسم السلسلة (عربي)")}>
+            <input
+              value={nameAr}
+              onChange={(e) => setNameAr(e.target.value)}
+              placeholder="صيدليات العزبي"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </Field>
+
+          <Field label={t("URL slug (unique)", "المعرّف الفريد *")} required>
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="el-ezaby"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </Field>
+
+          <Field label={t("Website", "الموقع الإلكتروني")}>
+            <input
+              type="url"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="https://elezabypharmacy.com"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </Field>
+
+          <Field label={t("License number", "رقم الترخيص")}>
+            <input
+              value={license}
+              onChange={(e) => setLicense(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </Field>
+
+          <Field label={t("Description", "وصف")}>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </Field>
+
+          <Field label={t("Logo", "الشعار")}>
+            <label className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-background/50 px-4 py-3 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+              <Upload className="h-4 w-4" />
+              {logoFile ? logoFile.name : t("Choose image (PNG/JPG)", "اختر صورة (PNG/JPG)")}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                className="hidden"
+              />
+            </label>
+          </Field>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t("Submit for review", "إرسال للمراجعة")}
+            </button>
+            <Link
+              to="/missing-drugs"
+              className="rounded-lg border border-border bg-background px-5 py-2.5 text-sm font-medium hover:bg-accent"
+            >
+              {t("Cancel", "إلغاء")}
+            </Link>
           </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-border bg-card p-6">
-            <Field label={t("Chain name (English)", "اسم السلسلة (إنجليزي) *")} required>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="El Ezaby Pharmacy"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            </Field>
-
-            <Field label={t("Chain name (Arabic)", "اسم السلسلة (عربي)")}>
-              <input
-                value={nameAr}
-                onChange={(e) => setNameAr(e.target.value)}
-                placeholder="صيدليات العزبي"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            </Field>
-
-            <Field label={t("URL slug (unique)", "المعرّف الفريد *")} required>
-              <input
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="el-ezaby"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            </Field>
-
-            <Field label={t("Website", "الموقع الإلكتروني")}>
-              <input
-                type="url"
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-                placeholder="https://elezabypharmacy.com"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            </Field>
-
-            <Field label={t("License number", "رقم الترخيص")}>
-              <input
-                value={license}
-                onChange={(e) => setLicense(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            </Field>
-
-            <Field label={t("Description", "وصف")}>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            </Field>
-
-            <Field label={t("Logo", "الشعار")}>
-              <label className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-background/50 px-4 py-3 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
-                <Upload className="h-4 w-4" />
-                {logoFile ? logoFile.name : t("Choose image (PNG/JPG)", "اختر صورة (PNG/JPG)")}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
-                  className="hidden"
-                />
-              </label>
-            </Field>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {t("Submit for review", "إرسال للمراجعة")}
-              </button>
-              <Link
-                to="/missing-drugs"
-                className="rounded-lg border border-border bg-background px-5 py-2.5 text-sm font-medium hover:bg-accent"
-              >
-                {t("Cancel", "إلغاء")}
-              </Link>
-            </div>
-          </form>
-        </section>
+        </form>
+      </section>
     </div>
   );
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <label className="mb-1.5 block text-sm font-medium text-foreground">

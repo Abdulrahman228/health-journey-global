@@ -3,6 +3,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
 
 /**
  * Doctor-facing toggle for Online Consultations (telemedicine).
@@ -28,7 +29,11 @@ export const toggleTelemedicine = createServerFn({ method: "POST" })
     const { data: dd, error: ddErr } = await supabaseAdmin
       .from("doctor_details")
       .select("id, is_verified, telemedicine_enabled")
-      .eq("profile_id", context.userId)
+      .eq(
+        "id",
+        (await getDoctorForUser(context.userId))?.doctorDetailsId ??
+          "00000000-0000-0000-0000-000000000000",
+      )
       .maybeSingle();
     if (ddErr) throw new Error(ddErr.message);
     if (!dd) throw new Error("Doctor profile not found");
@@ -76,7 +81,11 @@ export const getMyTelemedicineStatus = createServerFn({ method: "GET" })
     const { data: dd } = await supabaseAdmin
       .from("doctor_details")
       .select("is_verified, telemedicine_enabled")
-      .eq("profile_id", context.userId)
+      .eq(
+        "id",
+        (await getDoctorForUser(context.userId))?.doctorDetailsId ??
+          "00000000-0000-0000-0000-000000000000",
+      )
       .maybeSingle();
     return {
       isVerified: dd?.is_verified === true,

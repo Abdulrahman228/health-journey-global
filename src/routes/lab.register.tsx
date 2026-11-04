@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { FlaskConical, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -11,7 +11,10 @@ export const Route = createFileRoute("/lab/register")({
   head: () => ({
     meta: [
       { title: "تسجيل معمل / مركز أشعة — Tebana" },
-      { name: "description", content: "سجّل معملك أو مركز الأشعة على طبانا لاستقبال طلبات المرضى وتسليم النتائج." },
+      {
+        name: "description",
+        content: "سجّل معملك أو مركز الأشعة على طبانا لاستقبال طلبات المرضى وتسليم النتائج.",
+      },
     ],
   }),
 });
@@ -28,9 +31,9 @@ function LabRegisterPage() {
   const [address, setAddress] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (!isLoading && !isAuthenticated) {
-    throw redirect({ to: "/login" });
-  }
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) navigate({ to: "/login" });
+  }, [isLoading, isAuthenticated, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,7 +59,9 @@ function LabRegisterPage() {
         phone: phone.trim() || undefined,
         address: address.trim() || undefined,
       });
-      toast.success(t("Registered! You can now receive orders.", "تم التسجيل! يمكنك الآن استقبال الطلبات."));
+      toast.success(
+        t("Registered! You can now receive orders.", "تم التسجيل! يمكنك الآن استقبال الطلبات."),
+      );
       navigate({ to: "/lab/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("Failed", "فشل"));
@@ -103,7 +108,10 @@ function LabRegisterPage() {
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-border bg-card p-6">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-5 rounded-2xl border border-border bg-card p-6"
+        >
           <Field label={t("Facility name", "اسم المنشأة") + " *"}>
             <input
               value={name}

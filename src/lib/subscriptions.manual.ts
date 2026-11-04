@@ -7,7 +7,9 @@ import { MANUAL_GOLD_PLAN_CODES } from "@/lib/subscriptions.access";
 const SubmitManualSchema = z.object({
   planCode: z.enum(MANUAL_GOLD_PLAN_CODES),
   /** URL of the uploaded receipt (Supabase Storage or similar). */
-  receiptUrl: z.string().trim().url().max(2000),
+  // Storage object path inside the private `receipts` bucket (legacy rows may
+  // still hold a full public URL; the admin page handles both).
+  receiptUrl: z.string().trim().min(3).max(2000),
 });
 
 /**
@@ -60,7 +62,12 @@ export const submitManualSubscription = createServerFn({ method: "POST" })
       .eq("access_status", "pending")
       .maybeSingle();
     if (existing) {
-      return { ok: true as const, subscriptionId: existing.id, accessStatus: "pending" as const, duplicate: true };
+      return {
+        ok: true as const,
+        subscriptionId: existing.id,
+        accessStatus: "pending" as const,
+        duplicate: true,
+      };
     }
 
     const now = new Date();
@@ -113,5 +120,10 @@ export const submitManualSubscription = createServerFn({ method: "POST" })
       );
     }
 
-    return { ok: true as const, subscriptionId: inserted.id, accessStatus: "pending" as const, duplicate: false };
+    return {
+      ok: true as const,
+      subscriptionId: inserted.id,
+      accessStatus: "pending" as const,
+      duplicate: false,
+    };
   });

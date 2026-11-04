@@ -13,7 +13,7 @@ async function isAdmin(userId: string | null): Promise<boolean> {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
+    .in("role", ["admin", "super_admin"])
     .maybeSingle();
   return !!data;
 }
@@ -39,9 +39,7 @@ export interface SupportTicket {
 
 export const listMyTickets = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ userId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ userId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }): Promise<SupportTicket[]> => {
     assertSelf(context.userId, data.userId);
     const { data: rows } = await supabaseAdmin
@@ -99,11 +97,14 @@ export const listAllTickets = createServerFn({ method: "GET" })
     let q = supabaseAdmin
       .from("support_tickets")
       .select("*")
-      .order("priority", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(200);
     if (data.status) q = q.eq("status", data.status);
-    const { data: rows } = await q;
+    const { data: rowsRaw } = await q;
+    const rank: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
+    const rows = (rowsRaw ?? [])
+      .slice()
+      .sort((a, b) => (rank[a.priority as string] ?? 9) - (rank[b.priority as string] ?? 9));
     if (!rows || rows.length === 0) return [];
 
     const userIds = Array.from(new Set(rows.map((r) => r.user_id as string)));

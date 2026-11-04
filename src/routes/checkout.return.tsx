@@ -2,8 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/checkout/return")({
-  validateSearch: (search: Record<string, unknown>): { session_id?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { session_id?: string; cr?: string } => ({
     session_id: typeof search.session_id === "string" ? search.session_id : undefined,
+    cr: typeof search.cr === "string" ? search.cr : undefined,
   }),
   component: CheckoutReturn,
   head: () => ({
@@ -12,7 +13,8 @@ export const Route = createFileRoute("/checkout/return")({
 });
 
 function CheckoutReturn() {
-  const { session_id: sessionId } = Route.useSearch();
+  const { session_id: sessionIdRaw, cr } = Route.useSearch();
+  const sessionId = sessionIdRaw ?? cr;
 
   return (
     <div className="container mx-auto max-w-xl px-4 py-16">

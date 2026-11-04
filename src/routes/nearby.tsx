@@ -23,12 +23,7 @@ export const Route = createFileRoute("/nearby")({
       description:
         "اعثر على أقرب الأطباء الموثّقين حولك في الخليج ومصر. خريطة حيّة، ترتيب حسب المسافة، وحجز فوري.",
       path: "/nearby",
-      keywords: [
-        "طبيب قريب مني",
-        "أقرب طبيب",
-        "بحث جغرافي عن الأطباء",
-        "خريطة الأطباء",
-      ],
+      keywords: ["طبيب قريب مني", "أقرب طبيب", "بحث جغرافي عن الأطباء", "خريطة الأطباء"],
     }),
     links: buildSeoLinks("/nearby"),
   }),
@@ -123,24 +118,27 @@ function NearbyDoctorsPage() {
     },
   });
 
-  const { data: rows = [], isLoading, error: rpcError } = useQuery<NearbyRow[]>({
+  const {
+    data: rows = [],
+    isLoading,
+    error: rpcError,
+  } = useQuery<NearbyRow[]>({
     queryKey: ["nearby", coords?.lat, coords?.lng, radiusKm, specialty],
     enabled: !!coords,
     queryFn: async () => {
       if (!coords) return [];
       // The RPC isn't in the generated supabase types yet, so we cast through unknown.
-      const { data, error } = await ((supabase.rpc as unknown) as (
-        fn: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ data: NearbyRow[] | null; error: unknown }>)(
-        "search_doctors_nearby",
-        {
-          p_lat: coords.lat,
-          p_lng: coords.lng,
-          p_radius_km: radiusKm,
-          p_specialty: specialty || null,
-        },
-      );
+      const { data, error } = await (
+        supabase.rpc as unknown as (
+          fn: string,
+          args: Record<string, unknown>,
+        ) => Promise<{ data: NearbyRow[] | null; error: unknown }>
+      )("search_doctors_nearby", {
+        p_lat: coords.lat,
+        p_lng: coords.lng,
+        p_radius_km: radiusKm,
+        p_specialty: specialty || null,
+      });
       if (error) {
         const msg =
           error && typeof error === "object" && "message" in error
@@ -166,9 +164,7 @@ function NearbyDoctorsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Breadcrumbs
-        items={[{ name: t("Nearby doctors", "أطباء قريبون منك"), path: "/nearby" }]}
-      />
+      <Breadcrumbs items={[{ name: t("Nearby doctors", "أطباء قريبون منك"), path: "/nearby" }]} />
 
       <div className="bg-linear-to-br from-primary/10 via-background to-teal/10 border-b border-border">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -185,7 +181,10 @@ function NearbyDoctorsPage() {
           {/* Controls */}
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div>
-              <label htmlFor="nearby-specialty" className="block text-xs font-medium mb-1 text-muted-foreground">
+              <label
+                htmlFor="nearby-specialty"
+                className="block text-xs font-medium mb-1 text-muted-foreground"
+              >
                 {t("Specialty", "التخصص")}
               </label>
               <div className="relative">
@@ -198,7 +197,7 @@ function NearbyDoctorsPage() {
                 >
                   <option value="">{t("All specialties", "كل التخصصات")}</option>
                   {specialties.map((s) => (
-                    <option key={s.id} value={s.slug}>
+                    <option key={s.id} value={isRTL ? s.name_ar : s.name_en}>
                       {isRTL ? s.name_ar : s.name_en}
                     </option>
                   ))}
@@ -207,7 +206,10 @@ function NearbyDoctorsPage() {
             </div>
 
             <div>
-              <label htmlFor="nearby-radius" className="block text-xs font-medium mb-1 text-muted-foreground">
+              <label
+                htmlFor="nearby-radius"
+                className="block text-xs font-medium mb-1 text-muted-foreground"
+              >
                 {t("Radius (km)", "نطاق البحث (كم)")}
               </label>
               <select
@@ -321,9 +323,7 @@ function NearbyDoctorsPage() {
                           {r.full_name ?? t("Doctor", "طبيب")}
                           <BadgeCheck className="inline-block h-4 w-4 text-primary ms-1" />
                         </h3>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {r.specialty ?? "—"}
-                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{r.specialty ?? "—"}</p>
                         <p className="mt-1 text-xs text-muted-foreground inline-flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
                           {r.clinic_name ?? "—"}

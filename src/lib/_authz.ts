@@ -19,15 +19,12 @@ export async function isAdmin(userId: string): Promise<boolean> {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
+    .in("role", ["admin", "super_admin"])
     .maybeSingle();
   return Boolean(data);
 }
 
-export async function assertSelfOrAdmin(
-  contextUserId: string,
-  dataUserId: string,
-): Promise<void> {
+export async function assertSelfOrAdmin(contextUserId: string, dataUserId: string): Promise<void> {
   if (contextUserId && dataUserId && contextUserId === dataUserId) return;
   if (await isAdmin(contextUserId)) return;
   throw new Error("Unauthorized");

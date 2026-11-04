@@ -202,15 +202,16 @@ export const optOutListing = createServerFn({ method: "POST" })
           ? "لا أريد الانضمام"
           : data.note?.trim() || "سبب آخر";
 
-    await supabaseAdmin
+    const { error: optErr } = await supabaseAdmin
       .from("scraped_doctors")
       .update({
         opted_out: true,
         opted_out_at: new Date().toISOString(),
         opted_out_reason: reasonText,
         listing_status: "suppressed",
-      })
+      } as never) // opted_out_reason: added by migration 20261104100000 §7; regenerate types after apply
       .eq("id", row.id);
+    if (optErr) throw new Error(optErr.message);
 
     await notifyAdmins({
       kind: "listing_opt_out",

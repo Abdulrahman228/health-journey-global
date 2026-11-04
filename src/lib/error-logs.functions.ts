@@ -18,7 +18,7 @@ async function assertAdmin(userId: string): Promise<void> {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
+    .in("role", ["admin", "super_admin"])
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Forbidden: admin role required");
@@ -59,9 +59,7 @@ export const adminListErrorGroups = createServerFn({ method: "GET" })
       .object({
         userId: z.string().uuid(),
         sinceHours: z.number().int().min(1).max(720).default(24),
-        level: z
-          .enum(["debug", "info", "warn", "error", "fatal", "all"])
-          .default("all"),
+        level: z.enum(["debug", "info", "warn", "error", "fatal", "all"]).default("all"),
       })
       .parse(x),
   )
@@ -128,21 +126,19 @@ export const adminGetErrorLog = createServerFn({ method: "GET" })
       .select("*")
       .eq("id", data.id)
       .maybeSingle()) as {
-      data:
-        | {
-            id: string;
-            created_at: string;
-            source: ErrorLogRow["source"];
-            level: ErrorLogRow["level"];
-            message: string;
-            stack: string | null;
-            url: string | null;
-            user_agent: string | null;
-            user_id: string | null;
-            context: Record<string, unknown> | null;
-            fingerprint: string | null;
-          }
-        | null;
+      data: {
+        id: string;
+        created_at: string;
+        source: ErrorLogRow["source"];
+        level: ErrorLogRow["level"];
+        message: string;
+        stack: string | null;
+        url: string | null;
+        user_agent: string | null;
+        user_id: string | null;
+        context: Record<string, unknown> | null;
+        fingerprint: string | null;
+      } | null;
       error: { message: string } | null;
     };
     if (error) throw new Error(error.message);

@@ -42,19 +42,26 @@ function AdminSubscriptionsPage() {
     setLoading(true);
     const { data: subscriptions } = await supabase
       .from("subscriptions")
-      .select("id, user_id, plan_code, status, current_period_start, current_period_end, created_at, environment")
+      .select(
+        "id, user_id, plan_code, status, current_period_start, current_period_end, created_at, environment",
+      )
       .order("created_at", { ascending: false })
       .limit(200);
 
     const userIds = Array.from(new Set((subscriptions ?? []).map((row) => row.user_id)));
-    const planCodes = Array.from(new Set((subscriptions ?? []).map((row) => row.plan_code).filter(Boolean))) as string[];
+    const planCodes = Array.from(
+      new Set((subscriptions ?? []).map((row) => row.plan_code).filter(Boolean)),
+    ) as string[];
 
     const [{ data: profiles }, { data: plans }] = await Promise.all([
       userIds.length
         ? supabase.from("profiles").select("user_id, full_name, city").in("user_id", userIds)
         : Promise.resolve({ data: [] }),
       planCodes.length
-        ? supabase.from("subscription_plans").select("code, name_ar, price_cents, currency").in("code", planCodes)
+        ? supabase
+            .from("subscription_plans")
+            .select("code, name_ar, price_cents, currency")
+            .in("code", planCodes)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -65,7 +72,7 @@ function AdminSubscriptionsPage() {
       ((subscriptions ?? []) as SubscriptionRow[]).map((row) => ({
         ...row,
         profile: profileByUserId.get(row.user_id) ?? null,
-        plan: row.plan_code ? planByCode.get(row.plan_code) ?? null : null,
+        plan: row.plan_code ? (planByCode.get(row.plan_code) ?? null) : null,
       })),
     );
     setLoading(false);
@@ -84,7 +91,14 @@ function AdminSubscriptionsPage() {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((row) =>
-      [row.profile?.full_name, row.profile?.city, row.plan_code, row.status, row.environment, row.user_id]
+      [
+        row.profile?.full_name,
+        row.profile?.city,
+        row.plan_code,
+        row.status,
+        row.environment,
+        row.user_id,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -98,7 +112,7 @@ function AdminSubscriptionsPage() {
     return sum + row.plan.price_cents / 100;
   }, 0);
 
-  if (authLoading || roleLoading || loading) {
+  if (authLoading || roleLoading || (isAdmin && loading)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -119,12 +133,22 @@ function AdminSubscriptionsPage() {
     <AdminShell>
       <header className="mb-6">
         <h1 className="text-3xl font-bold">إدارة الاشتراكات</h1>
-        <p className="mt-1 text-sm text-muted-foreground">متابعة خطط الأطباء، الحالات، والإيراد المتكرر.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          متابعة خطط الأطباء، الحالات، والإيراد المتكرر.
+        </p>
       </header>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2">
-        <SummaryCard icon={CreditCard} label="اشتراكات نشطة" value={activeRows.length.toLocaleString("ar-EG")} />
-        <SummaryCard icon={TrendingUp} label="إيراد شهري نشط" value={`${Math.round(monthlyRevenue).toLocaleString("ar-EG")} ج.م`} />
+        <SummaryCard
+          icon={CreditCard}
+          label="اشتراكات نشطة"
+          value={activeRows.length.toLocaleString("ar-EG")}
+        />
+        <SummaryCard
+          icon={TrendingUp}
+          label="إيراد شهري نشط"
+          value={`${Math.round(monthlyRevenue).toLocaleString("ar-EG")} ج.م`}
+        />
       </div>
 
       <div className="mb-5 relative">
@@ -158,26 +182,36 @@ function AdminSubscriptionsPage() {
                   {search ? "لا توجد نتائج تطابق بحثك." : "لا توجد اشتراكات بعد."}
                 </td>
               </tr>
-            ) : filtered.map((row) => (
-              <tr key={row.id} className="border-b border-border last:border-0 hover:bg-muted/30">
-                <td className="px-4 py-3">
-                  <div className="font-semibold">{row.profile?.full_name ?? "مستخدم بدون ملف"}</div>
-                  <div className="font-mono text-xs text-muted-foreground">{row.user_id.slice(0, 8)}...</div>
-                </td>
-                <td className="px-4 py-3">{row.plan?.name_ar ?? row.plan_code ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass(row.status)}`}>
-                    {row.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  {row.plan ? `${(row.plan.price_cents / 100).toLocaleString("ar-EG")} ${row.plan.currency}` : "—"}
-                </td>
-                <td className="px-4 py-3">{formatDate(row.current_period_start)}</td>
-                <td className="px-4 py-3">{formatDate(row.current_period_end)}</td>
-                <td className="px-4 py-3">{row.environment}</td>
-              </tr>
-            ))}
+            ) : (
+              filtered.map((row) => (
+                <tr key={row.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                  <td className="px-4 py-3">
+                    <div className="font-semibold">
+                      {row.profile?.full_name ?? "مستخدم بدون ملف"}
+                    </div>
+                    <div className="font-mono text-xs text-muted-foreground">
+                      {row.user_id.slice(0, 8)}...
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{row.plan?.name_ar ?? row.plan_code ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass(row.status)}`}
+                    >
+                      {row.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.plan
+                      ? `${(row.plan.price_cents / 100).toLocaleString("ar-EG")} ${row.plan.currency}`
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3">{formatDate(row.current_period_start)}</td>
+                  <td className="px-4 py-3">{formatDate(row.current_period_end)}</td>
+                  <td className="px-4 py-3">{row.environment}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -185,7 +219,15 @@ function AdminSubscriptionsPage() {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value }: { icon: typeof CreditCard; label: string; value: string }) {
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof CreditCard;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-center gap-3">
@@ -206,7 +248,9 @@ function formatDate(value: string | null) {
 }
 
 function statusClass(status: string) {
-  if (status === "active" || status === "trialing") return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
-  if (status === "past_due" || status === "unpaid") return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
+  if (status === "active" || status === "trialing")
+    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+  if (status === "past_due" || status === "unpaid")
+    return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
   return "bg-muted text-muted-foreground";
 }

@@ -94,7 +94,14 @@ export async function registerLab(input: {
     .select("id")
     .single();
   if (error) throw new Error(error.message);
-  await sb.from("user_roles").upsert({ user_id: input.ownerUserId, role: "lab" });
+  const { error: roleErr } = await sb
+    .from("user_roles")
+    .upsert(
+      { user_id: input.ownerUserId, role: "lab" },
+      { onConflict: "user_id,role", ignoreDuplicates: true },
+    );
+  if (roleErr)
+    throw new Error("تم إنشاء المنشأة لكن تعذّر تفعيل صلاحية المعمل: " + roleErr.message);
   return data!.id as string;
 }
 
@@ -223,10 +230,7 @@ export async function listMyDoctors(patientProfileId: string): Promise<MyDoctor[
   );
   if (profileIds.length === 0) return [];
 
-  const { data: profs } = await sb
-    .from("profiles")
-    .select("id, full_name")
-    .in("id", profileIds);
+  const { data: profs } = await sb.from("profiles").select("id, full_name").in("id", profileIds);
   return ((profs as { id: string; full_name: string | null }[]) ?? []).map((p) => ({
     profileId: p.id,
     fullName: p.full_name,

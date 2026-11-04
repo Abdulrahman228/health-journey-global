@@ -30,7 +30,11 @@ interface Appt {
   fee: number;
   status: string;
   notes: string | null;
+  patient: { full_name: string | null } | null;
 }
+
+const UPCOMING_STATUSES = ["confirmed", "waiting", "called", "in_progress"];
+const HISTORY_STATUSES = ["completed", "cancelled", "no_show"];
 
 function DoctorAppointmentsPage() {
   const { t } = useLanguage();
@@ -60,18 +64,29 @@ function DoctorAppointmentsPage() {
     queryKey: ["doctor_appointments", details?.id],
     enabled: !!details?.id,
     queryFn: async () => {
+      // Include the patient (name) — the doctor must see WHO the appointment is for.
       const { data, error } = await supabase
         .from("appointments")
-        .select("id, scheduled_at, fee, status, notes")
+        .select(
+          "id, scheduled_at, fee, status, notes, patient:profiles!appointments_patient_id_fkey(full_name)",
+        )
         .eq("doctor_id", details!.id)
-        .order("scheduled_at", { ascending: false });
+        .order("scheduled_at", { ascending: false })
+        .limit(300);
       if (error) throw error;
-      return (data ?? []) as Appt[];
+      return (data ?? []) as unknown as Appt[];
     },
   });
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      if (status === "completed") {
+        // complete_visit sets ended_at and recomputes the queue ETAs; it needs a
+        // clinic-bound appointment — doctor-booked follow-ups without a clinic
+        // fall back to a plain status update (the revenue trigger still fires).
+        const { error: rpcErr } = await supabase.rpc("complete_visit", { p_appointment_id: id });
+        if (!rpcErr) return;
+      }
       const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
       if (error) throw error;
     },
@@ -80,8 +95,8 @@ function DoctorAppointmentsPage() {
         vars.status === "confirmed"
           ? t("Appointment confirmed", "تم تأكيد الموعد")
           : vars.status === "completed"
-          ? t("Marked as completed", "تم تمييزه كمكتمل")
-          : t("Appointment cancelled", "تم إلغاء الموعد"),
+            ? t("Marked as completed", "تم تمييزه كمكتمل")
+            : t("Appointment cancelled", "تم إلغاء الموعد"),
       );
       queryClient.invalidateQueries({ queryKey: ["doctor_appointments"] });
     },
@@ -89,7 +104,8 @@ function DoctorAppointmentsPage() {
   });
 
   const pending = appointments.filter((a) => a.status === "pending");
-  const upcoming = appointments.filter((a) => a.status === "confirmed");
+  const upcoming = appointments.filter((a) => UPCOMING_STATUSES.includes(a.status));
+  const history = appointments.filter((a) => HISTORY_STATUSES.includes(a.status)).slice(0, 50);
 
   if (authLoading || isLoading) {
     return (
@@ -104,7 +120,10 @@ function DoctorAppointmentsPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">{t("Appointments", "المواعيد")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {t("Confirm requests and manage your upcoming visits.", "أكّد الطلبات وأدِر مواعيدك القادمة.")}
+          {t(
+            "Confirm requests and manage your upcoming visits.",
+            "أكّد الطلبات وأدِر مواعيدك القادمة.",
+          )}
         </p>
       </div>
 
@@ -155,10 +174,28 @@ function DoctorAppointmentsPage() {
           </div>
         )}
         <div className="mt-6">
-          <Link to="/appointments" className="text-sm font-medium text-primary hover:underline">
-            {t("Patient booking view →", "عرض حجوزات المرضى ←")}
+          <Link
+            to="/dashboard/waiting-room"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            {t("Open the waiting room →", "فتح صالة الانتظار ←")}
           </Link>
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-xl font-semibold text-foreground">{t("History", "السجل")}</h2>
+        {history.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            {t("No past appointments yet.", "لا توجد مواعيد سابقة بعد.")}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {history.map((a) => (
+              <AppointmentRow key={a.id} appt={a} t={t} />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

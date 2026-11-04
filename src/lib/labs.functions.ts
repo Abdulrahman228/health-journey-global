@@ -61,7 +61,7 @@ export const getLabOrderResults = createServerFn({ method: "GET" })
       .from("user_roles")
       .select("role")
       .eq("user_id", data.userId)
-      .eq("role", "admin")
+      .in("role", ["admin", "super_admin"])
       .maybeSingle();
 
     // lab owner?
@@ -74,15 +74,9 @@ export const getLabOrderResults = createServerFn({ method: "GET" })
 
     const isPatient = me != null && me === order.patient_profile_id;
     const isAuthorizedDoctor =
-      me != null &&
-      order.patient_authorized === true &&
-      me === order.authorized_doctor_profile_id;
+      me != null && order.patient_authorized === true && me === order.authorized_doctor_profile_id;
 
-    const allowed =
-      !!adminRow ||
-      isLabOwner ||
-      (isPatient && paid) ||
-      (isAuthorizedDoctor && paid);
+    const allowed = !!adminRow || isLabOwner || (isPatient && paid) || (isAuthorizedDoctor && paid);
     if (!allowed) return [];
 
     const { data: rows } = await supabaseAdmin

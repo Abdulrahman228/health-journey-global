@@ -72,7 +72,18 @@ function AuthCallbackPage() {
         });
 
         if (!cancelled) {
-          window.location.replace("/dashboard");
+          const { data: roleRows } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", session.user.id);
+          const roles = (roleRows ?? []).map((r) => r.role as string);
+          const landing =
+            roles.includes("super_admin") || roles.includes("admin")
+              ? "/admin"
+              : roles.includes("doctor")
+                ? "/dashboard"
+                : "/";
+          window.location.replace(landing);
         }
       } catch (e) {
         if (cancelled) return;
@@ -106,7 +117,10 @@ function AuthCallbackPage() {
           {t("Google sign-in failed", "فشل تسجيل الدخول بجوجل")}
         </h1>
         <p className="mt-2 text-sm text-destructive">{error}</p>
-        <Link to="/login" className="mt-5 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+        <Link
+          to="/login"
+          className="mt-5 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
           {t("Back to sign in", "العودة لتسجيل الدخول")}
         </Link>
       </div>

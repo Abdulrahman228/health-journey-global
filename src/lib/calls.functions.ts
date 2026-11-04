@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
 
 /**
  * Phase 6 — Masked calling.
@@ -27,18 +28,20 @@ async function twilioCreateCall(
   const auth = btoa(`${sid}:${token}`);
   const body = new URLSearchParams({ To: to, From: from, Twiml: twiml });
   try {
-    const r = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body,
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-    );
-    const j = (await r.json()) as { sid?: string; status?: string; message?: string; code?: number };
+      body,
+    });
+    const j = (await r.json()) as {
+      sid?: string;
+      status?: string;
+      message?: string;
+      code?: number;
+    };
     if (!r.ok) return { error: `twilio_${j.code ?? r.status}: ${j.message ?? "unknown"}` };
     return { sid: j.sid ?? "", status: j.status ?? "queued" };
   } catch (e) {
@@ -55,13 +58,17 @@ export const initiateMaskedCall = createServerFn({ method: "POST" })
     }).parse,
   )
   .handler(async ({ data, context }) => {
+    // appointments.patient_id / masked_call_sessions.patient_profile_id are
+    // PROFILE ids; phones live in user_contacts keyed by auth USER id.
+    const patientProfileId = await getProfileIdForUser(context.userId);
+    if (!patientProfileId) throw new Error("أكمل ملفك الشخصي أولاً");
     // Verify there's an active appointment between this patient and doctor
     // before allowing masked call (privacy guard).
     const { data: appt } = await supabaseAdmin
       .from("appointments")
       .select("id, status, doctor_id")
       .eq("doctor_id", data.doctorDetailsId)
-      .eq("patient_id", context.userId)
+      .eq("patient_id", patientProfileId)
       .in("status", ["confirmed", "in_progress", "completed"])
       .order("appointment_date", { ascending: false })
       .limit(1)
@@ -78,17 +85,26 @@ export const initiateMaskedCall = createServerFn({ method: "POST" })
       .maybeSingle();
     const dd = ddRaw as { profile_id: string | null } | null;
     const doctorProfileId = dd?.profile_id;
+    let doctorUserId: string | null = null;
+    if (doctorProfileId) {
+      const { data: dp } = await supabaseAdmin
+        .from("profiles")
+        .select("user_id")
+        .eq("id", doctorProfileId)
+        .maybeSingle();
+      doctorUserId = (dp?.user_id as string | null) ?? null;
+    }
 
     const phoneIds: string[] = [context.userId];
-    if (doctorProfileId) phoneIds.push(doctorProfileId);
+    if (doctorUserId) phoneIds.push(doctorUserId);
     const { data: contactsRaw } = await supabaseAdmin
       .from("user_contacts")
       .select("user_id, phone")
       .in("user_id", phoneIds);
     const contacts = (contactsRaw ?? []) as Array<{ user_id: string; phone: string | null }>;
     const patientPhone = contacts.find((c) => c.user_id === context.userId)?.phone ?? null;
-    const doctorPhone = doctorProfileId
-      ? (contacts.find((c) => c.user_id === doctorProfileId)?.phone ?? null)
+    const doctorPhone = doctorUserId
+      ? (contacts.find((c) => c.user_id === doctorUserId)?.phone ?? null)
       : null;
 
     const proxyNumber = process.env.TWILIO_PHONE_NUMBER ?? "+1-555-TEBANA";
@@ -117,8 +133,8 @@ export const initiateMaskedCall = createServerFn({ method: "POST" })
       .insert({
         appointment_id: appt.id,
         doctor_details_id: data.doctorDetailsId,
-        patient_profile_id: context.userId,
-        initiated_by: context.userId,
+        patient_profile_id: patientProfileId,
+        initiated_by: patientProfileId,
         provider,
         proxy_number: proxyNumber,
         status: provider === "twilio" ? "ringing" : "queued",
@@ -134,29 +150,22 @@ export const initiateMaskedCall = createServerFn({ method: "POST" })
 export const listMyCalls = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: profRaw } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", context.userId)
-      .maybeSingle();
-    const prof = profRaw as { role: string | null } | null;
+    const me = await getDoctorForUser(context.userId);
+    const myProfileId = me?.profileId ?? (await getProfileIdForUser(context.userId));
+    if (!myProfileId) return [];
 
     let query = supabaseAdmin
       .from("masked_call_sessions")
-      .select("id, status, proxy_number, started_at, ended_at, duration_seconds, created_at, doctor_details_id, patient_profile_id")
+      .select(
+        "id, status, proxy_number, started_at, ended_at, duration_seconds, created_at, doctor_details_id, patient_profile_id",
+      )
       .order("created_at", { ascending: false })
       .limit(50);
 
-    if (prof?.role === "doctor") {
-      const { data: dd } = await supabaseAdmin
-        .from("doctor_details")
-        .select("id")
-        .eq("profile_id", context.userId)
-        .maybeSingle();
-      if (!dd) return [];
-      query = query.eq("doctor_details_id", dd.id);
+    if (me) {
+      query = query.eq("doctor_details_id", me.doctorDetailsId);
     } else {
-      query = query.eq("patient_profile_id", context.userId);
+      query = query.eq("patient_profile_id", myProfileId);
     }
 
     const { data, error } = await query;

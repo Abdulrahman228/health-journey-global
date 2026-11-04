@@ -1,6 +1,14 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { FlaskConical, Loader2, Upload, FileText, CheckCircle2, Clock, XCircle } from "lucide-react";
+import {
+  FlaskConical,
+  Loader2,
+  Upload,
+  FileText,
+  CheckCircle2,
+  Clock,
+  XCircle,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import {
@@ -20,13 +28,22 @@ export const Route = createFileRoute("/lab/dashboard")({
 });
 
 const PAYMENT_LABEL: Record<PaymentStatus, { ar: string; en: string; cls: string }> = {
-  paid: { ar: "مدفوع", en: "Paid", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
-  partial: { ar: "مدفوع جزئياً", en: "Partial", cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+  paid: {
+    ar: "مدفوع",
+    en: "Paid",
+    cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  },
+  partial: {
+    ar: "مدفوع جزئياً",
+    en: "Partial",
+    cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  },
   unpaid: { ar: "غير مدفوع", en: "Unpaid", cls: "bg-rose-500/15 text-rose-600 dark:text-rose-400" },
 };
 
 function LabDashboardPage() {
   const { user, profile, isAuthenticated, isLoading } = useAuth();
+  const navigate = useNavigate();
   const { t } = useLanguage();
 
   const [lab, setLab] = useState<LabFacility | null>(null);
@@ -34,9 +51,9 @@ function LabDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  if (!isLoading && !isAuthenticated) {
-    throw redirect({ to: "/login" });
-  }
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) navigate({ to: "/login" });
+  }, [isLoading, isAuthenticated, navigate]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -96,9 +113,14 @@ function LabDashboardPage() {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
         <FlaskConical className="mx-auto h-12 w-12 text-muted-foreground" />
-        <h1 className="mt-4 text-2xl font-bold text-foreground">{t("No facility yet", "لا توجد منشأة بعد")}</h1>
+        <h1 className="mt-4 text-2xl font-bold text-foreground">
+          {t("No facility yet", "لا توجد منشأة بعد")}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {t("Register your lab or radiology center to start receiving orders.", "سجّل معملك أو مركز الأشعة لتبدأ استقبال الطلبات.")}
+          {t(
+            "Register your lab or radiology center to start receiving orders.",
+            "سجّل معملك أو مركز الأشعة لتبدأ استقبال الطلبات.",
+          )}
         </p>
         <Link
           to="/lab/register"
@@ -143,8 +165,12 @@ function LabDashboardPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-foreground">{o.patient?.full_name || t("Patient", "مريض")}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pay.cls}`}>{t(pay.en, pay.ar)}</span>
+                      <span className="font-semibold text-foreground">
+                        {o.patient?.full_name || t("Patient", "مريض")}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pay.cls}`}>
+                        {t(pay.en, pay.ar)}
+                      </span>
                       <StatusBadge status={o.status} t={t} />
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -167,7 +193,9 @@ function LabDashboardPage() {
 
                 {/* Payment control (lab is the source of truth) */}
                 <div className="mt-4 border-t border-border pt-3">
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">{t("Set payment status", "تحديد حالة الدفع")}</p>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">
+                    {t("Set payment status", "تحديد حالة الدفع")}
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {(["paid", "partial", "unpaid"] as PaymentStatus[]).map((ps) => {
                       const active = o.payment_status === ps;
@@ -193,7 +221,11 @@ function LabDashboardPage() {
                 {/* Result upload */}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent">
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
                     {t("Upload result", "رفع النتيجة")}
                     <input
                       type="file"
@@ -222,11 +254,22 @@ function LabDashboardPage() {
   );
 }
 
-function StatusBadge({ status, t }: { status: LabOrder["status"]; t: (en: string, ar: string) => string }) {
+function StatusBadge({
+  status,
+  t,
+}: {
+  status: LabOrder["status"];
+  t: (en: string, ar: string) => string;
+}) {
   const map = {
     requested: { icon: Clock, ar: "مطلوب", en: "Requested", cls: "text-muted-foreground" },
     in_progress: { icon: Loader2, ar: "قيد التنفيذ", en: "In progress", cls: "text-blue-500" },
-    delivered: { icon: CheckCircle2, ar: "تم التسليم", en: "Delivered", cls: "text-emerald-600 dark:text-emerald-400" },
+    delivered: {
+      icon: CheckCircle2,
+      ar: "تم التسليم",
+      en: "Delivered",
+      cls: "text-emerald-600 dark:text-emerald-400",
+    },
     cancelled: { icon: XCircle, ar: "ملغي", en: "Cancelled", cls: "text-rose-500" },
   } as const;
   const s = map[status];

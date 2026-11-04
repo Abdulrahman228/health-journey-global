@@ -138,7 +138,13 @@ function PatientDetailPage() {
         warning?: string;
       };
       if (res.ok === false) {
-        throw new Error(INVITE_ERRORS[res.error ?? ""] ?? res.error ?? "فشل الإرسال");
+        const code = res.error ?? "";
+        const friendly =
+          INVITE_ERRORS[code] ??
+          (/does not exist|not found|schema cache/i.test(code)
+            ? "ميزة الدعوة التلقائية غير مفعّلة بعد على الخادم"
+            : "تعذّر إرسال الدعوة — حاول لاحقاً");
+        throw new Error(friendly);
       }
       if (res.warning === "no_provider_configured") {
         toast.info("تمت جدولة الدعوة وستُرسل فور تفعيل قناة الرسائل");

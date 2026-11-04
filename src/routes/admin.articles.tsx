@@ -128,7 +128,7 @@ function AdminArticlesPage() {
       setLoading(false);
       return;
     }
-    setRows(((data ?? []) as ArticleRow[]));
+    setRows((data ?? []) as ArticleRow[]);
     setLoading(false);
   }, []);
 
@@ -155,11 +155,7 @@ function AdminArticlesPage() {
       if (filter === "published" && !r.is_published) return false;
       if (search) {
         const q = search.toLowerCase();
-        if (
-          !r.title.toLowerCase().includes(q) &&
-          !r.slug.toLowerCase().includes(q)
-        )
-          return false;
+        if (!r.title.toLowerCase().includes(q) && !r.slug.toLowerCase().includes(q)) return false;
       }
       return true;
     });
@@ -196,7 +192,7 @@ function AdminArticlesPage() {
     }
     const slug = draft.slug.trim() || slugify(draft.title);
     const wasPublished = rows.find((r) => r.id === draft.id)?.is_published ?? false;
-    const willPublish = publish ? true : draft.is_published;
+    const willPublish = publish;
     const minutes = draft.reading_minutes || estimateMinutes(draft.body_md);
 
     const payload = {
@@ -210,7 +206,7 @@ function AdminArticlesPage() {
       author_name: draft.author_name.trim() || null,
       reading_minutes: minutes,
       is_published: willPublish,
-      published_at: willPublish && !wasPublished ? new Date().toISOString() : undefined,
+      published_at: willPublish ? (wasPublished ? undefined : new Date().toISOString()) : null,
     };
 
     setSaving(true);
@@ -308,12 +304,18 @@ function AdminArticlesPage() {
               type="button"
               onClick={() => setFilter(f)}
               className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
-                filter === f ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent"
+                filter === f
+                  ? "bg-primary text-primary-foreground"
+                  : "text-foreground hover:bg-accent"
               }`}
             >
               {f === "all" ? "الكل" : f === "draft" ? "مسودّات" : "منشورة"}
               <span className="ms-1 text-xs opacity-70">
-                ({f === "all" ? rows.length : rows.filter((r) => (f === "published") === r.is_published).length})
+                (
+                {f === "all"
+                  ? rows.length
+                  : rows.filter((r) => (f === "published") === r.is_published).length}
+                )
               </span>
             </button>
           ))}
@@ -437,7 +439,9 @@ function AdminArticlesPage() {
                 <span className="text-sm font-medium">اللغة</span>
                 <select
                   value={draft.language}
-                  onChange={(e) => setDraft((d) => ({ ...d, language: e.target.value as "ar" | "en" }))}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, language: e.target.value as "ar" | "en" }))
+                  }
                   className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 outline-none focus:border-primary"
                 >
                   <option value="ar">العربية</option>

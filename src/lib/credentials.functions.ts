@@ -34,7 +34,7 @@ async function assertAdmin(userId: string) {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
+    .in("role", ["admin", "super_admin"])
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Forbidden: admin role required");
@@ -49,7 +49,9 @@ export const listMyDocuments = createServerFn({ method: "GET" })
     const doctorId = await getDoctorIdForUser(context.userId);
     const { data, error } = await supabaseAdmin
       .from("doctor_documents")
-      .select("id, document_type, status, rejection_reason, file_name, mime_type, uploaded_at, reviewed_at")
+      .select(
+        "id, document_type, status, rejection_reason, file_name, mime_type, uploaded_at, reviewed_at",
+      )
       .eq("doctor_id", doctorId)
       .order("uploaded_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -84,8 +86,12 @@ export const uploadDocument = createServerFn({ method: "POST" })
       // for HEIC (iPhone photos) and sometimes PDFs. Fall back to the file
       // extension so a valid file is not rejected as "Unsupported file type".
       const extMime: Record<string, string> = {
-        jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
-        webp: "image/webp", heic: "image/heic", heif: "image/heic",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        webp: "image/webp",
+        heic: "image/heic",
+        heif: "image/heic",
         pdf: "application/pdf",
       };
       let mime = (data.mimeType || "").toLowerCase();
@@ -223,14 +229,16 @@ export const adminListPendingDocuments = createServerFn({ method: "GET" })
     await assertAdmin(context.userId);
     const { data, error } = await supabaseAdmin
       .from("doctor_documents")
-      .select(`
+      .select(
+        `
         id, document_type, status, rejection_reason, file_name, mime_type,
         uploaded_at, reviewed_at, storage_path,
         doctor_details:doctor_id (
           id, specialty, syndicate_number, national_id_last4,
-          profiles:profile_id ( id, full_name, email, phone )
+          profiles:profile_id ( id, full_name, phone )
         )
-      `)
+      `,
+      )
       .order("uploaded_at", { ascending: true });
     if (error) throw new Error(error.message);
     return { documents: data ?? [] };
@@ -242,11 +250,7 @@ export const adminListPendingDocuments = createServerFn({ method: "GET" })
 export const adminReviewDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (data: {
-      documentId: string;
-      action: "approve" | "reject";
-      rejectionReason?: string;
-    }) => {
+    (data: { documentId: string; action: "approve" | "reject"; rejectionReason?: string }) => {
       if (!data.documentId) throw new Error("documentId required");
       if (data.action !== "approve" && data.action !== "reject") {
         throw new Error("Invalid action");

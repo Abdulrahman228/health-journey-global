@@ -11,6 +11,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
 import { assertSelf } from "./_authz";
 import { normalizePhone } from "./phone";
 import { triggerOutboxDrain } from "./messaging.server";
@@ -583,6 +584,13 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
     if (!doctorProfileId) {
       return { ok: false as const, error: "unauth" };
     }
+    // Only a doctor who is actually linked to this patient (appointment,
+    // managed-patient link, prior record) may write into their file.
+    const me = await getDoctorForUser(data.userId);
+    if (!me) return { ok: false as const, error: "not_a_doctor" };
+    if (!(await isDoctorLinkedToPatient(doctorProfileId, data.patientProfileId))) {
+      return { ok: false as const, error: "not_your_patient" };
+    }
     // Insert medical record
     const { data: rec, error: recErr } = await supabaseAdmin
       .from("medical_records")
@@ -637,7 +645,14 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
         })
         .select("id")
         .single();
-      if (!rxErr && rx) {
+      if (rxErr || !rx) {
+        return {
+          ok: false as const,
+          error: "visit_saved_prescription_failed:" + (rxErr?.message ?? "insert"),
+          recordId: rec.id,
+        };
+      }
+      {
         prescriptionId = rx.id;
         const items = data.prescription.items.map((it, idx) => ({
           prescription_id: rx.id,
@@ -651,7 +666,14 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
           quantity: it.quantity ?? null,
           sort_order: idx,
         }));
-        await supabaseAdmin.from("prescription_items").insert(items);
+        const { error: itemsErr } = await supabaseAdmin.from("prescription_items").insert(items);
+        if (itemsErr) {
+          return {
+            ok: false as const,
+            error: "visit_saved_prescription_failed:" + itemsErr.message,
+            recordId: rec.id,
+          };
+        }
       }
     }
 
@@ -735,14 +757,8 @@ export const getPatientMedicalProfile = createServerFn({ method: "GET" })
     const admin = await isAdmin(context.userId);
     if (!admin && myProfileId !== data.patientProfileId) {
       if (!myProfileId) return null;
-      const { data: link } = await supabaseAdmin
-        .from("medical_records")
-        .select("id")
-        .eq("patient_profile_id", data.patientProfileId)
-        .eq("doctor_profile_id", myProfileId)
-        .limit(1)
-        .maybeSingle();
-      if (!link) return null;
+      // Same rule as the visit history: appointment / managed link / prior record.
+      if (!(await isDoctorLinkedToPatient(myProfileId, data.patientProfileId))) return null;
     }
     const { data: p } = await supabaseAdmin
       .from("patient_medical_profile")

@@ -5,19 +5,41 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
+import { PUBLIC_DOCTOR_COLUMNS, PUBLIC_PROFILE_COLUMNS } from "@/lib/public-columns";
 import { ClinicMap } from "@/components/maps/ClinicMap";
 import { PrivateFeedbackButton } from "@/components/PrivateFeedbackButton";
-import { Star, MapPin, ArrowLeft, Loader2, MessageSquare, Phone, Sparkles, Video, Building2, Crown } from "lucide-react";
+import {
+  Star,
+  MapPin,
+  ArrowLeft,
+  Loader2,
+  MessageSquare,
+  Phone,
+  Sparkles,
+  Video,
+  Building2,
+  Crown,
+} from "lucide-react";
 import { toast } from "sonner";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { TierBadge } from "@/components/TierBadge";
 import { BookingCard } from "@/components/booking/BookingCard";
 import { buildMeta, buildSeoLinks, siteConfig, truncate } from "@/lib/seo";
-import { physicianSchema, breadcrumbSchema, medicalClinicSchema, reviewSchema, jsonLdString } from "@/lib/schema";
+import {
+  physicianSchema,
+  breadcrumbSchema,
+  medicalClinicSchema,
+  reviewSchema,
+  jsonLdString,
+} from "@/lib/schema";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { loadDoctorForSeo, type DoctorSeoData } from "@/lib/seo.functions";
 import { determineVisitFee } from "@/lib/visit-fee.functions";
-import { listEligibleAppointments, submitReview, type EligibleAppointment } from "@/lib/reviews.functions";
+import {
+  listEligibleAppointments,
+  submitReview,
+  type EligibleAppointment,
+} from "@/lib/reviews.functions";
 
 /**
  * Build the SEO title for a doctor page following Rank Math rules:
@@ -88,7 +110,12 @@ export const Route = createFileRoute("/doctor/$id")({
           breadcrumbSchema([
             { name: "الأطباء", path: "/doctors" },
             ...(d.specialty
-              ? [{ name: d.specialty, path: `/doctors?specialty=${encodeURIComponent(d.specialty)}` }]
+              ? [
+                  {
+                    name: d.specialty,
+                    path: `/doctors?specialty=${encodeURIComponent(d.specialty)}`,
+                  },
+                ]
               : []),
             { name: d.name, path },
           ]),
@@ -143,7 +170,13 @@ export const Route = createFileRoute("/doctor/$id")({
         image,
         type: "profile",
         keywords: d?.specialty
-          ? [d.specialty, "حجز موعد طبيب", "طبيب أونلاين", d.city || "", siteConfig.brand.ar].filter(Boolean)
+          ? [
+              d.specialty,
+              "حجز موعد طبيب",
+              "طبيب أونلاين",
+              d.city || "",
+              siteConfig.brand.ar,
+            ].filter(Boolean)
           : undefined,
       }),
       links: buildSeoLinks(path),
@@ -167,9 +200,20 @@ function DoctorDetailPage() {
   const { data: doctor, isLoading } = useQuery({
     queryKey: ["doctor", id],
     queryFn: async () => {
-      const { data: d, error } = await supabase.from("doctor_details").select("*").eq("id", id).single();
+      // Public columns only — licence/verification/push-token fields are not
+      // readable by anonymous visitors (column privileges, 2026-11-04).
+      const { data: d, error } = await supabase
+        .from("doctor_details")
+        .select(PUBLIC_DOCTOR_COLUMNS)
+        .eq("id", id)
+        .single();
       if (error) throw error;
-      const { data: p } = await supabase.from("profiles").select("*").eq("id", d.profile_id).single();
+      if (!d.profile_id) return { ...d, profile: null };
+      const { data: p } = await supabase
+        .from("profiles")
+        .select(PUBLIC_PROFILE_COLUMNS)
+        .eq("id", d.profile_id)
+        .maybeSingle();
       return { ...d, profile: p };
     },
   });
@@ -237,7 +281,12 @@ function DoctorDetailPage() {
         phone: string | null;
         lat: number | null;
         lng: number | null;
-        clinic_schedules: Array<{ id: string; day_of_week: number; start_time: string; end_time: string }>;
+        clinic_schedules: Array<{
+          id: string;
+          day_of_week: number;
+          start_time: string;
+          end_time: string;
+        }>;
       }>;
     },
   });
@@ -251,9 +300,7 @@ function DoctorDetailPage() {
       }),
   });
 
-  const reviewableAppointments = eligibleAppointments.filter(
-    (a) => !a.alreadyReviewed,
-  );
+  const reviewableAppointments = eligibleAppointments.filter((a) => !a.alreadyReviewed);
   const activeAppointmentId =
     selectedAppointmentId ?? reviewableAppointments[0]?.appointmentId ?? null;
   const canReview = reviewableAppointments.length > 0;
@@ -288,10 +335,7 @@ function DoctorDetailPage() {
     },
     onSuccess: () => {
       toast.success(
-        t(
-          "Review submitted — pending admin approval",
-          "تم استلام تقييمك وسيُنشر بعد المراجعة",
-        ),
+        t("Review submitted — pending admin approval", "تم استلام تقييمك وسيُنشر بعد المراجعة"),
       );
       setReviewText("");
       setSelectedAppointmentId(null);
@@ -300,10 +344,7 @@ function DoctorDetailPage() {
     },
     onError: (e: Error) => {
       const map: Record<string, string> = {
-        already_reviewed: t(
-          "You already reviewed this visit",
-          "لقد قيّمت هذه الزيارة من قبل",
-        ),
+        already_reviewed: t("You already reviewed this visit", "لقد قيّمت هذه الزيارة من قبل"),
         appointment_not_completed: t(
           "Appointment must be completed first",
           "يجب اكتمال الموعد أولاً",
@@ -312,10 +353,7 @@ function DoctorDetailPage() {
           "Appointment must be paid to leave a review",
           "يجب أن يكون الموعد مدفوعاً لكتابة تقييم",
         ),
-        no_eligible_appointment: t(
-          "No eligible appointment found",
-          "لا توجد زيارة مؤهّلة للتقييم",
-        ),
+        no_eligible_appointment: t("No eligible appointment found", "لا توجد زيارة مؤهّلة للتقييم"),
         forbidden: t("Forbidden", "غير مسموح"),
         login_required: t("Sign in first", "سجّل الدخول أولاً"),
       };
@@ -352,7 +390,10 @@ function DoctorDetailPage() {
         <div className="bg-linear-to-r from-amber-400 via-amber-500 to-amber-600 py-2 text-center text-xs font-bold text-amber-950 shadow-sm">
           <span className="inline-flex items-center gap-1.5">
             <Crown className="h-3.5 w-3.5" />
-            {t("Featured Gold Doctor — Verified leader in their specialty", "طبيب Gold مميّز — موثّق ورائد فى تخصصه")}
+            {t(
+              "Featured Gold Doctor — Verified leader in their specialty",
+              "طبيب Gold مميّز — موثّق ورائد فى تخصصه",
+            )}
             <Crown className="h-3.5 w-3.5" />
           </span>
         </div>
@@ -364,7 +405,10 @@ function DoctorDetailPage() {
         ]}
       />
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link to="/doctors" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6">
+        <Link
+          to="/doctors"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
+        >
           <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           {t("Back to doctors", "العودة لقائمة الأطباء")}
         </Link>
@@ -372,7 +416,9 @@ function DoctorDetailPage() {
         <div className="grid gap-6 pb-24 lg:grid-cols-3 lg:pb-0">
           {/* Profile column */}
           <div className="lg:col-span-2 space-y-6">
-            <div className={`relative overflow-hidden rounded-2xl bg-card p-6 ${isGold ? "border-2 border-amber-300 shadow-lg" : "border border-border"}`}>
+            <div
+              className={`relative overflow-hidden rounded-2xl bg-card p-6 ${isGold ? "border-2 border-amber-300 shadow-lg" : "border border-border"}`}
+            >
               {isGold && (
                 <>
                   <div className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full bg-linear-to-br from-amber-200/40 to-amber-400/20 blur-2xl" />
@@ -381,8 +427,12 @@ function DoctorDetailPage() {
               )}
               <div className="relative flex items-start gap-4">
                 <div className="relative shrink-0">
-                  {isGold && <div className="absolute -inset-1 rounded-full bg-linear-to-tr from-amber-400 to-amber-600 blur-sm" />}
-                  <div className={`relative h-20 w-20 rounded-full bg-linear-to-br from-primary to-teal flex items-center justify-center text-primary-foreground text-3xl font-semibold ${isGold ? "ring-4 ring-amber-400" : ""}`}>
+                  {isGold && (
+                    <div className="absolute -inset-1 rounded-full bg-linear-to-tr from-amber-400 to-amber-600 blur-sm" />
+                  )}
+                  <div
+                    className={`relative h-20 w-20 rounded-full bg-linear-to-br from-primary to-teal flex items-center justify-center text-primary-foreground text-3xl font-semibold ${isGold ? "ring-4 ring-amber-400" : ""}`}
+                  >
                     {name.charAt(0).toUpperCase()}
                   </div>
                   {isGold && (
@@ -433,17 +483,31 @@ function DoctorDetailPage() {
               {clinics.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-border space-y-5">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
-                    <Building2 className="h-4 w-4" /> {t("Clinics & schedule", "العيادات والمواعيد")}
+                    <Building2 className="h-4 w-4" />{" "}
+                    {t("Clinics & schedule", "العيادات والمواعيد")}
                   </h2>
                   {clinics.map((c) => (
                     <div key={c.id} className="space-y-2">
                       <div>
                         <p className="font-medium text-foreground">{c.name}</p>
-                        {c.address && <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5"><MapPin className="h-3.5 w-3.5" />{c.address}</p>}
-                        {c.phone && <p className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{c.phone}</p>}
+                        {c.address && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MapPin className="h-3.5 w-3.5" />
+                            {c.address}
+                          </p>
+                        )}
+                        {c.phone && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Phone className="h-3.5 w-3.5" />
+                            {c.phone}
+                          </p>
+                        )}
                       </div>
                       {c.lat != null && c.lng != null && (
-                        <ClinicMap markers={[{ lat: c.lat, lng: c.lng, title: c.name }]} className="h-44" />
+                        <ClinicMap
+                          markers={[{ lat: c.lat, lng: c.lng, title: c.name }]}
+                          className="h-44"
+                        />
                       )}
                       {(c.clinic_schedules ?? []).length > 0 && (
                         <ul className="text-sm space-y-0.5">
@@ -453,11 +517,11 @@ function DoctorDetailPage() {
                             .map((s) => (
                               <li key={s.id} className="text-muted-foreground">
                                 <span className="font-medium text-foreground">
-                                  {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][s.day_of_week]}
+                                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][s.day_of_week]}
                                 </span>{" "}
-                                · {s.start_time.slice(0,5)} – {s.end_time.slice(0,5)}
+                                · {s.start_time.slice(0, 5)} – {s.end_time.slice(0, 5)}
                               </li>
-                          ))}
+                            ))}
                         </ul>
                       )}
                     </div>
@@ -468,11 +532,12 @@ function DoctorDetailPage() {
                 <div className="mt-6 pt-6 border-t border-border">
                   <h2 className="font-semibold text-foreground mb-2">{t("Clinic", "العيادة")}</h2>
                   <p className="text-sm text-foreground">{doctor.clinic_name}</p>
-                  {doctor.clinic_address && <p className="text-sm text-muted-foreground mt-1">{doctor.clinic_address}</p>}
+                  {doctor.clinic_address && (
+                    <p className="text-sm text-muted-foreground mt-1">{doctor.clinic_address}</p>
+                  )}
                 </div>
               )}
             </div>
-
 
             {/* Reviews */}
             <div className="bg-card border border-border rounded-2xl p-6">
@@ -480,7 +545,10 @@ function DoctorDetailPage() {
                 <h2 className="font-semibold text-foreground flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" /> {t("Reviews", "التقييمات")}
                 </h2>
-                <PrivateFeedbackButton doctorDetailsId={doctor.id} doctorName={doctor.profile?.full_name ?? undefined} />
+                <PrivateFeedbackButton
+                  doctorDetailsId={doctor.id}
+                  doctorName={doctor.profile?.full_name ?? undefined}
+                />
               </div>
 
               {canReview ? (
@@ -508,7 +576,9 @@ function DoctorDetailPage() {
                   <div className="flex items-center gap-1 mb-2">
                     {[1, 2, 3, 4, 5].map((n) => (
                       <button key={n} type="button" onClick={() => setReviewRating(n)}>
-                        <Star className={`h-6 w-6 ${n <= reviewRating ? "fill-current text-amber-500" : "text-muted-foreground"}`} />
+                        <Star
+                          className={`h-6 w-6 ${n <= reviewRating ? "fill-current text-amber-500" : "text-muted-foreground"}`}
+                        />
                       </button>
                     ))}
                   </div>
@@ -524,7 +594,9 @@ function DoctorDetailPage() {
                     disabled={reviewMutation.isPending || !activeAppointmentId}
                     className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
                   >
-                    {reviewMutation.isPending ? t("Sending...", "جارٍ الإرسال...") : t("Submit review", "إرسال التقييم")}
+                    {reviewMutation.isPending
+                      ? t("Sending...", "جارٍ الإرسال...")
+                      : t("Submit review", "إرسال التقييم")}
                   </button>
                 </div>
               ) : reviewBlockedReason ? (
@@ -534,14 +606,19 @@ function DoctorDetailPage() {
               ) : null}
 
               {reviews.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("No reviews yet.", "لا توجد تقييمات بعد.")}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t("No reviews yet.", "لا توجد تقييمات بعد.")}
+                </p>
               ) : (
                 <div className="space-y-4">
                   {reviews.map((r) => (
                     <div key={r.id} className="border-b border-border last:border-0 pb-4 last:pb-0">
                       <div className="flex items-center gap-1">
                         {[1, 2, 3, 4, 5].map((n) => (
-                          <Star key={n} className={`h-4 w-4 ${n <= r.rating ? "fill-current text-amber-500" : "text-muted-foreground"}`} />
+                          <Star
+                            key={n}
+                            className={`h-4 w-4 ${n <= r.rating ? "fill-current text-amber-500" : "text-muted-foreground"}`}
+                          />
                         ))}
                       </div>
                       {r.comment && <p className="mt-2 text-sm text-foreground">{r.comment}</p>}
@@ -553,7 +630,9 @@ function DoctorDetailPage() {
                           <p className="text-sm text-foreground">{r.doctor_response}</p>
                         </div>
                       )}
-                      <p className="mt-1 text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {new Date(r.created_at).toLocaleDateString()}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -567,6 +646,7 @@ function DoctorDetailPage() {
               doctorId={id}
               doctorName={name}
               consultationFee={Number(feeDecision?.fee ?? doctor.consultation_fee ?? 0)}
+              onlineConsultationFee={doctor.online_consultation_fee ?? null}
               currency={feeDecision?.currency || (doctor.currency ?? "EGP")}
               isVerified={Boolean(doctor.is_verified)}
               telemedicineEnabled={Boolean(doctor.telemedicine_enabled)}
@@ -583,7 +663,8 @@ function DoctorDetailPage() {
                     : t("Discounted follow-up", "متابعة بسعر مخفّض")}
                   {typeof feeDecision.remainingFreeFollowups === "number" && (
                     <>
-                      {" "}·{" "}
+                      {" "}
+                      ·{" "}
                       {t(
                         `${feeDecision.remainingFreeFollowups} left`,
                         `متبقّي ${feeDecision.remainingFreeFollowups}`,
@@ -611,7 +692,9 @@ function DoctorDetailPage() {
           <button
             type="button"
             onClick={() =>
-              document.getElementById("book")?.scrollIntoView({ behavior: "smooth", block: "start" })
+              document
+                .getElementById("book")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
             }
             className="shrink-0 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
           >

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
 
 /**
  * Toggle solo (white-label) mode + branding for the doctor's L3 subdomain.
@@ -26,7 +27,11 @@ export const updateSoloMode = createServerFn({ method: "POST" })
     const { data: dd, error: ddErr } = await admin
       .from("doctor_details")
       .select("id")
-      .eq("profile_id", context.userId)
+      .eq(
+        "id",
+        (await getDoctorForUser(context.userId))?.doctorDetailsId ??
+          "00000000-0000-0000-0000-000000000000",
+      )
       .maybeSingle();
     if (ddErr) throw new Error(ddErr.message);
     if (!dd) throw new Error("Doctor profile not found");
@@ -56,9 +61,13 @@ export const getMySoloSettings = createServerFn({ method: "GET" })
       admin
         .from("doctor_details")
         .select("solo_mode_enabled, solo_brand_color, solo_logo_url, solo_clinic_name")
-        .eq("profile_id", context.userId)
+        .eq(
+          "id",
+          (await getDoctorForUser(context.userId))?.doctorDetailsId ??
+            "00000000-0000-0000-0000-000000000000",
+        )
         .maybeSingle(),
-      admin.from("profiles").select("slug").eq("id", context.userId).maybeSingle(),
+      admin.from("profiles").select("slug").eq("user_id", context.userId).maybeSingle(),
     ]);
     return {
       slug: prof?.slug ?? null,

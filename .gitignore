@@ -67,3 +67,6 @@ response.html
 
 tsc.out
 deploy.log
+
+# OMC / agent state
+.omc/

@@ -6,19 +6,20 @@ import { siteConfig } from "@/lib/seo";
 const footerContent = {
   en: {
     tagline: "Your Health, Connected",
-    description: "Connecting patients with trusted doctors across the Arab world. Book appointments, consult online, and manage your health.",
+    description:
+      "Connecting patients with trusted doctors across the Arab world. Book appointments, consult online, and manage your health.",
     patients: "For Patients",
     patientsLinks: [
       { label: "Find a Doctor", to: "/doctors" },
       { label: "Book Appointment", to: "/doctors" },
-      { label: "Online Consultation", to: "/online" },
-      { label: "Medical Records", to: "/records" },
+      { label: "Online Consultation", to: "/doctors" },
+      { label: "Medical Records", to: "/profile/medical-history" },
       { label: "Manual Payment", to: "/pay" },
     ],
     doctors: "For Doctors",
     doctorsLinks: [
       { label: "Join as Doctor", to: "/join-doctor" },
-      { label: "Doctor Dashboard", to: "/doctor-dashboard" },
+      { label: "Doctor Dashboard", to: "/dashboard" },
       { label: "Pricing", to: "/pricing" },
     ],
     company: "Company",
@@ -36,19 +37,20 @@ const footerContent = {
   },
   ar: {
     tagline: "صحتك، متصلة",
-    description: "نربط المرضى بأطباء موثوق بهم في جميع أنحاء العالم العربي. احجز مواعيد، استشر أونلاين، وادارء صحتك.",
+    description:
+      "نربط المرضى بأطباء موثوق بهم في جميع أنحاء العالم العربي. احجز مواعيد، استشر أونلاين، وادارء صحتك.",
     patients: "للمرضى",
     patientsLinks: [
       { label: "ابحث عن طبيب", to: "/doctors" },
       { label: "احجز موعد", to: "/doctors" },
-      { label: "استشارة أونلاين", to: "/online" },
-      { label: "السجل الطبي", to: "/records" },
+      { label: "استشارة أونلاين", to: "/doctors" },
+      { label: "السجل الطبي", to: "/profile/medical-history" },
       { label: "ادفع يدوياً", to: "/pay" },
     ],
     doctors: "للأطباء",
     doctorsLinks: [
       { label: "انضم كطبيب", to: "/join-doctor" },
-      { label: "لوحة تحكم الطبيب", to: "/doctor-dashboard" },
+      { label: "لوحة تحكم الطبيب", to: "/dashboard" },
       { label: "الأسعار", to: "/pricing" },
     ],
     company: "الشركة",
@@ -68,7 +70,8 @@ const footerContent = {
 
 export function Footer() {
   const { language } = useLanguage();
-  const content = (footerContent as Record<string, typeof footerContent.en>)[language] ?? footerContent.en;
+  const content =
+    (footerContent as Record<string, typeof footerContent.en>)[language] ?? footerContent.en;
   const isRTL = language === "ar";
 
   return (
@@ -77,7 +80,11 @@ export function Footer() {
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <Link to="/" className="flex items-center gap-2" aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}>
+            <Link
+              to="/"
+              className="flex items-center gap-2"
+              aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}
+            >
               <img
                 src="/logo-mark.png"
                 alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
@@ -89,9 +96,7 @@ export function Footer() {
                 className="text-xl text-foreground"
               />
             </Link>
-            <p className="mt-4 max-w-xs text-sm text-muted-foreground">
-              {content.description}
-            </p>
+            <p className="mt-4 max-w-xs text-sm text-muted-foreground">{content.description}</p>
           </div>
 
           {/* Links */}
@@ -155,9 +160,7 @@ export function Footer() {
         </div>
 
         <div className="mt-12 border-t border-border pt-8">
-          <p className="text-center text-sm text-muted-foreground">
-            {content.copyright}
-          </p>
+          <p className="text-center text-sm text-muted-foreground">{content.copyright}</p>
         </div>
       </div>
     </footer>

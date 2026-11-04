@@ -3,14 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import {
-  Loader2,
-  ShieldCheck,
-  Eye,
-  CheckCircle2,
-  XCircle,
-  FileText,
-} from "lucide-react";
+import { Loader2, ShieldCheck, Eye, CheckCircle2, XCircle, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { AdminShell } from "@/components/admin/AdminNav";
 import { EmptyState } from "@/components/admin/EmptyState";
@@ -57,7 +50,12 @@ interface Doc {
     specialty: string | null;
     syndicate_number: string | null;
     national_id_last4: string | null;
-    profiles: { id: string; full_name: string | null; email: string | null; phone: string | null } | null;
+    profiles: {
+      id: string;
+      full_name: string | null;
+      email?: string | null;
+      phone: string | null;
+    } | null;
   } | null;
 }
 
@@ -171,7 +169,9 @@ function AdminDocumentsPage() {
                 : "bg-muted text-muted-foreground hover:bg-muted/70"
             }`}
           >
-            {k === "pending" ? `قيد المراجعة (${docs.filter((d) => d.status === "pending").length})` : "الكل"}
+            {k === "pending"
+              ? `قيد المراجعة (${docs.filter((d) => d.status === "pending").length})`
+              : "الكل"}
           </button>
         ))}
       </div>
@@ -256,9 +256,7 @@ function AdminDocumentsPage() {
                       id={`reason-${doc.id}`}
                       type="text"
                       value={reasonById[doc.id] ?? ""}
-                      onChange={(e) =>
-                        setReasonById((s) => ({ ...s, [doc.id]: e.target.value }))
-                      }
+                      onChange={(e) => setReasonById((s) => ({ ...s, [doc.id]: e.target.value }))}
                       placeholder="سبب الرفض (مطلوب عند الرفض)"
                       className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />

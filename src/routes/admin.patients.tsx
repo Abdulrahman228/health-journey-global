@@ -58,7 +58,10 @@ function AdminPatientsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "patient");
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "patient");
     const userIds = Array.from(new Set((roles ?? []).map((role) => role.user_id)));
     if (userIds.length === 0) {
       setRows([]);
@@ -113,7 +116,7 @@ function AdminPatientsPage() {
     );
   }, [rows, search]);
 
-  if (authLoading || roleLoading || loading) {
+  if (authLoading || roleLoading || (isAdmin && loading)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -134,7 +137,9 @@ function AdminPatientsPage() {
     <AdminShell>
       <header className="mb-6">
         <h1 className="text-3xl font-bold">إدارة المرضى</h1>
-        <p className="mt-1 text-sm text-muted-foreground">أرشيف حسابات المرضى وحجم نشاطهم داخل المنصة.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          أرشيف حسابات المرضى وحجم نشاطهم داخل المنصة.
+        </p>
       </header>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2">
@@ -176,50 +181,60 @@ function AdminPatientsPage() {
                   {search ? "لا توجد نتائج تطابق بحثك." : "لا يوجد مرضى مسجّلون بعد."}
                 </td>
               </tr>
-            ) : filtered.map((row) => (
-              <tr key={row.id} className="border-b border-border last:border-0 hover:bg-muted/30">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    {row.avatar_url ? (
-                      <img src={row.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" />
+            ) : (
+              filtered.map((row) => (
+                <tr key={row.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {row.avatar_url ? (
+                        <img
+                          src={row.avatar_url}
+                          alt=""
+                          className="h-9 w-9 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+                          <UserRound className="h-4 w-4 text-primary" />
+                        </div>
+                      )}
+                      <span className="font-semibold">{row.full_name ?? "مريض بدون اسم"}</span>
+                      {row.status === "banned" && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+                          <Ban className="h-3 w-3" /> محظور
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{row.city ?? row.country ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    {new Date(row.created_at).toLocaleDateString("ar-EG")}
+                  </td>
+                  <td className="px-4 py-3">{row.appointments_count.toLocaleString("ar-EG")}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                    {row.user_id.slice(0, 8)}...
+                  </td>
+                  <td className="px-4 py-3 text-end">
+                    {row.status === "banned" ? (
+                      <button
+                        type="button"
+                        onClick={() => setBanTarget(row)}
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-500/10"
+                      >
+                        <ShieldCheck className="h-3 w-3" /> رفع الحظر
+                      </button>
                     ) : (
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
-                        <UserRound className="h-4 w-4 text-primary" />
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBanTarget(row)}
+                        className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
+                      >
+                        <Ban className="h-3 w-3" /> حظر
+                      </button>
                     )}
-                    <span className="font-semibold">{row.full_name ?? "مريض بدون اسم"}</span>
-                    {row.status === "banned" && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-                        <Ban className="h-3 w-3" /> محظور
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">{row.city ?? row.country ?? "—"}</td>
-                <td className="px-4 py-3">{new Date(row.created_at).toLocaleDateString("ar-EG")}</td>
-                <td className="px-4 py-3">{row.appointments_count.toLocaleString("ar-EG")}</td>
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.user_id.slice(0, 8)}...</td>
-                <td className="px-4 py-3 text-end">
-                  {row.status === "banned" ? (
-                    <button
-                      type="button"
-                      onClick={() => setBanTarget(row)}
-                      className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-500/10"
-                    >
-                      <ShieldCheck className="h-3 w-3" /> رفع الحظر
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setBanTarget(row)}
-                      className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
-                    >
-                      <Ban className="h-3 w-3" /> حظر
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -300,7 +315,12 @@ function BanUserModal({
       >
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-lg font-bold">{isUnban ? "رفع الحظر" : "حظر المستخدم"}</h2>
-          <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-md p-1 hover:bg-muted">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="إغلاق"
+            className="rounded-md p-1 hover:bg-muted"
+          >
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -310,9 +330,15 @@ function BanUserModal({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
             <p className="text-muted-foreground">
               {isUnban ? (
-                <>سيتم رفع الحظر عن <span className="font-semibold text-foreground">{name}</span> وإعادة تفعيل حسابه.</>
+                <>
+                  سيتم رفع الحظر عن <span className="font-semibold text-foreground">{name}</span>{" "}
+                  وإعادة تفعيل حسابه.
+                </>
               ) : (
-                <>سيتم حظر <span className="font-semibold text-foreground">{name}</span> على مستوى تسجيل الدخول (تُلغى جلساته الحالية فوراً).</>
+                <>
+                  سيتم حظر <span className="font-semibold text-foreground">{name}</span> على مستوى
+                  تسجيل الدخول (تُلغى جلساته الحالية فوراً).
+                </>
               )}
             </p>
           </div>
@@ -360,10 +386,18 @@ function BanUserModal({
             disabled={busy || reason.trim().length < 3}
             className={
               "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 " +
-              (isUnban ? "bg-emerald-600 hover:bg-emerald-700" : "bg-destructive hover:bg-destructive/90")
+              (isUnban
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-destructive hover:bg-destructive/90")
             }
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : isUnban ? <ShieldCheck className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isUnban ? (
+              <ShieldCheck className="h-4 w-4" />
+            ) : (
+              <Ban className="h-4 w-4" />
+            )}
             {isUnban ? "تأكيد رفع الحظر" : "تأكيد الحظر"}
           </button>
         </footer>
@@ -372,7 +406,15 @@ function BanUserModal({
   );
 }
 
-function SummaryCard({ icon: Icon, label, value }: { icon: typeof UserRound; label: string; value: number }) {
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof UserRound;
+  label: string;
+  value: number;
+}) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-center gap-3">

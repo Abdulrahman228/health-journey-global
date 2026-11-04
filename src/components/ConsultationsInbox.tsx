@@ -133,6 +133,9 @@ export function ConsultationsInbox() {
       }),
     onSuccess: (res) => {
       if (res.url) {
+        toast.success(
+          t("Accepted. Complete the payment to confirm.", "تم القبول. أكمل الدفع لتأكيد الموعد."),
+        );
         window.location.href = res.url;
       } else {
         toast.error(t("Could not create payment", "تعذّر إنشاء جلسة الدفع"));
@@ -173,10 +176,18 @@ export function ConsultationsInbox() {
   }
 
   const patientItems = (() => {
-    try { return JSON.parse((data as { asPatient?: string })?.asPatient ?? "[]") as PatientItem[]; } catch { return [] as PatientItem[]; }
+    try {
+      return JSON.parse((data as { asPatient?: string })?.asPatient ?? "[]") as PatientItem[];
+    } catch {
+      return [] as PatientItem[];
+    }
   })();
   const doctorItems = (() => {
-    try { return JSON.parse((data as { asDoctor?: string })?.asDoctor ?? "[]") as DoctorItem[]; } catch { return [] as DoctorItem[]; }
+    try {
+      return JSON.parse((data as { asDoctor?: string })?.asDoctor ?? "[]") as DoctorItem[];
+    } catch {
+      return [] as DoctorItem[];
+    }
   })();
 
   return (
@@ -441,7 +452,9 @@ function ProposeSlotDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ps-note">{t("Optional note to patient", "ملاحظة للمريض (اختياري)")}</Label>
+            <Label htmlFor="ps-note">
+              {t("Optional note to patient", "ملاحظة للمريض (اختياري)")}
+            </Label>
             <Textarea
               id="ps-note"
               value={note}
@@ -456,7 +469,9 @@ function ProposeSlotDialog({
             {t("Cancel", "إلغاء")}
           </Button>
           <Button onClick={() => proposeMut.mutate()} disabled={proposeMut.isPending}>
-            {proposeMut.isPending ? t("Sending…", "جارٍ الإرسال…") : t("Send proposal", "إرسال الاقتراح")}
+            {proposeMut.isPending
+              ? t("Sending…", "جارٍ الإرسال…")
+              : t("Send proposal", "إرسال الاقتراح")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -76,9 +76,7 @@ function emptySeries(days: number): DoctorAnalyticsSeriesPoint[] {
 
 export const getDoctorAnalytics = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ userId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ userId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }): Promise<DoctorAnalytics | null> => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
@@ -88,10 +86,7 @@ export const getDoctorAnalytics = createServerFn({ method: "GET" })
     const { data: tierRow } = await supabaseAdmin.rpc("doctor_active_tier", {
       doctor_details_id: ddId,
     });
-    const tier = ((tierRow as string | null) ?? "free") as
-      | "free"
-      | "premium"
-      | "gold";
+    const tier = ((tierRow as string | null) ?? "free") as "free" | "premium" | "gold";
     const hasAccess = tier === "premium" || tier === "gold";
 
     // Date range: last 30 days inclusive.
@@ -129,9 +124,7 @@ export const getDoctorAnalytics = createServerFn({ method: "GET" })
         // Bucket by `scheduled_at` (always set), NOT the nullable
         // `appointment_date` — otherwise rows without an appointment_date are
         // dropped from the revenue/booking series.
-        .select(
-          "fee, appointment_type, status, scheduled_at, patient_id",
-        )
+        .select("fee, appointment_type, status, scheduled_at, patient_id")
         .eq("doctor_id", ddId)
         .gte("scheduled_at", `${fromStr}T00:00:00Z`)
         .lte("scheduled_at", `${toStr}T23:59:59.999Z`),
@@ -182,12 +175,13 @@ export const getDoctorAnalytics = createServerFn({ method: "GET" })
     // Top patient cities — derive from profiles in a follow-up query.
     let topCities: { city: string; bookings: number }[] = [];
     if (patientIds.size > 0) {
+      // appointments.patient_id is a PROFILE id (not the auth user id).
       const { data: profs } = await supabaseAdmin
         .from("profiles")
-        .select("user_id, city")
-        .in("user_id", Array.from(patientIds));
+        .select("id, city")
+        .in("id", Array.from(patientIds));
       const cityCounts = new Map<string, number>();
-      for (const p of (profs ?? []) as Array<{ user_id: string; city: string | null }>) {
+      for (const p of (profs ?? []) as Array<{ id: string; city: string | null }>) {
         const city = (p.city ?? "").trim();
         if (!city) continue;
         cityCounts.set(city, (cityCounts.get(city) ?? 0) + 1);
@@ -199,8 +193,7 @@ export const getDoctorAnalytics = createServerFn({ method: "GET" })
     }
 
     const totalViews = series.reduce((s, p) => s + p.views, 0);
-    const conversionPct =
-      totalViews > 0 ? (totalBookings / totalViews) * 100 : 0;
+    const conversionPct = totalViews > 0 ? (totalBookings / totalViews) * 100 : 0;
 
     return {
       tier,

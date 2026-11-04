@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
+import { listAttachments } from "@/lib/attachments.functions";
 import {
   Activity,
   ArrowUpRight,
@@ -111,11 +112,20 @@ function LabResultsPage() {
           .eq("user_id", user.id)
           .eq("kind", "lab_ready")
           .eq("is_read", false);
-        const unreadIds = (notifs ?? [])
-          .map((n: { id: string }) => n.id)
-          .filter(Boolean);
+        const unreadIds = (notifs ?? []).map((n: { id: string }) => n.id).filter(Boolean);
         if (unreadIds.length > 0) {
           await supabase.rpc("mark_notifications_read", { _ids: unreadIds });
+        }
+
+        // Files live in a private bucket — sign them server-side.
+        const signedMap = new Map<string, string>();
+        try {
+          const signed = await listAttachments({
+            data: { userId: user.id, patientProfileId: profile.id },
+          });
+          for (const f of signed) if (f.signedUrl) signedMap.set(f.id, f.signedUrl);
+        } catch (e) {
+          console.warn("[lab-results] signing failed", e);
         }
 
         if (!alive) return;
@@ -123,12 +133,12 @@ function LabResultsPage() {
           attachments.map((a) => ({
             id: a.id,
             type: a.type,
-            fileUrl: a.file_url,
+            fileUrl: signedMap.get(a.id) ?? a.file_url,
             fileName: a.file_name,
             notes: a.notes,
             uploadedAt: a.uploaded_at,
             doctorName: a.uploaded_by_profile_id
-              ? nameMap.get(a.uploaded_by_profile_id) ?? null
+              ? (nameMap.get(a.uploaded_by_profile_id) ?? null)
               : null,
           })),
         );
@@ -163,46 +173,44 @@ function LabResultsPage() {
     );
   }
 
-  const typeMeta: Record<
-    AttachmentType,
-    { icon: React.ReactNode; label: string; color: string }
-  > = {
-    lab_result: {
-      icon: <Microscope className="h-5 w-5" />,
-      label: t("Lab results", "نتائج التحاليل"),
-      color: "text-emerald-600",
-    },
-    xray: {
-      icon: <FileImage className="h-5 w-5" />,
-      label: t("X-Ray", "أشعة سينية"),
-      color: "text-sky-600",
-    },
-    mri: {
-      icon: <Brain className="h-5 w-5" />,
-      label: t("MRI", "رنين مغناطيسي"),
-      color: "text-purple-600",
-    },
-    ct: {
-      icon: <Activity className="h-5 w-5" />,
-      label: t("CT scan", "أشعة مقطعية"),
-      color: "text-indigo-600",
-    },
-    ecg: {
-      icon: <HeartPulse className="h-5 w-5" />,
-      label: t("ECG", "تخطيط القلب"),
-      color: "text-rose-600",
-    },
-    prescription: {
-      icon: <FileText className="h-5 w-5" />,
-      label: t("Prescription", "روشتة"),
-      color: "text-amber-600",
-    },
-    other: {
-      icon: <FileText className="h-5 w-5" />,
-      label: t("Other", "أخرى"),
-      color: "text-muted-foreground",
-    },
-  };
+  const typeMeta: Record<AttachmentType, { icon: React.ReactNode; label: string; color: string }> =
+    {
+      lab_result: {
+        icon: <Microscope className="h-5 w-5" />,
+        label: t("Lab results", "نتائج التحاليل"),
+        color: "text-emerald-600",
+      },
+      xray: {
+        icon: <FileImage className="h-5 w-5" />,
+        label: t("X-Ray", "أشعة سينية"),
+        color: "text-sky-600",
+      },
+      mri: {
+        icon: <Brain className="h-5 w-5" />,
+        label: t("MRI", "رنين مغناطيسي"),
+        color: "text-purple-600",
+      },
+      ct: {
+        icon: <Activity className="h-5 w-5" />,
+        label: t("CT scan", "أشعة مقطعية"),
+        color: "text-indigo-600",
+      },
+      ecg: {
+        icon: <HeartPulse className="h-5 w-5" />,
+        label: t("ECG", "تخطيط القلب"),
+        color: "text-rose-600",
+      },
+      prescription: {
+        icon: <FileText className="h-5 w-5" />,
+        label: t("Prescription", "روشتة"),
+        color: "text-amber-600",
+      },
+      other: {
+        icon: <FileText className="h-5 w-5" />,
+        label: t("Other", "أخرى"),
+        color: "text-muted-foreground",
+      },
+    };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl" dir={isRTL ? "rtl" : "ltr"}>
@@ -234,7 +242,9 @@ function LabResultsPage() {
             .filter((k) => grouped[k].length > 0)
             .map((kind) => (
               <section key={kind}>
-                <h2 className={`font-semibold mb-3 flex items-center gap-2 ${typeMeta[kind].color}`}>
+                <h2
+                  className={`font-semibold mb-3 flex items-center gap-2 ${typeMeta[kind].color}`}
+                >
                   {typeMeta[kind].icon}
                   {typeMeta[kind].label}
                   <span className="text-xs bg-muted text-muted-foreground rounded-full px-2 py-0.5">
@@ -280,10 +290,7 @@ function LabResultsPage() {
       )}
 
       <div className="mt-8 text-center">
-        <Link
-          to="/profile/medical-history"
-          className="text-sm text-primary hover:underline"
-        >
+        <Link to="/profile/medical-history" className="text-sm text-primary hover:underline">
           {t("View full medical history →", "عرض السجل الطبي الكامل ←")}
         </Link>
       </div>

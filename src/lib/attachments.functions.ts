@@ -11,6 +11,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
 import { assertSelf } from "./_authz";
 
 const BUCKET = "medical-attachments";
@@ -56,14 +57,8 @@ async function isAuthorizedForPatient(
   if (adminCheck) return "admin";
 
   if (!me) return null;
-  const { data: rec } = await supabaseAdmin
-    .from("medical_records")
-    .select("id")
-    .eq("patient_profile_id", patientProfileId)
-    .eq("doctor_profile_id", me)
-    .limit(1)
-    .maybeSingle();
-  if (rec) return "doctor";
+  // Same rule as the rest of the EMR (appointment / managed link / prior record).
+  if (await isDoctorLinkedToPatient(me, patientProfileId)) return "doctor";
 
   return null;
 }
@@ -137,15 +132,7 @@ export const recordAttachment = createServerFn({ method: "POST" })
         userId: z.string().uuid(),
         patientProfileId: z.string().uuid(),
         medicalRecordId: z.string().uuid().nullable(),
-        type: z.enum([
-          "lab_result",
-          "xray",
-          "mri",
-          "ct",
-          "ecg",
-          "prescription",
-          "other",
-        ]),
+        type: z.enum(["lab_result", "xray", "mri", "ct", "ecg", "prescription", "other"]),
         fileName: z.string().min(1).max(255),
         filePath: z.string().min(1).max(512),
         fileSize: z.number().int().nonnegative().nullable(),
@@ -208,19 +195,12 @@ export const deleteAttachment = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!row) return { ok: false as const, error: "Not found" };
 
-    const role = await isAuthorizedForPatient(
-      data.userId,
-      row.patient_profile_id as string,
-    );
+    const role = await isAuthorizedForPatient(data.userId, row.patient_profile_id as string);
     if (!role) return { ok: false as const, error: "Unauthorized" };
 
     // Only owner-patient, the uploader-doctor, or admin can delete
     const me = await getMyProfileId(data.userId);
-    if (
-      role !== "admin" &&
-      role !== "patient" &&
-      me !== (row.uploaded_by_profile_id as string)
-    ) {
+    if (role !== "admin" && role !== "patient" && me !== (row.uploaded_by_profile_id as string)) {
       return { ok: false as const, error: "Forbidden" };
     }
 

@@ -92,7 +92,7 @@ async function isAdminUser(userId: string): Promise<boolean> {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
+    .in("role", ["admin", "super_admin"])
     .maybeSingle();
   return Boolean(data);
 }
@@ -102,9 +102,7 @@ async function isAdminUser(userId: string): Promise<boolean> {
 // ============================================================
 export const getDoctorBalance = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ userId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ userId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }): Promise<DoctorBalance | null> => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
@@ -148,34 +146,29 @@ export const getDoctorBalance = createServerFn({ method: "GET" })
     const onlineFeePct =
       settingsPct != null && settingsPct < tierPct ? Number(settingsPct) : tierPct;
     const minPayout = (settings?.minimum_payout as number | null) ?? DEFAULT_MIN_PAYOUT;
-    const currency =
-      ((txs?.[0]?.currency as string | null) ?? "EGP") || "EGP";
+    const currency = ((txs?.[0]?.currency as string | null) ?? "EGP") || "EGP";
 
     let lifetime = 0;
-    let available = 0;
     for (const t of txs ?? []) {
       const net = Number(t.net_amount ?? 0);
       const status = t.status as DoctorTransaction["status"];
       const type = t.type as DoctorTransaction["type"];
       if (status !== "completed") continue;
-      if (type === "consultation" || type === "adjustment" || type === "bonus") {
-        lifetime += net;
-        available += net;
-      } else if (type === "refund" || type === "chargeback") {
-        available -= Math.abs(net);
-      }
+      if (type === "consultation" || type === "adjustment" || type === "bonus") lifetime += net;
     }
 
-    let totalWithdrawn = 0;
-    for (const w of wds ?? []) {
-      const amt = Number(w.amount ?? 0);
-      const st = w.status as DoctorWithdrawal["status"];
-      if (st === "paid") totalWithdrawn += amt;
-      // hold reserved against available
-      if (st === "approved" || st === "processing" || st === "paid") {
-        available -= amt;
-      }
-    }
+    // Withdrawable balance = the DB's single source of truth
+    // (doctor_wallet_balance: ONLINE net earnings only — clinic cash was never
+    // collected by the platform — minus paid + still-reserved withdrawals).
+    const { data: walletRows } = await supabaseAdmin.rpc("doctor_wallet_balance", {
+      _doctor_details_id: ddId,
+    });
+    const wallet = (
+      walletRows as Array<{ withdrawable: number; total_paid_out: number }> | null
+    )?.[0];
+    const available = Number(wallet?.withdrawable ?? 0);
+    const totalWithdrawn = Number(wallet?.total_paid_out ?? 0);
+    void wds;
 
     // Pending preview: in-person visits → 0% commission; online → tier rate.
     let pending = 0;
@@ -242,9 +235,7 @@ export const getDoctorTransactions = createServerFn({ method: "GET" })
 // ============================================================
 export const getDoctorWithdrawals = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ userId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ userId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }): Promise<DoctorWithdrawal[]> => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
@@ -293,7 +284,7 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return { ok: false as const, error: "Not a doctor" };
 
-    // Check balance
+    // Check balance (same RPC the mobile apps use → one rule everywhere)
     const balance = await getDoctorBalance({ data: { userId: data.userId } });
     if (!balance) return { ok: false as const, error: "Balance unavailable" };
     if (data.amount > balance.available) {
@@ -372,9 +363,7 @@ export const cancelMyWithdrawal = createServerFn({ method: "POST" })
 // ============================================================
 export const getMyBillingSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ userId: z.string().uuid() }).parse(x),
-  )
+  .inputValidator((x: unknown) => z.object({ userId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }): Promise<BillingSettings | null> => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
@@ -516,7 +505,8 @@ export const adminListWithdrawals = createServerFn({ method: "GET" })
         doctorName: ((prof?.full_name as string | null) ?? null) || null,
         doctorSpecialty: (dd?.specialty as string | null) ?? null,
         payoutDetails:
-          (w.payout_details_snapshot as Record<string, string | number | boolean | null> | null) ?? null,
+          (w.payout_details_snapshot as Record<string, string | number | boolean | null> | null) ??
+          null,
       };
     });
   });

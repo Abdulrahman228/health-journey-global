@@ -59,6 +59,8 @@ select extname, extversion from pg_extension where extname in ('pg_cron','pg_net
 # 2) Migrations ----------------------------------------------------------------
 Run-Sql "supabase\migrations\20261103100000_phone_identity_messaging.sql"
 Run-Sql "supabase\migrations\20261103110000_medical_references.sql"
+Run-Sql "supabase\migrations\20261103120000_payments_idempotency.sql"
+Run-Sql "supabase\migrations\20261104100000_security_hardening_2.sql"
 
 # 3) Secrets we generate ourselves ---------------------------------------------
 $outboxSecret = New-Secret 40

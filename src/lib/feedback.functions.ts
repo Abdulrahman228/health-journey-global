@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
 
 /**
  * Phase 5 — Private encrypted feedback.
@@ -22,19 +23,18 @@ export const submitPrivateFeedback = createServerFn({ method: "POST" })
     }).parse,
   )
   .handler(async ({ data, context }) => {
-    const { data: id, error } = await (supabaseAdmin.rpc as unknown as (
-      fn: string,
-      args: Record<string, unknown>,
-    ) => Promise<{ data: unknown; error: { message: string } | null }>)(
-      "submit_private_feedback_admin",
-      {
-        p_doctor_details_id: data.doctorDetailsId,
-        p_patient_id: context.userId,
-        p_message: data.message,
-        p_rating: data.rating ?? null,
-        p_anonymous: data.anonymous,
-      },
-    );
+    const { data: id, error } = await (
+      supabaseAdmin.rpc as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: { message: string } | null }>
+    )("submit_private_feedback_admin", {
+      p_doctor_details_id: data.doctorDetailsId,
+      p_patient_id: (await getProfileIdForUser(context.userId)) ?? context.userId,
+      p_message: data.message,
+      p_rating: data.rating ?? null,
+      p_anonymous: data.anonymous,
+    });
     if (error) throw new Error(error.message);
     return { id: id as string };
   });
@@ -56,18 +56,21 @@ export const readMyPrivateFeedback = createServerFn({ method: "GET" })
     const { data: dd, error: ddErr } = await supabaseAdmin
       .from("doctor_details")
       .select("id")
-      .eq("profile_id", context.userId)
+      .eq(
+        "id",
+        (await getDoctorForUser(context.userId))?.doctorDetailsId ??
+          "00000000-0000-0000-0000-000000000000",
+      )
       .maybeSingle();
     if (ddErr) throw new Error(ddErr.message);
     if (!dd) throw new Error("Doctor profile not found");
 
-    const { data: rows, error } = await (supabaseAdmin.rpc as unknown as (
-      fn: string,
-      args: Record<string, unknown>,
-    ) => Promise<{ data: unknown; error: { message: string } | null }>)(
-      "read_my_private_feedback_admin",
-      { p_doctor_details_id: dd.id, p_limit: data.limit },
-    );
+    const { data: rows, error } = await (
+      supabaseAdmin.rpc as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: { message: string } | null }>
+    )("read_my_private_feedback_admin", { p_doctor_details_id: dd.id, p_limit: data.limit });
     if (error) {
       // Fallback to client-decrypt-less listing (no message text) if the
       // admin RPC isn't installed yet. This still returns metadata so the UI
@@ -114,18 +117,25 @@ export const replyToPrivateFeedback = createServerFn({ method: "POST" })
     const { data: dd, error: ddErr } = await supabaseAdmin
       .from("doctor_details")
       .select("id")
-      .eq("profile_id", context.userId)
+      .eq(
+        "id",
+        (await getDoctorForUser(context.userId))?.doctorDetailsId ??
+          "00000000-0000-0000-0000-000000000000",
+      )
       .maybeSingle();
     if (ddErr) throw new Error(ddErr.message);
     if (!dd) throw new Error("Doctor profile not found");
 
-    const { error } = await (supabaseAdmin.rpc as unknown as (
-      fn: string,
-      args: Record<string, unknown>,
-    ) => Promise<{ data: unknown; error: { message: string } | null }>)(
-      "reply_private_feedback_admin",
-      { p_feedback_id: data.feedbackId, p_doctor_details_id: dd.id, p_reply: data.reply },
-    );
+    const { error } = await (
+      supabaseAdmin.rpc as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: { message: string } | null }>
+    )("reply_private_feedback_admin", {
+      p_feedback_id: data.feedbackId,
+      p_doctor_details_id: dd.id,
+      p_reply: data.reply,
+    });
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });

@@ -411,7 +411,14 @@ export function AppointmentRow({
   mutationPending,
   t,
 }: {
-  appt: { id: string; scheduled_at: string; fee: number; status: string; notes: string | null };
+  appt: {
+    id: string;
+    scheduled_at: string;
+    fee: number;
+    status: string;
+    notes: string | null;
+    patient?: { full_name: string | null } | null;
+  };
   onConfirm?: () => void;
   onComplete?: () => void;
   onReject?: () => void;
@@ -426,6 +433,9 @@ export function AppointmentRow({
           <Calendar className="h-5 w-5" />
         </div>
         <div>
+          {appt.patient?.full_name && (
+            <p className="text-sm font-semibold text-foreground">{appt.patient.full_name}</p>
+          )}
           <p className="font-medium text-foreground text-sm">
             {date.toLocaleDateString()} ·{" "}
             {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}

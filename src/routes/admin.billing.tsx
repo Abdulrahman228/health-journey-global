@@ -32,9 +32,21 @@ export const Route = createFileRoute("/admin/billing")({
 });
 
 const PLANNED_MODULES = [
-  { icon: Building2, title: "شركاء التأمين", desc: "إدارة عقود شركات التأمين، حدود التغطية، والتعريفات المتفق عليها." },
-  { icon: FileSpreadsheet, title: "دفتر الأستاذ (Ledger)", desc: "سجل شامل لجميع الحركات المالية مع تصفية متقدمة." },
-  { icon: BarChart3, title: "تقارير الإيرادات", desc: "تحليلات مالية حسب التخصص، الطبيب، وجهة التأمين." },
+  {
+    icon: Building2,
+    title: "شركاء التأمين",
+    desc: "إدارة عقود شركات التأمين، حدود التغطية، والتعريفات المتفق عليها.",
+  },
+  {
+    icon: FileSpreadsheet,
+    title: "دفتر الأستاذ (Ledger)",
+    desc: "سجل شامل لجميع الحركات المالية مع تصفية متقدمة.",
+  },
+  {
+    icon: BarChart3,
+    title: "تقارير الإيرادات",
+    desc: "تحليلات مالية حسب التخصص، الطبيب، وجهة التأمين.",
+  },
 ];
 
 type PaymentRow = {
@@ -163,7 +175,10 @@ function AdminBillingPage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {PLANNED_MODULES.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="flex gap-4 rounded-xl border border-dashed border-border bg-muted/30 p-5">
+            <div
+              key={title}
+              className="flex gap-4 rounded-xl border border-dashed border-border bg-muted/30 p-5"
+            >
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Icon className="h-5 w-5" aria-hidden="true" />
               </div>
@@ -205,7 +220,11 @@ function StatusBadge({ status }: { status: string }) {
           : status === "failed"
             ? "bg-destructive/10 text-destructive"
             : "bg-primary/10 text-primary";
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>{status}</span>;
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>
+      {status}
+    </span>
+  );
 }
 
 function PaymentsTable({
@@ -248,7 +267,9 @@ function PaymentsTable({
             payments.map((p) => (
               <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30">
                 <td className="px-4 py-3">{new Date(p.created_at).toLocaleDateString("ar-EG")}</td>
-                <td className="px-4 py-3 font-medium">{p.payerName ?? p.user_id.slice(0, 8) + "…"}</td>
+                <td className="px-4 py-3 font-medium">
+                  {p.payerName ?? p.user_id.slice(0, 8) + "…"}
+                </td>
                 <td className="px-4 py-3 tabular-nums">{money(p.amount_cents, p.currency)}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.provider}</td>
                 <td className="px-4 py-3">
@@ -344,10 +365,18 @@ function RefundModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
-      <div className="w-full max-w-md overflow-hidden rounded-xl bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="w-full max-w-md overflow-hidden rounded-xl bg-card shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-lg font-bold">استرداد دفعة</h2>
-          <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-md p-1 hover:bg-muted">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="إغلاق"
+            className="rounded-md p-1 hover:bg-muted"
+          >
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -358,9 +387,13 @@ function RefundModal({
             <p className="text-muted-foreground">
               سيتم استرداد{" "}
               <span className="font-semibold text-foreground">
-                {partial.trim() ? `${partial} ${payment.currency}` : money(payment.amount_cents, payment.currency)}
+                {partial.trim()
+                  ? `${partial} ${payment.currency}`
+                  : money(payment.amount_cents, payment.currency)}
               </span>{" "}
-              عبر {payment.provider}. لا يمكن التراجع.
+              {payment.provider === "stripe"
+                ? "عبر Stripe. لا يمكن التراجع."
+                : `— سيتم تعليم الدفعة كمستردة فقط؛ الاسترداد الفعلي يتم يدوياً عبر ${payment.provider}.`}
             </p>
           </div>
 

@@ -12,6 +12,7 @@
  * does not consume a per-user redemption slot.
  */
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
@@ -20,10 +21,10 @@ export interface CouponValidationResult {
   code: string | null;
   discountType: "percent" | "fixed" | null;
   discountValue: number | null;
-  discountAmount: number;       // major units, computed for the supplied amount
-  finalAmount: number;          // amount - discountAmount, never below 0
+  discountAmount: number; // major units, computed for the supplied amount
+  finalAmount: number; // amount - discountAmount, never below 0
   currency: string | null;
-  message: string;              // Arabic, user-facing
+  message: string; // Arabic, user-facing
 }
 
 interface CouponRow {
@@ -47,21 +48,20 @@ interface CouponRow {
 
 interface ValidateInput {
   code: string;
-  amount: number;                              // major units (e.g. 750 EGP)
-  currency: string;                            // ISO upper or lower
+  amount: number; // major units (e.g. 750 EGP)
+  currency: string; // ISO upper or lower
   appointmentType?: "in_person" | "video" | "telehealth";
-  doctorId?: string | null;                    // doctor_details.id
-  userId?: string | null;                      // auth.users.id (for per-user limit)
+  doctorId?: string | null; // doctor_details.id
+  userId?: string | null; // auth.users.id (for per-user limit)
 }
 
 function normalizeCode(raw: string): string {
-  return String(raw ?? "").trim().toUpperCase();
+  return String(raw ?? "")
+    .trim()
+    .toUpperCase();
 }
 
-function computeDiscount(
-  coupon: CouponRow,
-  amount: number,
-): { discount: number; final: number } {
+function computeDiscount(coupon: CouponRow, amount: number): { discount: number; final: number } {
   if (coupon.discount_type === "fixed") {
     const discount = Math.min(coupon.discount_value, amount);
     return { discount: round2(discount), final: round2(amount - discount) };
@@ -90,10 +90,7 @@ async function loadCoupon(code: string): Promise<CouponRow | null> {
   return (data as CouponRow | null) ?? null;
 }
 
-async function userRedemptionCount(
-  couponId: string,
-  userId: string,
-): Promise<number> {
+async function userRedemptionCount(couponId: string, userId: string): Promise<number> {
   const { count } = await supabaseAdmin
     .from("coupon_redemptions")
     .select("id", { count: "exact", head: true })
@@ -107,9 +104,7 @@ async function userRedemptionCount(
  * side effects. Always resolves with a result; `valid` distinguishes
  * success from any rejection reason.
  */
-export async function evaluateCoupon(
-  input: ValidateInput,
-): Promise<CouponValidationResult> {
+export async function evaluateCoupon(input: ValidateInput): Promise<CouponValidationResult> {
   const code = normalizeCode(input.code);
   const empty: CouponValidationResult = {
     valid: false,
@@ -139,10 +134,7 @@ export async function evaluateCoupon(
   if (coupon.valid_until && new Date(coupon.valid_until) < now) {
     return { ...empty, message: "انتهت صلاحية الكود." };
   }
-  if (
-    coupon.usage_limit !== null &&
-    coupon.times_used >= coupon.usage_limit
-  ) {
+  if (coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit) {
     return { ...empty, message: "تم استنفاد عدد مرات استخدام الكود." };
   }
   if (
@@ -178,11 +170,7 @@ export async function evaluateCoupon(
     };
   }
 
-  if (
-    input.userId &&
-    coupon.usage_limit_per_user !== null &&
-    coupon.usage_limit_per_user > 0
-  ) {
+  if (input.userId && coupon.usage_limit_per_user !== null && coupon.usage_limit_per_user > 0) {
     const used = await userRedemptionCount(coupon.id, input.userId);
     if (used >= coupon.usage_limit_per_user) {
       return { ...empty, message: "استخدمت الكود من قبل." };
@@ -286,3 +274,41 @@ export async function applyCouponToAppointment(args: {
   }
   return result;
 }
+
+// ---------------------------------------------------------------------------
+// Patient: stamp a validated coupon on their own freshly booked appointment.
+// ---------------------------------------------------------------------------
+export const applyCoupon = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({ appointmentId: z.string().uuid(), code: z.string().trim().min(2).max(40) }).parse,
+  )
+  .handler(async ({ data, context }): Promise<CouponValidationResult> => {
+    const { data: appt } = await supabaseAdmin
+      .from("appointments")
+      .select(
+        "id, patient_id, doctor_id, fee, currency, appointment_type, coupon_code, payment_status",
+      )
+      .eq("id", data.appointmentId)
+      .maybeSingle();
+    if (!appt) throw new Error("الموعد غير موجود");
+    const { data: prof } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("id", appt.patient_id as string)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!prof) throw new Error("غير مصرح");
+    if (appt.coupon_code) throw new Error("تم تطبيق كود بالفعل على هذا الحجز");
+    if (appt.payment_status === "paid") throw new Error("هذا الحجز مدفوع بالفعل");
+    const type = (appt.appointment_type as string | null) ?? "in_person";
+    return applyCouponToAppointment({
+      appointmentId: appt.id as string,
+      code: data.code,
+      amount: Number(appt.fee ?? 0),
+      currency: (appt.currency as string | null) ?? "EGP",
+      appointmentType: type === "online" || type === "video" ? "video" : "in_person",
+      doctorId: appt.doctor_id as string,
+      userId: context.userId,
+    });
+  });

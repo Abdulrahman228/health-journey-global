@@ -5,7 +5,19 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
 import { supabase } from "@/integrations/supabase/client";
-import { Calendar, Clock, Loader2, X, CheckCircle2, Video, Building2, User as UserIcon, Stethoscope, ReceiptText, Star } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  Loader2,
+  X,
+  CheckCircle2,
+  Video,
+  Building2,
+  User as UserIcon,
+  Stethoscope,
+  ReceiptText,
+  Star,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ConsultationsInbox } from "@/components/ConsultationsInbox";
 import { PatientShell } from "@/components/patient/PatientNav";
@@ -34,6 +46,36 @@ interface EnrichedAppointment {
   iAmDoctor: boolean;
   currency: string;
   payment_status: string | null;
+}
+
+type T = (en: string, ar: string) => string;
+
+function statusLabel(status: string, t: T): string {
+  const map: Record<string, [string, string]> = {
+    pending: ["Pending", "بانتظار التأكيد"],
+    confirmed: ["Confirmed", "مؤكد"],
+    waiting: ["Waiting", "في الانتظار"],
+    called: ["Called", "تم النداء"],
+    in_progress: ["In progress", "جارٍ الكشف"],
+    completed: ["Completed", "مكتمل"],
+    cancelled: ["Cancelled", "ملغي"],
+    no_show: ["No-show", "لم يحضر"],
+  };
+  const m = map[status];
+  return m ? t(m[0], m[1]) : status;
+}
+
+function paymentLabel(status: string, t: T): string {
+  const map: Record<string, [string, string]> = {
+    unpaid: ["Unpaid", "غير مدفوع"],
+    pending_review: ["Receipt under review", "الإيصال قيد المراجعة"],
+    paid: ["Paid", "مدفوع"],
+    refunded: ["Refunded", "مسترد"],
+    partially_refunded: ["Partially refunded", "مسترد جزئياً"],
+    failed: ["Payment failed", "فشل الدفع"],
+  };
+  const m = map[status];
+  return m ? t(m[0], m[1]) : status;
 }
 
 function AppointmentsPage() {
@@ -102,7 +144,11 @@ function AppointmentsPage() {
           const p = docProfiles?.find((x: any) => x.id === d.profile_id);
           return [
             d.id,
-            { name: p?.full_name ?? "Doctor", specialty: d.specialty as string, currency: d.currency as string },
+            {
+              name: p?.full_name ?? "Doctor",
+              specialty: d.specialty as string,
+              currency: d.currency as string,
+            },
           ];
         }),
       );
@@ -122,9 +168,9 @@ function AppointmentsPage() {
           doctor_id: a.doctor_id,
           iAmDoctor,
           counterpart_name: iAmDoctor
-            ? patById.get(a.patient_id) ?? t("Patient", "مريض")
-            : doc?.name ?? t("Doctor", "طبيب"),
-          counterpart_subtitle: iAmDoctor ? null : doc?.specialty ?? null,
+            ? (patById.get(a.patient_id) ?? t("Patient", "مريض"))
+            : (doc?.name ?? t("Doctor", "طبيب")),
+          counterpart_subtitle: iAmDoctor ? null : (doc?.specialty ?? null),
           currency: doc?.currency ?? "EGP",
           payment_status: (a.payment_status as string | null) ?? null,
         };
@@ -183,6 +229,18 @@ function AppointmentsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      if (status === "cancelled") {
+        // cancel_appointment frees the slot / queue number and notifies the
+        // other side; a plain status update would leave the queue stale.
+        const { error: rpcErr } = await supabase.rpc("cancel_appointment", {
+          p_appointment_id: id,
+        });
+        if (!rpcErr) return;
+      }
+      if (status === "completed") {
+        const { error: rpcErr } = await supabase.rpc("complete_visit", { p_appointment_id: id });
+        if (!rpcErr) return;
+      }
       const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
       if (error) throw error;
     },
@@ -223,52 +281,59 @@ function AppointmentsPage() {
   return (
     <PatientShell>
       <div>
-      <h1 className="text-3xl font-bold text-foreground mb-2">{t("My Appointments", "مواعيدي")}</h1>
-      <p className="text-muted-foreground mb-8">
-        {role === "doctor"
-          ? t("Manage your patient appointments.", "تابع مواعيد مرضاك.")
-          : t("Manage your upcoming and past appointments.", "تابع مواعيدك القادمة والسابقة.")}
-      </p>
+        <h1 className="text-3xl font-bold text-foreground mb-2">
+          {t("My Appointments", "مواعيدي")}
+        </h1>
+        <p className="text-muted-foreground mb-8">
+          {role === "doctor"
+            ? t("Manage your patient appointments.", "تابع مواعيد مرضاك.")
+            : t("Manage your upcoming and past appointments.", "تابع مواعيدك القادمة والسابقة.")}
+        </p>
 
-      {appointments.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-border rounded-2xl">
-          <Calendar className="mx-auto h-12 w-12 text-muted-foreground" />
-          <p className="mt-4 text-muted-foreground">{t("No appointments yet.", "لا توجد مواعيد بعد.")}</p>
-          {role !== "doctor" && (
-            <Link to="/doctors" className="mt-4 inline-block px-5 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90">
-              {t("Find a doctor", "ابحث عن طبيب")}
-            </Link>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {grouped.upcoming.length > 0 && (
-            <Section
-              title={t("Upcoming", "القادمة")}
-              items={grouped.upcoming}
-              t={t}
-              onUpdate={(id, status) => updateStatus.mutate({ id, status })}
-              formatPrice={formatPrice}
-            />
-          )}
-          {grouped.past.length > 0 && (
-            <Section
-              title={t("Past", "السابقة")}
-              items={grouped.past}
-              t={t}
-              onUpdate={(id, status) => updateStatus.mutate({ id, status })}
-              formatPrice={formatPrice}
-              isPast
-            />
-          )}
-        </div>
-      )}
+        {appointments.length === 0 ? (
+          <div className="text-center py-16 border border-dashed border-border rounded-2xl">
+            <Calendar className="mx-auto h-12 w-12 text-muted-foreground" />
+            <p className="mt-4 text-muted-foreground">
+              {t("No appointments yet.", "لا توجد مواعيد بعد.")}
+            </p>
+            {role !== "doctor" && (
+              <Link
+                to="/doctors"
+                className="mt-4 inline-block px-5 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90"
+              >
+                {t("Find a doctor", "ابحث عن طبيب")}
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {grouped.upcoming.length > 0 && (
+              <Section
+                title={t("Upcoming", "القادمة")}
+                items={grouped.upcoming}
+                t={t}
+                onUpdate={(id, status) => updateStatus.mutate({ id, status })}
+                formatPrice={formatPrice}
+              />
+            )}
+            {grouped.past.length > 0 && (
+              <Section
+                title={t("Past", "السابقة")}
+                items={grouped.past}
+                t={t}
+                onUpdate={(id, status) => updateStatus.mutate({ id, status })}
+                formatPrice={formatPrice}
+                isPast
+              />
+            )}
+          </div>
+        )}
 
-      {/* Online consultation requests */}
-      <div className="mt-10">
-        <ConsultationsInbox />
+        {/* Online consultation requests */}
+        <div className="mt-10">
+          <ConsultationsInbox />
+        </div>
       </div>
-    </div>
     </PatientShell>
   );
 }
@@ -290,27 +355,44 @@ function Section({
 }) {
   return (
     <section>
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">{title}</h2>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+        {title}
+      </h2>
       <div className="space-y-3">
         {items.map((a) => {
           const date = new Date(a.scheduled_at);
           const statusColor =
-            ({
-              pending: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-              confirmed: "bg-primary/10 text-primary",
-              completed: "bg-teal/10 text-teal",
-              cancelled: "bg-destructive/10 text-destructive",
-            } as Record<string, string>)[a.status] ?? "bg-muted text-muted-foreground";
+            (
+              {
+                pending: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                confirmed: "bg-primary/10 text-primary",
+                completed: "bg-teal/10 text-teal",
+                cancelled: "bg-destructive/10 text-destructive",
+              } as Record<string, string>
+            )[a.status] ?? "bg-muted text-muted-foreground";
 
           return (
-            <div key={a.id} className="bg-card border border-border rounded-xl p-5 flex items-start justify-between gap-4 flex-wrap">
+            <div
+              key={a.id}
+              className="bg-card border border-border rounded-xl p-5 flex items-start justify-between gap-4 flex-wrap"
+            >
               <div className="flex items-start gap-4 min-w-0 flex-1">
-                <div className={`h-12 w-12 rounded-lg flex items-center justify-center shrink-0 ${isOnlineVisit(a.appointment_type) ? "bg-teal/10 text-teal" : "bg-primary/10 text-primary"}`}>
-                  {isOnlineVisit(a.appointment_type) ? <Video className="h-6 w-6" /> : <Building2 className="h-6 w-6" />}
+                <div
+                  className={`h-12 w-12 rounded-lg flex items-center justify-center shrink-0 ${isOnlineVisit(a.appointment_type) ? "bg-teal/10 text-teal" : "bg-primary/10 text-primary"}`}
+                >
+                  {isOnlineVisit(a.appointment_type) ? (
+                    <Video className="h-6 w-6" />
+                  ) : (
+                    <Building2 className="h-6 w-6" />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-foreground font-semibold">
-                    {a.iAmDoctor ? <UserIcon className="h-4 w-4" /> : <Stethoscope className="h-4 w-4" />}
+                    {a.iAmDoctor ? (
+                      <UserIcon className="h-4 w-4" />
+                    ) : (
+                      <Stethoscope className="h-4 w-4" />
+                    )}
                     <span className="truncate">{a.counterpart_name}</span>
                   </div>
                   {a.counterpart_subtitle && (
@@ -324,10 +406,19 @@ function Section({
                     {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </p>
                   <div className="mt-1.5 flex items-center gap-2 text-sm flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>{a.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                      {statusLabel(a.status, t)}
+                    </span>
                     <span className="text-muted-foreground">{formatPrice(a.fee, a.currency)}</span>
+                    {a.fee > 0 && a.payment_status && !a.iAmDoctor && (
+                      <span className="text-xs text-muted-foreground">
+                        · {paymentLabel(a.payment_status, t)}
+                      </span>
+                    )}
                   </div>
-                  {a.notes && <p className="mt-2 text-xs text-muted-foreground italic">"{a.notes}"</p>}
+                  {a.notes && (
+                    <p className="mt-2 text-xs text-muted-foreground italic">"{a.notes}"</p>
+                  )}
                 </div>
               </div>
 
@@ -342,6 +433,33 @@ function Section({
                     >
                       <ReceiptText className="h-4 w-4" />
                       {t("Receipt", "الإيصال")}
+                    </Link>
+                  )}
+                {!a.iAmDoctor &&
+                  a.fee > 0 &&
+                  (a.payment_status === "unpaid" || a.payment_status === "pending_review") &&
+                  !["cancelled", "completed", "no_show"].includes(a.status) &&
+                  !isPast && (
+                    <Link
+                      to="/pay"
+                      search={{ amount: Math.round(a.fee), ref: a.id }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
+                    >
+                      {a.payment_status === "pending_review"
+                        ? t("Receipt under review", "الإيصال قيد المراجعة")
+                        : t("Pay", "ادفع")}
+                    </Link>
+                  )}
+                {!a.iAmDoctor &&
+                  !isOnlineVisit(a.appointment_type) &&
+                  ["confirmed", "waiting", "called", "in_progress"].includes(a.status) &&
+                  !isPast && (
+                    <Link
+                      to="/my-queue/$appointmentId"
+                      params={{ appointmentId: a.id }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted"
+                    >
+                      {t("My turn", "دوري")}
                     </Link>
                   )}
                 {isOnlineVisit(a.appointment_type) && a.status === "confirmed" && !isPast && (
@@ -372,7 +490,12 @@ function Section({
                 )}
                 {a.status !== "cancelled" && a.status !== "completed" && !isPast && (
                   <button
-                    onClick={() => onUpdate(a.id, "cancelled")}
+                    onClick={() => {
+                      if (
+                        window.confirm(t("Cancel this appointment?", "هل تريد إلغاء هذا الموعد؟"))
+                      )
+                        onUpdate(a.id, "cancelled");
+                    }}
                     className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition"
                     title={t("Cancel", "إلغاء")}
                   >
@@ -390,7 +513,9 @@ function Section({
                     {t("Rate", "قيّم")}
                   </Link>
                 )}
-                {a.status === "completed" && a.iAmDoctor && <CheckCircle2 className="h-5 w-5 text-teal" />}
+                {a.status === "completed" && a.iAmDoctor && (
+                  <CheckCircle2 className="h-5 w-5 text-teal" />
+                )}
               </div>
             </div>
           );

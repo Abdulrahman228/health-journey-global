@@ -39,17 +39,19 @@ async function resolveOrCreateCustomer(
 
 export const createCheckoutSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: {
-    priceId: string;
-    planCode?: string;
-    customerEmail?: string;
-    userId?: string;
-    returnUrl: string;
-    environment: StripeEnv;
-  }) => {
-    if (!/^[a-zA-Z0-9_-]+$/.test(data.priceId)) throw new Error("Invalid priceId");
-    return data;
-  })
+  .inputValidator(
+    (data: {
+      priceId: string;
+      planCode?: string;
+      customerEmail?: string;
+      userId?: string;
+      returnUrl: string;
+      environment: StripeEnv;
+    }) => {
+      if (!/^[a-zA-Z0-9_-]+$/.test(data.priceId)) throw new Error("Invalid priceId");
+      return data;
+    },
+  )
   .handler(async ({ data, context }) => {
     // Always bind checkout to the authenticated user, never trust input.
     const userId = context.userId;
@@ -63,18 +65,18 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
     const stripePrice = prices.data[0];
     const isRecurring = stripePrice.type === "recurring";
 
-    const customerId = (data.customerEmail || userId)
-      ? await resolveOrCreateCustomer(stripe, {
-          email: data.customerEmail,
-          userId,
-        })
-      : undefined;
+    const customerId =
+      data.customerEmail || userId
+        ? await resolveOrCreateCustomer(stripe, {
+            email: data.customerEmail,
+            userId,
+          })
+        : undefined;
 
     let productDescription: string | undefined;
     if (!isRecurring) {
-      const productId = typeof stripePrice.product === "string"
-        ? stripePrice.product
-        : stripePrice.product.id;
+      const productId =
+        typeof stripePrice.product === "string" ? stripePrice.product : stripePrice.product.id;
       const product = await stripe.products.retrieve(productId);
       productDescription = product.name;
     }
@@ -174,32 +176,34 @@ export async function resolveVisitFeeMajor(appointmentId: string): Promise<numbe
 
 export const createAppointmentCheckout = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: {
-    appointmentId: string;
-    amount: number; // in smallest currency unit (e.g. cents / piastres)
-    currency: string; // ISO lowercase (egp, usd, sar…)
-    doctorName: string;
-    returnUrl: string;
-    cancelUrl: string;
-    customerEmail?: string;
-    userId?: string;
-    couponCode?: string;
-    appointmentType?: "in_person" | "video" | "telehealth";
-    doctorId?: string;
-  }) => {
-    if (!/^[a-zA-Z0-9-]+$/.test(data.appointmentId)) throw new Error("Invalid appointmentId");
-    if (!Number.isInteger(data.amount) || data.amount < 50) {
-      throw new Error("Invalid amount");
-    }
-    if (!/^[a-z]{3}$/.test(data.currency)) throw new Error("Invalid currency");
-    if (data.userId && !/^[a-zA-Z0-9_-]+$/.test(data.userId)) {
-      throw new Error("Invalid userId");
-    }
-    if (data.couponCode && data.couponCode.length > 64) {
-      throw new Error("Invalid couponCode");
-    }
-    return data;
-  })
+  .inputValidator(
+    (data: {
+      appointmentId: string;
+      amount: number; // in smallest currency unit (e.g. cents / piastres)
+      currency: string; // ISO lowercase (egp, usd, sar…)
+      doctorName: string;
+      returnUrl: string;
+      cancelUrl: string;
+      customerEmail?: string;
+      userId?: string;
+      couponCode?: string;
+      appointmentType?: "in_person" | "video" | "telehealth";
+      doctorId?: string;
+    }) => {
+      if (!/^[a-zA-Z0-9-]+$/.test(data.appointmentId)) throw new Error("Invalid appointmentId");
+      if (!Number.isInteger(data.amount) || data.amount < 50) {
+        throw new Error("Invalid amount");
+      }
+      if (!/^[a-z]{3}$/.test(data.currency)) throw new Error("Invalid currency");
+      if (data.userId && !/^[a-zA-Z0-9_-]+$/.test(data.userId)) {
+        throw new Error("Invalid userId");
+      }
+      if (data.couponCode && data.couponCode.length > 64) {
+        throw new Error("Invalid couponCode");
+      }
+      return data;
+    },
+  )
   .handler(async ({ data, context }) => {
     // Bind checkout to authenticated user; reject any mismatched input userId.
     const userId = context.userId;
@@ -254,12 +258,13 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
       throw new Error("بعد خصم الكود أصبح المبلغ صغيراً جداً. تواصل مع الدعم.");
     }
 
-    const customerId = (data.customerEmail || userId)
-      ? await resolveOrCreateCustomer(stripe, {
-          email: data.customerEmail,
-          userId,
-        })
-      : undefined;
+    const customerId =
+      data.customerEmail || userId
+        ? await resolveOrCreateCustomer(stripe, {
+            email: data.customerEmail,
+            userId,
+          })
+        : undefined;
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -311,26 +316,26 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
 // =============================================================================
 
 export interface AppointmentReceipt {
-  receiptNumber: string;        // R-{YYYYMMDD}-{shortId}
+  receiptNumber: string; // R-{YYYYMMDD}-{shortId}
   appointmentId: string;
   status: "paid" | "refunded" | "partially_refunded" | "pending" | "failed";
   paidAt: string | null;
   refundedAt: string | null;
   scheduledAt: string;
   appointmentType: string;
-  fee: number;                  // Major currency units (after coupon)
-  refundedAmount: number;       // Major currency units
-  netPaid: number;              // fee - refundedAmount
+  fee: number; // Major currency units (after coupon)
+  refundedAmount: number; // Major currency units
+  netPaid: number; // fee - refundedAmount
   currency: string;
   doctorName: string | null;
   doctorSpecialty: string | null;
   doctorSyndicate: string | null;
   patientName: string | null;
   paymentProvider: string | null;
-  paymentReference: string | null;  // last 12 chars of provider_payment_id
+  paymentReference: string | null; // last 12 chars of provider_payment_id
   environment: "sandbox" | "live" | null;
   couponCode: string | null;
-  couponDiscount: number;       // Major currency units
+  couponDiscount: number; // Major currency units
 }
 
 function generateReceiptNumber(appointmentId: string, paidAt: string | null): string {
@@ -350,10 +355,7 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
     if (typeof obj.userId !== "string" || !/^[0-9a-f-]{36}$/i.test(obj.userId)) {
       throw new Error("Invalid userId");
     }
-    if (
-      typeof obj.appointmentId !== "string" ||
-      !/^[0-9a-f-]{36}$/i.test(obj.appointmentId)
-    ) {
+    if (typeof obj.appointmentId !== "string" || !/^[0-9a-f-]{36}$/i.test(obj.appointmentId)) {
       throw new Error("Invalid appointmentId");
     }
     return { userId: obj.userId, appointmentId: obj.appointmentId };
@@ -364,7 +366,7 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
     const { data: appt } = await supabaseAdmin
       .from("appointments")
       .select(
-        "id, patient_id, doctor_id, scheduled_at, appointment_type, status, fee, currency, payment_status, paid_at, refunded_at, refunded_amount, payment_intent_id, payment_environment, coupon_code, coupon_discount",
+        "id, patient_id, doctor_id, scheduled_at, appointment_type, status, fee, currency, payment_status, payment_method, paid_at, refunded_at, refunded_amount, payment_intent_id, payment_environment, coupon_code, coupon_discount",
       )
       .eq("id", data.appointmentId)
       .maybeSingle();
@@ -422,11 +424,7 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
         .select("profile_id, specialty, syndicate_number")
         .eq("id", doctorDetailsId)
         .maybeSingle(),
-      supabaseAdmin
-        .from("profiles")
-        .select("full_name")
-        .eq("id", patientProfileId)
-        .maybeSingle(),
+      supabaseAdmin.from("profiles").select("full_name").eq("id", patientProfileId).maybeSingle(),
     ]);
 
     let doctorName: string | null = null;
@@ -476,9 +474,12 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
       doctorSpecialty: (dd?.specialty as string | null) ?? null,
       doctorSyndicate: (dd?.syndicate_number as string | null) ?? null,
       patientName: (patientProfile?.full_name as string | null) ?? null,
-      paymentProvider: (payment?.provider as string | null) ?? "stripe",
+      paymentProvider:
+        (payment?.provider as string | null) ??
+        (appt.payment_method === "online" ? "paymob" : "manual_transfer"),
       paymentReference: reference,
-      environment: (payment?.environment as AppointmentReceipt["environment"]) ??
+      environment:
+        (payment?.environment as AppointmentReceipt["environment"]) ??
         (appt.payment_environment as AppointmentReceipt["environment"]) ??
         null,
       couponCode: (appt.coupon_code as string | null) ?? null,
@@ -500,10 +501,7 @@ export const emailAppointmentReceipt = createServerFn({ method: "POST" })
     if (typeof obj.userId !== "string" || !/^[0-9a-f-]{36}$/i.test(obj.userId)) {
       throw new Error("Invalid userId");
     }
-    if (
-      typeof obj.appointmentId !== "string" ||
-      !/^[0-9a-f-]{36}$/i.test(obj.appointmentId)
-    ) {
+    if (typeof obj.appointmentId !== "string" || !/^[0-9a-f-]{36}$/i.test(obj.appointmentId)) {
       throw new Error("Invalid appointmentId");
     }
     return { userId: obj.userId, appointmentId: obj.appointmentId };
@@ -521,8 +519,9 @@ export const emailAppointmentReceipt = createServerFn({ method: "POST" })
     }
 
     // 2. Fetch the user's email from auth.users.
-    const { data: authUser, error: authErr } =
-      await supabaseAdmin.auth.admin.getUserById(data.userId);
+    const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.getUserById(
+      data.userId,
+    );
     if (authErr || !authUser?.user?.email) {
       return { ok: false as const, reason: "no_email_on_account" };
     }
@@ -534,9 +533,10 @@ export const emailAppointmentReceipt = createServerFn({ method: "POST" })
 
     const { subject, html } = buildReceiptEmail({
       receipt,
-      patientFallback: typeof authUser.user.user_metadata?.full_name === "string"
-        ? authUser.user.user_metadata.full_name
-        : undefined,
+      patientFallback:
+        typeof authUser.user.user_metadata?.full_name === "string"
+          ? authUser.user.user_metadata.full_name
+          : undefined,
     });
 
     const result = await sendEmail({

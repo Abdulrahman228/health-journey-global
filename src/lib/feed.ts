@@ -30,6 +30,8 @@ export interface FeedPost {
   };
   is_author_verified_doctor?: boolean;
   author_specialty?: string | null;
+  /** doctor_details.id of the author (what /doctor/$id expects), when a doctor. */
+  author_doctor_id?: string | null;
   drug_info?: {
     drug_name: string;
     dosage: string | null;
@@ -99,7 +101,7 @@ export async function listPosts(filters: ListPostsFilters = {}): Promise<FeedPos
     fetchAuthorCards(profileIds).then((rows) => ({ data: rows })),
     supabase
       .from("doctor_details")
-      .select("profile_id, is_verified, specialty")
+      .select("id, profile_id, is_verified, specialty")
       .in("profile_id", profileIds),
   ]);
 
@@ -113,6 +115,7 @@ export async function listPosts(filters: ListPostsFilters = {}): Promise<FeedPos
       drug_info: Array.isArray(p.drug_info) ? (p.drug_info[0] ?? null) : p.drug_info,
       author: profileMap.get(p.author_profile_id) ?? undefined,
       is_author_verified_doctor: dd?.is_verified ?? false,
+      author_doctor_id: dd?.id ?? null,
       author_specialty: dd?.specialty ?? null,
     };
   });
@@ -162,7 +165,7 @@ export async function getPost(id: string): Promise<FeedPost | null> {
     fetchAuthorCards([post.author_profile_id]).then((rows) => ({ data: rows[0] ?? null })),
     supabase
       .from("doctor_details")
-      .select("is_verified, specialty")
+      .select("id, is_verified, specialty")
       .eq("profile_id", post.author_profile_id)
       .maybeSingle(),
   ]);
@@ -173,6 +176,7 @@ export async function getPost(id: string): Promise<FeedPost | null> {
     author: profile ?? undefined,
     is_author_verified_doctor: dd?.is_verified ?? false,
     author_specialty: dd?.specialty ?? null,
+    author_doctor_id: dd?.id ?? null,
   };
 }
 

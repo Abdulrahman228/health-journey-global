@@ -22,7 +22,7 @@ import {
 import { toast } from "sonner";
 import { PatientConsentModal, CONSENT_TEXT_VERSION } from "@/components/PatientConsentModal";
 import { createAppointmentCheckout } from "@/lib/payments.functions";
-import { validateCoupon, type CouponValidationResult } from "@/lib/coupons.functions";
+import { validateCoupon, applyCoupon, type CouponValidationResult } from "@/lib/coupons.functions";
 import { syncVisitType, previewVisitPricing } from "@/lib/clinical.classification";
 import { handleEmergencyBooking } from "@/lib/emergency.booking";
 
@@ -102,6 +102,8 @@ interface Props {
   doctorId: string;
   doctorName: string;
   consultationFee: number;
+  /** Fee for online (video) consultations; falls back to consultationFee. */
+  onlineConsultationFee?: number | null;
   currency: string;
   isVerified: boolean;
   telemedicineEnabled: boolean;
@@ -110,7 +112,8 @@ interface Props {
 export function BookingCard({
   doctorId,
   doctorName,
-  consultationFee,
+  consultationFee: clinicFee,
+  onlineConsultationFee,
   currency,
   isVerified,
   telemedicineEnabled,
@@ -165,13 +168,18 @@ export function BookingCard({
   const effectiveClinicId = selectedClinicId ?? clinics?.[0]?.id ?? null;
 
   // === Fixed time-slot grid for the chosen clinic + date ===
-  const { data: daySlots = [], isLoading: slotsLoading, refetch: refetchSlots } = useQuery({
+  const {
+    data: daySlots = [],
+    isLoading: slotsLoading,
+    refetch: refetchSlots,
+  } = useQuery({
     queryKey: ["day-slots", doctorId, effectiveClinicId, selectedDate],
     enabled:
       Boolean(effectiveClinicId) &&
       (appointmentType === "clinic" || (isVerified && telemedicineEnabled)),
     refetchInterval: 30_000,
     queryFn: async (): Promise<DaySlot[]> => {
+      if (!effectiveClinicId) return [];
       const { data, error } = await supabase.rpc("get_clinic_day_slots", {
         p_doctor_id: doctorId,
         p_clinic_id: effectiveClinicId,
@@ -194,15 +202,19 @@ export function BookingCard({
   }, [clinics, selectedClinicId]);
 
   const multipleClinic = (clinics?.length ?? 0) > 1;
+  // Online consults use the doctor's online fee when one is configured.
+  const consultationFee =
+    appointmentType === "online" && (onlineConsultationFee ?? 0) > 0
+      ? (onlineConsultationFee as number)
+      : clinicFee;
   const requiresPayment = consultationFee > 0;
 
   // Predicted visit type + fee for the pre-payment label (consultation vs first
   // visit). createAppointmentCheckout recomputes the fee authoritatively.
   const { data: pricing } = useQuery({
-    queryKey: ["visit-pricing", doctorId, user?.id, selectedDate],
+    queryKey: ["visit-pricing", doctorId, user?.id, selectedDate, appointmentType],
     enabled: Boolean(user && requiresPayment && selectedDate),
-    queryFn: () =>
-      previewVisitPricing({ data: { doctorId, scheduledAt: selectedDate } }),
+    queryFn: () => previewVisitPricing({ data: { doctorId, scheduledAt: selectedDate } }),
   });
 
   const bookMutation = useMutation({
@@ -235,6 +247,15 @@ export function BookingCard({
       if (error) throw error;
 
       const result = data as { id: string };
+
+      // Apply the validated coupon to the row (fee + discount stamped server-side).
+      if (coupon?.valid && coupon.code) {
+        try {
+          await applyCoupon({ data: { appointmentId: result.id, code: coupon.code } });
+        } catch (e) {
+          console.warn("[booking] coupon apply failed", e);
+        }
+      }
 
       // Non-blocking: classify the visit (consultation vs initial checkup) and
       // notify the doctor on a follow-up. Wrapped so classification failures can
@@ -287,8 +308,10 @@ export function BookingCard({
         // needed. The /pay page shows the receiving details + amount + reference;
         // the doctor confirms the transfer.
         setIsRedirecting(true);
-        toast.success(t("Booked. Complete the transfer to confirm.", "تم الحجز. أكمل التحويل لتأكيد الدفع."));
-        window.location.href = `/pay?amount=${Math.round(consultationFee)}&ref=${result.id}`;
+        toast.success(
+          t("Booked. Complete the transfer to confirm.", "تم الحجز. أكمل التحويل لتأكيد الدفع."),
+        );
+        window.location.href = `/pay?amount=${Math.round(coupon?.valid ? coupon.finalAmount : consultationFee)}&ref=${result.id}`;
         return;
       } else if (requiresPayment) {
         toast.success(t("Booked — pay at the clinic", "تم الحجز — الدفع في العيادة"));
@@ -321,17 +344,14 @@ export function BookingCard({
     (appointmentType === "online" && (!isVerified || !telemedicineEnabled));
 
   // Will this booking redirect to online payment (vs. confirm to pay at clinic)?
-  const willCheckout =
-    requiresPayment && (appointmentType === "online" || payMethod === "online");
+  const willCheckout = requiresPayment && (appointmentType === "online" || payMethod === "online");
 
   return (
     <div className="bg-card border border-border rounded-2xl p-6 lg:sticky lg:top-4">
       <div className="text-center pb-4 border-b border-border">
         <p className="text-sm text-muted-foreground">{t("Consultation fee", "رسوم الكشف")}</p>
         <p className="text-2xl font-bold text-primary mt-1">
-          {consultationFee === 0
-            ? t("Free", "مجاناً")
-            : formatPrice(consultationFee, currency)}
+          {consultationFee === 0 ? t("Free", "مجاناً") : formatPrice(consultationFee, currency)}
         </p>
         {requiresPayment && (
           <p className="text-[11px] text-muted-foreground mt-1">
@@ -343,7 +363,9 @@ export function BookingCard({
             <span className="font-semibold text-foreground">
               {t("Booking type", "نوع الحجز")}:{" "}
             </span>
-            <span className={pricing.visitType === "follow_up" ? "text-emerald-600" : "text-primary"}>
+            <span
+              className={pricing.visitType === "follow_up" ? "text-emerald-600" : "text-primary"}
+            >
               {pricing.visitType === "follow_up"
                 ? t("Consultation", "استشارة")
                 : t("First visit", "كشف أول")}
@@ -359,7 +381,12 @@ export function BookingCard({
             {t("Login to book an appointment", "سجّل الدخول لحجز موعد")}
           </p>
           <button
-            onClick={() => navigate({ to: "/login" })}
+            onClick={() =>
+              navigate({
+                to: "/login",
+                search: { redirect: `${window.location.pathname}${window.location.search}#book` },
+              })
+            }
             className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90"
           >
             {t("Login", "تسجيل الدخول")}
@@ -456,9 +483,7 @@ export function BookingCard({
                       }`}
                     >
                       <div className="font-medium">{c.name}</div>
-                      {c.city && (
-                        <div className="text-xs text-muted-foreground">{c.city}</div>
-                      )}
+                      {c.city && <div className="text-xs text-muted-foreground">{c.city}</div>}
                     </button>
                   ))}
                 </div>
@@ -527,7 +552,10 @@ export function BookingCard({
                 </p>
                 {!(clinics && clinics.length === 0) && (
                   <p className="mt-1 text-xs font-medium text-primary">
-                    {t("Pick another day from the strip above ↑", "اختر يومًا آخر من الشريط بالأعلى ↑")}
+                    {t(
+                      "Pick another day from the strip above ↑",
+                      "اختر يومًا آخر من الشريط بالأعلى ↑",
+                    )}
                   </p>
                 )}
               </div>
@@ -742,29 +770,26 @@ export function BookingCard({
             {bookMutation.isPending || isRedirecting ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {isRedirecting
-                  ? t("Redirecting…", "جارٍ التحويل…")
-                  : t("Booking…", "جارٍ الحجز…")}
+                {isRedirecting ? t("Redirecting…", "جارٍ التحويل…") : t("Booking…", "جارٍ الحجز…")}
               </span>
             ) : selectedSlot ? (
-              willCheckout
-                ? t("Reserve & pay", `احجز وادفع — ${formatTime(selectedSlot)}`)
-                : t("Reserve my spot", `احجز موعدي — ${formatTime(selectedSlot)}`)
+              willCheckout ? (
+                t("Reserve & pay", `احجز وادفع — ${formatTime(selectedSlot)}`)
+              ) : (
+                t("Reserve my spot", `احجز موعدي — ${formatTime(selectedSlot)}`)
+              )
             ) : (
               t("Pick a time above", "اختر وقتًا بالأعلى")
             )}
           </button>
 
           {requiresPayment && (
-            <a
-              href={`/pay?amount=${Math.round(consultationFee)}`}
-              className="mt-2 block text-center text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-            >
+            <p className="mt-2 text-center text-xs text-muted-foreground">
               {t(
-                "Or pay manually (InstaPay / Vodafone Cash / Bank)",
-                "أو ادفع يدوياً (InstaPay / فودافون كاش / حساب بنكي)",
+                "After booking you can pay online or by transfer (InstaPay / Vodafone Cash / Bank) from your appointments.",
+                "بعد الحجز يمكنك الدفع أونلاين أو بالتحويل (InstaPay / فودافون كاش / حساب بنكي) من صفحة مواعيدك.",
               )}
-            </a>
+            </p>
           )}
         </div>
       )}
