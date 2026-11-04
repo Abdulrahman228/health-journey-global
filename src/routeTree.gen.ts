@@ -108,6 +108,7 @@ import { Route as DSlugContactDotvcfRouteImport } from './routes/d.$slug.contact
 import { Route as ApiPublicWebVitalsRouteImport } from './routes/api/public/web-vitals'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
+import { Route as ApiPublicAuthSignupRouteImport } from './routes/api/public/auth/signup'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -612,6 +613,11 @@ const ApiPublicPaymentsWebhookRoute =
     path: '/api/public/payments/webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicAuthSignupRoute = ApiPublicAuthSignupRouteImport.update({
+  id: '/api/public/auth/signup',
+  path: '/api/public/auth/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -711,6 +717,7 @@ export interface FileRoutesByFullPath {
   '/feed/post/$id': typeof FeedPostIdRoute
   '/rx/verify/$number': typeof RxVerifyNumberRoute
   '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
+  '/api/public/auth/signup': typeof ApiPublicAuthSignupRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
@@ -812,6 +819,7 @@ export interface FileRoutesByTo {
   '/feed/post/$id': typeof FeedPostIdRoute
   '/rx/verify/$number': typeof RxVerifyNumberRoute
   '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
+  '/api/public/auth/signup': typeof ApiPublicAuthSignupRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
@@ -914,6 +922,7 @@ export interface FileRoutesById {
   '/feed/post/$id': typeof FeedPostIdRoute
   '/rx/verify/$number': typeof RxVerifyNumberRoute
   '/specialty/$slug/$city': typeof SpecialtySlugCityRoute
+  '/api/public/auth/signup': typeof ApiPublicAuthSignupRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
@@ -1017,6 +1026,7 @@ export interface FileRouteTypes {
     | '/feed/post/$id'
     | '/rx/verify/$number'
     | '/specialty/$slug/$city'
+    | '/api/public/auth/signup'
     | '/api/public/payments/webhook'
     | '/api/public/whatsapp/webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -1118,6 +1128,7 @@ export interface FileRouteTypes {
     | '/feed/post/$id'
     | '/rx/verify/$number'
     | '/specialty/$slug/$city'
+    | '/api/public/auth/signup'
     | '/api/public/payments/webhook'
     | '/api/public/whatsapp/webhook'
   id:
@@ -1219,6 +1230,7 @@ export interface FileRouteTypes {
     | '/feed/post/$id'
     | '/rx/verify/$number'
     | '/specialty/$slug/$city'
+    | '/api/public/auth/signup'
     | '/api/public/payments/webhook'
     | '/api/public/whatsapp/webhook'
   fileRoutesById: FileRoutesById
@@ -1301,6 +1313,7 @@ export interface RootRouteChildren {
   ArticlesIndexRoute: typeof ArticlesIndexRoute
   ApiPublicWebVitalsRoute: typeof ApiPublicWebVitalsRoute
   RxVerifyNumberRoute: typeof RxVerifyNumberRoute
+  ApiPublicAuthSignupRoute: typeof ApiPublicAuthSignupRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
 }
@@ -2000,6 +2013,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPaymentsWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/auth/signup': {
+      id: '/api/public/auth/signup'
+      path: '/api/public/auth/signup'
+      fullPath: '/api/public/auth/signup'
+      preLoaderRoute: typeof ApiPublicAuthSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -2166,6 +2186,7 @@ const rootRouteChildren: RootRouteChildren = {
   ArticlesIndexRoute: ArticlesIndexRoute,
   ApiPublicWebVitalsRoute: ApiPublicWebVitalsRoute,
   RxVerifyNumberRoute: RxVerifyNumberRoute,
+  ApiPublicAuthSignupRoute: ApiPublicAuthSignupRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
 }
