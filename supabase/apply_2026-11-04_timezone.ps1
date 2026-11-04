@@ -2,7 +2,7 @@
 
 # Tebana - booking times in the clinic's timezone + honest doctor defaults.
 
-# Applies ONE migration: supabase\migrations\20261104120000_booking_timezone_and_doctor_defaults.sql
+# Applies TWO migrations: 20261104120000_booking_timezone_and_doctor_defaults.sql + 20261104130000_identity_fixes_private_feedback_calls.sql
 
 # (dry-run on production inside BEGIN..ROLLBACK passed on 2026-11-04).
 
