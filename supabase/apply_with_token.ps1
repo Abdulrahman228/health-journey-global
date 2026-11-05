@@ -1,17 +1,18 @@
 ﻿$Host.UI.RawUI.WindowTitle = "Tebana - apply DB updates"
 # ============================================================================
-# Tebana - apply the pending database updates in ONE step.
-# The token is used only inside this window (env var), never stored on disk,
-# so it cannot be lost between "connect" and "apply".
+# Tebana - apply pending database updates in ONE step.
+# The token is used only inside this window (env var), never stored on disk.
+# Each migration is first DRY-RUN inside BEGIN..ROLLBACK; it is applied only
+# if the dry run succeeds.
 #
 #   powershell -ExecutionPolicy Bypass -File "C:\lovable\health-journey-global\supabase\apply_with_token.ps1"
 # ============================================================================
 $ErrorActionPreference = "Continue"
 $ref = "wqrrwvaxovrjjiilqkmt"
 Set-Location "C:\lovable\health-journey-global"
+# Already applied on 2026-11-05: 20261104120000_booking_timezone..., 20261104130000_identity_fixes...
 $migrations = @(
-  "supabase\migrations\20261104120000_booking_timezone_and_doctor_defaults.sql",
-  "supabase\migrations\20261104130000_identity_fixes_private_feedback_calls.sql"
+  "supabase\migrations\20261104140000_visit_status_rules.sql"
 )
 
 Write-Host ""
@@ -21,6 +22,11 @@ Write-Host "2) Copy the token shown once (starts with sbp_, about 44 characters)
 Write-Host "3) Paste it below (right-click pastes). Keep the token until this finishes."
 Write-Host ""
 Start-Process "https://supabase.com/dashboard/account/tokens"
+
+function Run-Query([string]$file) {
+  $out = & cmd /c "npx -y supabase@3.0.0 db query --remote=$ref -f `"$file`" --yes 2>&1" | Out-String
+  return @{ ok = ($LASTEXITCODE -eq 0 -and $out -notmatch '"_tag":"Error"'); out = $out }
+}
 
 for ($try = 1; $try -le 5; $try++) {
   $sec = Read-Host "Paste token here (input is hidden)" -AsSecureString
@@ -37,10 +43,10 @@ for ($try = 1; $try -le 5; $try++) {
 
   $probe = Join-Path $env:TEMP "tebana_write_probe.sql"
   [IO.File]::WriteAllText($probe, "select 'write-ok' as probe;", (New-Object System.Text.UTF8Encoding($false)))
-  $out = & cmd /c "npx -y supabase@3.0.0 db query --remote=$ref -f `"$probe`" --yes 2>&1" | Out-String
+  $r = Run-Query $probe
   Remove-Item $probe -ErrorAction SilentlyContinue
-  if ($out -notmatch "write-ok") {
-    $msg = ($out -split "`n" | Select-String 'message' | Select-Object -First 1)
+  if ($r.out -notmatch "write-ok") {
+    $msg = ($r.out -split "`n" | Select-String 'message' | Select-Object -First 1)
     Write-Host "This token cannot write to the database: $msg" -ForegroundColor Yellow
     Write-Host "Use 'Create legacy token' and paste the new sbp_ value." -ForegroundColor Yellow
     continue
@@ -49,9 +55,20 @@ for ($try = 1; $try -le 5; $try++) {
 
   $failed = $false
   foreach ($file in $migrations) {
-    Write-Host "`n>>> SQL: $file" -ForegroundColor Cyan
-    & cmd /c "npx -y supabase@3.0.0 db query --remote=$ref -f `"$file`" --yes 2>&1"
-    if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: $file" -ForegroundColor Red; $failed = $true; break }
+    Write-Host "`n>>> DRY RUN (rolled back): $file" -ForegroundColor Cyan
+    $body = (Get-Content $file -Raw -Encoding UTF8) -replace "(?m)^NOTIFY pgrst.*$", ""
+    $dry = Join-Path $env:TEMP "tebana_dryrun.sql"
+    [IO.File]::WriteAllText($dry, "BEGIN;`n" + $body + "`nROLLBACK;`n", (New-Object System.Text.UTF8Encoding($false)))
+    $d = Run-Query $dry
+    Remove-Item $dry -ErrorAction SilentlyContinue
+    if (-not $d.ok) {
+      Write-Host $d.out
+      Write-Host "DRY RUN FAILED - nothing was changed: $file" -ForegroundColor Red
+      $failed = $true; break
+    }
+    Write-Host "Dry run OK. Applying for real..." -ForegroundColor Cyan
+    $a = Run-Query $file
+    if (-not $a.ok) { Write-Host $a.out; Write-Host "FAILED: $file" -ForegroundColor Red; $failed = $true; break }
     Write-Host "OK: $file" -ForegroundColor Green
   }
   Remove-Item Env:SUPABASE_ACCESS_TOKEN -ErrorAction SilentlyContinue
