@@ -16,7 +16,9 @@ $probe = Join-Path $env:TEMP "tebana_write_probe.sql"
 for ($try = 1; $try -le 6; $try++) {
   $sec = Read-Host "Paste token here (input is hidden)" -AsSecureString
   $tok = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
-  $tok = ($tok -replace '\s', '')
+  # Keep only visible ASCII: an RTL (Arabic) browser page adds invisible
+  # direction marks (U+200E/U+200F) around copied text.
+  $tok = ($tok -replace '[^!-~]', '')
   if ($tok -notmatch '^sbp_\S+$') {
     $kind = "unknown"
     if ($tok.StartsWith("eyJ")) { $kind = "a JWT API key (anon / service_role) from Project Settings -> API" }

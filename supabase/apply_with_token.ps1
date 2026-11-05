@@ -25,9 +25,12 @@ Start-Process "https://supabase.com/dashboard/account/tokens"
 for ($try = 1; $try -le 5; $try++) {
   $sec = Read-Host "Paste token here (input is hidden)" -AsSecureString
   $tok = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
-  $tok = ($tok -replace '\s', '')
+  # Keep only visible ASCII: an RTL (Arabic) browser page adds invisible
+  # direction marks (U+200E/U+200F) around copied text.
+  $tok = ($tok -replace '[^!-~]', '')
   if ($tok -notmatch '^sbp_\S+$') {
-    Write-Host ("Not an access token (length {0}). It must start with sbp_." -f $tok.Length) -ForegroundColor Yellow
+    $head = if ($tok.Length -ge 4) { $tok.Substring(0, 4) } else { $tok }
+    Write-Host ("Not an access token (length {0}, starts with '{1}'). It must start with sbp_." -f $tok.Length, $head) -ForegroundColor Yellow
     continue
   }
   $env:SUPABASE_ACCESS_TOKEN = $tok
