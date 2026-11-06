@@ -27,10 +27,16 @@ const filterTabs: { key: PostType | "all"; labelEn: string; labelAr: string; ico
 
 function FeedPage() {
   const { t, language } = useLanguage();
-  const { user, isAuthenticated, role } = useAuth();
+  const { user, roles } = useAuth();
+  // Posting is doctors-only (RLS "Create posts with role rules" requires a
+  // doctor_details row) — admins without one would only hit an RLS error.
+  const canPost = roles.includes("doctor");
+  const userId = user?.id ?? null;
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [reactedIds, setReactedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [type, setType] = useState<PostType | "all">("all");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -38,17 +44,22 @@ function FeedPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     listPosts({ type, search: search || undefined })
       .then(async (data) => {
         if (cancelled) return;
         setPosts(data);
-        if (user) {
-          const reacted = await getUserReactions(user.id, data.map((p) => p.id));
+        if (userId) {
+          const reacted = await getUserReactions(userId, data.map((p) => p.id));
           if (!cancelled) setReactedIds(reacted);
         }
       })
-      .catch(() => {
-        if (!cancelled) setPosts([]);
+      .catch((e) => {
+        console.error("[feed] listPosts failed:", e);
+        if (!cancelled) {
+          setPosts([]);
+          setLoadError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -56,7 +67,7 @@ function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [type, search, user]);
+  }, [type, search, userId, reloadKey]);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
@@ -71,7 +82,7 @@ function FeedPage() {
               )}
             </p>
           </div>
-          {(role === "doctor" || role === "admin") && (
+          {canPost && (
             <Link
               to="/feed/new"
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -128,10 +139,27 @@ function FeedPage() {
               <div key={i} className="h-40 animate-pulse rounded-2xl bg-muted" />
             ))}
           </div>
+        ) : loadError ? (
+          <div className="rounded-2xl border border-dashed border-destructive/40 p-12 text-center">
+            <p className="text-destructive">
+              {t("Couldn't load posts. Check your connection.", "تعذّر تحميل البوستات. تحقّق من الاتصال.")}
+            </p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-accent"
+            >
+              {t("Try again", "حاول مرة أخرى")}
+            </button>
+          </div>
         ) : posts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-12 text-center">
-            <p className="text-muted-foreground">{t("No posts yet. Be the first!", "لا توجد بوستات. كن أول من ينشر!")}</p>
-            {isAuthenticated && (
+            <p className="text-muted-foreground">
+              {canPost
+                ? t("No posts yet. Be the first!", "لا توجد بوستات. كن أول من ينشر!")
+                : t("No posts yet.", "لا توجد بوستات بعد.")}
+            </p>
+            {canPost && (
               <Link
                 to="/feed/new"
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"

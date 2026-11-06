@@ -87,13 +87,36 @@ async function getMyProfileId(userId: string | null): Promise<string | null> {
 
 async function isAdmin(userId: string | null): Promise<boolean> {
   if (!userId) return false;
+  // A user may hold both admin and super_admin → read rows, never .maybeSingle().
   const { data } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  return Boolean(data);
+    .in("role", ["admin", "super_admin"])
+    .limit(1);
+  return (data ?? []).length > 0;
+}
+
+/**
+ * Shared care (Phase D): a doctor LINKED to the patient (doctor_patients) may
+ * follow the whole case — every doctor's visits — once the patient consented.
+ */
+async function hasSharedCare(doctorProfileId: string, patientProfileId: string): Promise<boolean> {
+  const [{ data: dpLink }, { data: pt }] = await Promise.all([
+    supabaseAdmin
+      .from("doctor_patients")
+      .select("id")
+      .eq("doctor_profile_id", doctorProfileId)
+      .eq("patient_profile_id", patientProfileId)
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("profiles")
+      .select("shared_care_consent")
+      .eq("id", patientProfileId)
+      .maybeSingle(),
+  ]);
+  return Boolean(dpLink && pt?.shared_care_consent);
 }
 
 function mapRecord(row: Record<string, unknown>, includePrivate: boolean): MedicalRecord {
@@ -124,49 +147,37 @@ export const getPatientHistoryForDoctor = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((x: unknown) => z.object({ patientProfileId: z.string().uuid() }).parse(x))
   .handler(async ({ data, context }) => {
-    // Caller must be admin OR a doctor who has a medical_record with this patient.
+    // Visibility (mirrors RLS "doctor reads own authored medical_records" + the
+    // shared-care consent model):
+    //   • admin / the patient themself → every record;
+    //   • a doctor LINKED to the patient (doctor_patients) whose patient
+    //     consented to shared care → every record (cross-doctor);
+    //   • any other doctor with their own record → ONLY the records they wrote.
+    // `private_notes` ("visible to you only") are returned only to their author
+    // (and admins) — never to the patient or to a co-treating doctor.
     const myProfileId = await getMyProfileId(context.userId);
     const admin = await isAdmin(context.userId);
-    if (!admin) {
+    let onlyAuthoredBy: string | null = null;
+    if (!admin && myProfileId !== data.patientProfileId) {
       if (!myProfileId) return [];
-      const { data: link } = await supabaseAdmin
-        .from("medical_records")
-        .select("id")
-        .eq("patient_profile_id", data.patientProfileId)
-        .eq("doctor_profile_id", myProfileId)
-        .limit(1)
-        .maybeSingle();
-      if (!link && myProfileId !== data.patientProfileId) {
-        // Shared care (Phase D): a doctor LINKED to this patient may follow the
-        // case even without a prior record — but only if the patient consented.
-        const [{ data: dpLink }, { data: pt }] = await Promise.all([
-          supabaseAdmin
-            .from("doctor_patients")
-            .select("id")
-            .eq("doctor_profile_id", myProfileId)
-            .eq("patient_profile_id", data.patientProfileId)
-            .limit(1)
-            .maybeSingle(),
-          supabaseAdmin
-            .from("profiles")
-            .select("shared_care_consent")
-            .eq("id", data.patientProfileId)
-            .maybeSingle(),
-        ]);
-        if (!(dpLink && pt?.shared_care_consent)) return [];
+      if (!(await hasSharedCare(myProfileId, data.patientProfileId))) {
+        onlyAuthoredBy = myProfileId; // → [] when this doctor wrote nothing yet
       }
     }
 
-    const { data: rows, error } = await supabaseAdmin
+    let q = supabaseAdmin
       .from("medical_records")
       .select(
         "id, patient_profile_id, doctor_profile_id, appointment_id, visit_type, chief_complaint, history_present_illness, physical_examination, diagnosis, icd10_codes, vitals, treatment_plan, recommended_tests, follow_up_days, private_notes, visit_date",
       )
-      .eq("patient_profile_id", data.patientProfileId)
-      .order("visit_date", { ascending: false })
-      .limit(200);
-    if (error || !rows) return [];
-    return rows.map((r) => mapRecord(r as Record<string, unknown>, true));
+      .eq("patient_profile_id", data.patientProfileId);
+    if (onlyAuthoredBy) q = q.eq("doctor_profile_id", onlyAuthoredBy);
+    const { data: rows, error } = await q.order("visit_date", { ascending: false }).limit(200);
+    if (error) throw new Error("تعذّر تحميل السجل الطبي");
+    if (!rows) return [];
+    return rows.map((r) =>
+      mapRecord(r as Record<string, unknown>, admin || r.doctor_profile_id === myProfileId),
+    );
   });
 
 // ============================================================
@@ -279,13 +290,25 @@ export const searchMyPatients = createServerFn({ method: "GET" })
     const derivedIds = Array.from(lastSeen.keys());
 
     // Include doctor-managed (offline) patients — added/imported by this doctor,
-    // even before they have any records or appointments.
-    const { data: managed } = await supabaseAdmin
-      .from("profiles")
-      .select("id")
-      .eq("managed_by_doctor", doctorProfileId)
-      .limit(2000);
-    const managedIds = (managed ?? []).map((m) => m.id as string);
+    // even before they have any records or appointments — AND patients linked
+    // through doctor_patients (a phone-dedup on add/import links this doctor to
+    // a profile another doctor created, so managed_by_doctor is someone else).
+    const [{ data: managed }, { data: links }] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("managed_by_doctor", doctorProfileId)
+        .limit(2000),
+      supabaseAdmin
+        .from("doctor_patients")
+        .select("patient_profile_id")
+        .eq("doctor_profile_id", doctorProfileId)
+        .limit(2000),
+    ]);
+    const managedIds = [
+      ...(managed ?? []).map((m) => m.id),
+      ...(links ?? []).map((l) => l.patient_profile_id),
+    ];
 
     const allIds = Array.from(new Set([...derivedIds, ...managedIds]));
     if (allIds.length === 0) return [];
@@ -332,8 +355,8 @@ const ManagedPatientSchema = z.object({
 async function cancelQueuedWelcome(patientIds: string[]): Promise<void> {
   if (patientIds.length === 0) return;
   await supabaseAdmin
-    .from("outbox_messages" as never)
-    .update({ status: "skipped", error: "doctor_declined_notification" } as never)
+    .from("outbox_messages")
+    .update({ status: "skipped", error: "doctor_declined_notification" })
     .in("patient_profile_id", patientIds)
     .eq("template_key", "patient_welcome")
     .eq("status", "queued");
@@ -342,7 +365,7 @@ async function cancelQueuedWelcome(patientIds: string[]): Promise<void> {
 async function countQueuedWelcome(patientIds: string[], since: string): Promise<number> {
   if (patientIds.length === 0) return 0;
   const { count } = await supabaseAdmin
-    .from("outbox_messages" as never)
+    .from("outbox_messages")
     .select("id", { count: "exact", head: true })
     .in("patient_profile_id", patientIds)
     .eq("template_key", "patient_welcome")
@@ -366,7 +389,8 @@ export const addManagedPatient = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertSelf(context.userId, data.userId);
     const doctorProfileId = await getMyProfileId(data.userId);
-    if (!doctorProfileId) throw new Error("Doctor profile not found");
+    if (!doctorProfileId) throw new Error("لم يتم العثور على ملف الطبيب");
+    if (!(await getDoctorForUser(data.userId))) throw new Error("هذه الميزة للأطباء فقط");
 
     const startedAt = new Date().toISOString();
     const phoneE164 = normalizePhone(data.phone);
@@ -379,7 +403,7 @@ export const addManagedPatient = createServerFn({ method: "POST" })
       const { data: existing } = await supabaseAdmin
         .from("profiles")
         .select("id")
-        .eq("phone_e164" as never, phoneE164)
+        .eq("phone_e164", phoneE164)
         .is("user_id", null)
         .order("created_at", { ascending: true })
         .limit(1)
@@ -399,25 +423,30 @@ export const addManagedPatient = createServerFn({ method: "POST" })
         })
         .select("id")
         .single();
-      if (error) throw new Error(error.message);
+      if (error) throw new Error("تعذّرت إضافة المريض: " + error.message);
       patientId = prof.id as string;
 
       const dob = data.dateOfBirth.trim();
       if (dob) {
-        await supabaseAdmin
+        // Best effort: the patient exists even if the birth date can't be saved.
+        const { error: dobErr } = await supabaseAdmin
           .from("patient_details")
           .insert({ profile_id: patientId, date_of_birth: dob });
+        if (dobErr) console.warn("[addManagedPatient] date_of_birth not saved:", dobErr.message);
       }
     }
 
     // Link this doctor to the patient (idempotent). The INSERT trigger queues
     // the welcome message; a no-op upsert (already linked) queues nothing.
-    await supabaseAdmin
+    // For a phone-dedup hit this link is the ONLY thing that ties the patient
+    // to this doctor, so a failure must surface.
+    const { error: linkErr } = await supabaseAdmin
       .from("doctor_patients")
       .upsert(
         { doctor_profile_id: doctorProfileId, patient_profile_id: patientId },
         { onConflict: "doctor_profile_id,patient_profile_id", ignoreDuplicates: true },
       );
+    if (linkErr) throw new Error("تعذّر ربط المريض بحسابك: " + linkErr.message);
 
     let queued = 0;
     if (data.notify) {
@@ -446,7 +475,8 @@ export const importManagedPatients = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertSelf(context.userId, data.userId);
     const doctorProfileId = await getMyProfileId(data.userId);
-    if (!doctorProfileId) throw new Error("Doctor profile not found");
+    if (!doctorProfileId) throw new Error("لم يتم العثور على ملف الطبيب");
+    if (!(await getDoctorForUser(data.userId))) throw new Error("هذه الميزة للأطباء فقط");
 
     const startedAt = new Date().toISOString();
     const cleaned = data.patients
@@ -478,11 +508,13 @@ export const importManagedPatients = createServerFn({ method: "POST" })
       const { data: found } = await supabaseAdmin
         .from("profiles")
         .select("id, phone_e164")
-        .in("phone_e164" as never, slice)
+        .in("phone_e164", slice)
         .is("user_id", null)
         .order("created_at", { ascending: true });
-      for (const f of (found ?? []) as unknown as Array<{ id: string; phone_e164: string }>) {
-        if (!existingByPhone.has(f.phone_e164)) existingByPhone.set(f.phone_e164, f.id);
+      for (const f of found ?? []) {
+        if (f.phone_e164 && !existingByPhone.has(f.phone_e164)) {
+          existingByPhone.set(f.phone_e164, f.id);
+        }
       }
     }
 
@@ -506,19 +538,20 @@ export const importManagedPatients = createServerFn({ method: "POST" })
         .from("profiles")
         .insert(toInsert.slice(i, i + 200))
         .select("id");
-      if (error) throw new Error(error.message);
+      if (error) throw new Error("تعذّر استيراد المرضى: " + error.message);
       inserted += rows?.length ?? 0;
       for (const r of rows ?? []) insertedIds.push(r.id as string);
     }
 
     if (toLink.length > 0) {
-      await supabaseAdmin.from("doctor_patients").upsert(
+      const { error: linkErr } = await supabaseAdmin.from("doctor_patients").upsert(
         toLink.map((patient_profile_id) => ({
           doctor_profile_id: doctorProfileId,
           patient_profile_id,
         })),
         { onConflict: "doctor_profile_id,patient_profile_id", ignoreDuplicates: true },
       );
+      if (linkErr) throw new Error("تعذّر ربط المرضى الموجودين مسبقاً: " + linkErr.message);
     }
 
     const queued = await countQueuedWelcome([...insertedIds, ...toLink], startedAt);
@@ -591,6 +624,19 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
     if (!(await isDoctorLinkedToPatient(doctorProfileId, data.patientProfileId))) {
       return { ok: false as const, error: "not_your_patient" };
     }
+    // The appointment id comes from the URL — it must be THIS doctor's
+    // appointment with THIS patient, otherwise the service-role update below
+    // could complete (and post revenue for) someone else's booking.
+    if (data.appointmentId) {
+      const { data: appt } = await supabaseAdmin
+        .from("appointments")
+        .select("id")
+        .eq("id", data.appointmentId)
+        .eq("doctor_id", me.doctorDetailsId)
+        .eq("patient_id", data.patientProfileId)
+        .maybeSingle();
+      if (!appt) return { ok: false as const, error: "appointment_mismatch" };
+    }
     // Insert medical record
     const { data: rec, error: recErr } = await supabaseAdmin
       .from("medical_records")
@@ -618,13 +664,15 @@ export const createMedicalRecord = createServerFn({ method: "POST" })
 
     // Writing the visit note completes the consultation: mark the linked
     // appointment 'completed' so the accounting trigger posts revenue (no
-    // separate "close visit" step to forget). Idempotent + best-effort.
+    // separate "close visit" step to forget). Idempotent + best-effort; only an
+    // open appointment moves (never revive a cancelled / no-show booking).
     if (data.appointmentId) {
-      await supabaseAdmin
+      const { error: doneErr } = await supabaseAdmin
         .from("appointments")
-        .update({ status: "completed" })
+        .update({ status: "completed", ended_at: new Date().toISOString() })
         .eq("id", data.appointmentId)
-        .neq("status", "completed");
+        .in("status", ["pending", "confirmed", "waiting", "called", "in_progress"]);
+      if (doneErr) console.warn("[createMedicalRecord] appointment not completed:", doneErr.message);
     }
 
     let prescriptionId: string | null = null;
@@ -701,7 +749,10 @@ export const getPrescriptionsForRecord = createServerFn({ method: "GET" })
       myProfileId !== (rec.patient_profile_id as string) &&
       myProfileId !== (rec.doctor_profile_id as string)
     ) {
-      return [];
+      // A co-treating doctor sees another doctor's visit only under shared care
+      // (same rule as getPatientHistoryForDoctor) — then its prescriptions too.
+      if (!myProfileId) return [];
+      if (!(await hasSharedCare(myProfileId, rec.patient_profile_id))) return [];
     }
 
     const { data: rxs, error } = await supabaseAdmin
@@ -709,7 +760,8 @@ export const getPrescriptionsForRecord = createServerFn({ method: "GET" })
       .select("id, medical_record_id, prescription_number, notes, valid_until, status, created_at")
       .eq("medical_record_id", data.medicalRecordId)
       .order("created_at", { ascending: false });
-    if (error || !rxs || rxs.length === 0) return [];
+    if (error) throw new Error("تعذّر تحميل الوصفات");
+    if (!rxs || rxs.length === 0) return [];
 
     const ids = rxs.map((r) => r.id as string);
     const { data: items } = await supabaseAdmin
@@ -952,7 +1004,9 @@ export const getPrescriptionView = createServerFn({ method: "GET" })
       .maybeSingle();
     if (!rec) return null;
 
-    // 2. Authorize: caller must be patient OR doctor OR admin
+    // 2. Authorize: caller must be patient OR prescribing doctor OR admin —
+    //    or a co-treating doctor under shared care (same rule as the history,
+    //    whose prescription list links here).
     const myProfileId = await getMyProfileId(data.userId);
     const admin = await isAdmin(data.userId);
     if (
@@ -960,7 +1014,8 @@ export const getPrescriptionView = createServerFn({ method: "GET" })
       myProfileId !== (rec.patient_profile_id as string) &&
       myProfileId !== (rec.doctor_profile_id as string)
     ) {
-      return null;
+      if (!myProfileId) return null;
+      if (!(await hasSharedCare(myProfileId, rec.patient_profile_id))) return null;
     }
 
     // 3. Items

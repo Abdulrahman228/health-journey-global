@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -72,6 +72,8 @@ function buildDoctorDescription(d: DoctorSeoData | null): string {
 export const Route = createFileRoute("/doctor/$id")({
   loader: async ({ params }) => {
     const seo = await loadDoctorForSeo({ data: params.id });
+    // Unknown id → real 404 instead of a 200 "not found" page (soft-404 for crawlers).
+    if (!seo) throw notFound();
     return { seo };
   },
   head: ({ params, loaderData }) => {
@@ -79,7 +81,9 @@ export const Route = createFileRoute("/doctor/$id")({
     const title = buildDoctorTitle(d);
     const description = buildDoctorDescription(d);
     const image = d?.avatarUrl ?? undefined;
-    const path = `/doctor/${params.id}`;
+    // Same doctor is also served at /d/{slug} when public — canonicalize to it
+    // so the two URLs don't compete as duplicate content.
+    const path = d?.publicPath ?? `/doctor/${params.id}`;
 
     const scripts: Array<{ type: string; children: string }> = [];
     if (d && d.name) {
@@ -189,7 +193,7 @@ export const Route = createFileRoute("/doctor/$id")({
 function DoctorDetailPage() {
   const { id } = Route.useParams();
   const { t } = useLanguage();
-  const { user, profile } = useAuth();
+  const { user, profile, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { formatPrice } = useCurrency();
@@ -221,9 +225,10 @@ function DoctorDetailPage() {
   const { data: reviews = [] } = useQuery({
     queryKey: ["reviews", id],
     queryFn: async () => {
+      // Only what the page renders — not moderation notes / moderator ids.
       const { data, error } = await supabase
         .from("reviews")
-        .select("*")
+        .select("id, rating, comment, doctor_response, created_at")
         .eq("doctor_id", id)
         .eq("status", "approved")
         .eq("is_published_by_doctor", true)
@@ -235,14 +240,18 @@ function DoctorDetailPage() {
 
   // Track profile view (analytics) — fire-and-forget, once per mount.
   // Suppressed for the doctor's own profile so they don't inflate stats.
+  // Waits for both the doctor row and the auth state, otherwise each of them
+  // arriving re-ran the effect and every visit was counted two or three times.
+  const doctorProfileId = doctor?.profile_id;
+  const doctorLoaded = doctor !== undefined;
   useEffect(() => {
-    if (!id) return;
-    if (doctor?.profile_id && profile?.id === doctor.profile_id) return;
+    if (!id || !doctorLoaded || authLoading) return;
+    if (doctorProfileId && profile?.id === doctorProfileId) return;
     supabase.rpc("track_doctor_view", { _doctor_details_id: id }).then(
       () => {},
       () => {},
     );
-  }, [id, doctor?.profile_id, profile?.id]);
+  }, [id, doctorLoaded, authLoading, doctorProfileId, profile?.id]);
 
   // Patient-aware fee preview (free follow-up vs new visit)
   const { data: feeDecision } = useQuery({
@@ -259,7 +268,7 @@ function DoctorDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("doctor_active_tier", { doctor_details_id: id });
       if (error) return "free";
-      return (data as string) ?? "free";
+      return data ?? "free";
     },
   });
   const isGold = tier === "gold";
@@ -269,25 +278,17 @@ function DoctorDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clinics")
-        .select("*, clinic_schedules(*)")
+        .select(
+          "id, name, address, city, phone, lat, lng, clinic_schedules(id, day_of_week, start_time, end_time, is_active)",
+        )
         .eq("doctor_id", id)
         .order("is_primary", { ascending: false });
       if (error) throw error;
-      return data as Array<{
-        id: string;
-        name: string;
-        address: string | null;
-        city: string | null;
-        phone: string | null;
-        lat: number | null;
-        lng: number | null;
-        clinic_schedules: Array<{
-          id: string;
-          day_of_week: number;
-          start_time: string;
-          end_time: string;
-        }>;
-      }>;
+      // Hide schedules the doctor switched off.
+      return (data ?? []).map((c) => ({
+        ...c,
+        clinic_schedules: (c.clinic_schedules ?? []).filter((s) => s.is_active),
+      }));
     },
   });
 
@@ -308,8 +309,8 @@ function DoctorDetailPage() {
     ? t("Sign in to leave a review", "سجّل الدخول لكتابة تقييم")
     : eligibleAppointments.length === 0
       ? t(
-          "Only patients with a completed paid visit can review",
-          "يمكن للمرضى الذين أتمّوا زيارة مدفوعة فقط كتابة تقييم",
+          "Only patients with a completed visit can review",
+          "يمكن للمرضى الذين أتمّوا زيارة مع الطبيب فقط كتابة تقييم",
         )
       : !canReview
         ? t(
@@ -354,10 +355,16 @@ function DoctorDetailPage() {
           "يجب أن يكون الموعد مدفوعاً لكتابة تقييم",
         ),
         no_eligible_appointment: t("No eligible appointment found", "لا توجد زيارة مؤهّلة للتقييم"),
+        appointment_not_found: t("Appointment not found", "الموعد غير موجود"),
+        profile_not_found: t("Your profile was not found", "لم يتم العثور على ملفك الشخصي"),
         forbidden: t("Forbidden", "غير مسموح"),
+        Unauthorized: t("Sign in again", "انتهت الجلسة — سجّل الدخول مرة أخرى"),
         login_required: t("Sign in first", "سجّل الدخول أولاً"),
       };
-      toast.error(map[e.message] ?? e.message);
+      toast.error(
+        map[e.message] ??
+          t(`Could not submit review: ${e.message}`, "تعذّر إرسال التقييم، حاول مرة أخرى"),
+      );
     },
   });
 

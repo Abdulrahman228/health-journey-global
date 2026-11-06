@@ -26,6 +26,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({
@@ -55,7 +56,7 @@ type GrowthPoint = {
 
 type RecentDoctor = {
   id: string;
-  profile_id: string;
+  profile_id: string | null;
   specialty: string | null;
   is_verified: boolean | null;
   verification_status: string | null;
@@ -102,7 +103,6 @@ function AdminHomePage() {
         doctors,
         patients,
         todayAppointments,
-        activeSubscriptions,
         pendingDoctors,
         activeSubscriptionRows,
         planRows,
@@ -117,16 +117,15 @@ function AdminHomePage() {
           .select("id", head)
           .gte("scheduled_at", todayStart.toISOString())
           .lt("scheduled_at", todayEnd.toISOString()),
-        supabase.from("subscriptions").select("id", head).in("status", ["active", "trialing"]),
         supabase
           .from("doctor_details")
           .select("id", head)
           .or("is_verified.is.false,verification_status.eq.pending"),
         supabase
           .from("subscriptions")
-          .select("plan_code,status")
+          .select("plan_code, status, stripe_customer_id, access_status, current_period_end")
           .in("status", ["active", "trialing"]),
-        supabase.from("subscription_plans").select("code, price_cents, currency"),
+        supabase.from("subscription_plans").select("code, price_cents, currency, interval"),
         supabase
           .from("profiles")
           .select("id, created_at")
@@ -139,22 +138,53 @@ function AdminHomePage() {
           .limit(6),
       ]);
 
-      const recentProfileIds = (recentRows.data ?? []).map((row) => row.profile_id);
+      const recentProfileIds = (recentRows.data ?? [])
+        .map((row) => row.profile_id)
+        .filter((id): id is string => Boolean(id));
       const { data: recentProfiles } = recentProfileIds.length
         ? await supabase.from("profiles").select("id, full_name, city").in("id", recentProfileIds)
         : { data: [] };
 
       if (cancelled) return;
 
+      const failed = [
+        doctors,
+        patients,
+        todayAppointments,
+        pendingDoctors,
+        activeSubscriptionRows,
+        planRows,
+        profileRows,
+        doctorRows,
+        recentRows,
+      ].find((r) => r.error);
+      if (failed?.error) {
+        toast.error("تعذّر تحميل بعض إحصائيات اللوحة: " + failed.error.message);
+      }
+
       const planByCode = new Map(
         (planRows.data ?? []).map((plan) => [
           plan.code,
-          { priceCents: Number(plan.price_cents ?? 0), currency: plan.currency ?? "EGP" },
+          {
+            priceCents: Number(plan.price_cents ?? 0),
+            currency: plan.currency ?? "EGP",
+            months: plan.interval === "year" ? 12 : 1,
+          },
         ]),
       );
-      const activeRevenueEgp = (activeSubscriptionRows.data ?? []).reduce((sum, row) => {
+      // Only subscriptions whose period has not lapsed count as active.
+      const liveSubs = (activeSubscriptionRows.data ?? []).filter(
+        (row) => !row.current_period_end || new Date(row.current_period_end) > now,
+      );
+      // Revenue = PAID subscriptions only: exclude the auto 30-day trial
+      // (stripe_customer_id 'trial'), admin comps ('comp') and manual receipts
+      // still awaiting / failing verification. Yearly plans are normalized /12.
+      const activeRevenueEgp = liveSubs.reduce((sum, row) => {
+        if (row.status !== "active") return sum;
+        if (row.stripe_customer_id === "trial" || row.stripe_customer_id === "comp") return sum;
+        if (row.access_status === "pending" || row.access_status === "rejected") return sum;
         const plan = row.plan_code ? planByCode.get(row.plan_code) : null;
-        return sum + (plan?.currency === "EGP" ? plan.priceCents / 100 : 0);
+        return sum + (plan?.currency === "EGP" ? plan.priceCents / 100 / plan.months : 0);
       }, 0);
 
       const doctorProfileIds = new Set((doctorRows.data ?? []).map((row) => row.profile_id));
@@ -174,15 +204,15 @@ function AdminHomePage() {
         doctors: doctors.count ?? 0,
         patients: patients.count ?? 0,
         todayAppointments: todayAppointments.count ?? 0,
-        activeSubscriptions: activeSubscriptions.count ?? 0,
+        activeSubscriptions: liveSubs.length,
         pendingDoctors: pendingDoctors.count ?? 0,
         activeRevenueEgp,
       });
       setGrowth(dailyGrowth);
       setRecentDoctors(
-        ((recentRows.data ?? []) as RecentDoctor[]).map((doctor) => ({
+        (recentRows.data ?? []).map((doctor): RecentDoctor => ({
           ...doctor,
-          profile: profileById.get(doctor.profile_id) ?? null,
+          profile: (doctor.profile_id ? profileById.get(doctor.profile_id) : undefined) ?? null,
         })),
       );
       setLoading(false);
@@ -254,7 +284,7 @@ function AdminHomePage() {
         <StatCard icon={Stethoscope} label="إجمالي الأطباء" value={stats.doctors} helper={`${stats.pendingDoctors} بانتظار الاعتماد`} tone="primary" />
         <StatCard icon={UserRound} label="إجمالي المرضى" value={stats.patients} helper="حسب user_roles" tone="blue" />
         <StatCard icon={CalendarDays} label="حجوزات اليوم" value={stats.todayAppointments} helper="من جدول appointments" tone="emerald" />
-        <StatCard icon={CreditCard} label="اشتراكات نشطة" value={stats.activeSubscriptions} helper={`${Math.round(stats.activeRevenueEgp).toLocaleString("ar-EG")} ج.م شهرياً`} tone="amber" />
+        <StatCard icon={CreditCard} label="اشتراكات نشطة" value={stats.activeSubscriptions} helper={`${Math.round(stats.activeRevenueEgp).toLocaleString("ar-EG")} ج.م شهرياً (مدفوعة فقط)`} tone="amber" />
       </section>
 
       <div className="mt-6">

@@ -20,19 +20,22 @@ export function createStripeClient(env: StripeEnv): Stripe {
   const connectionApiKey = getConnectionApiKey(env);
   const lovableApiKey = getEnv("LOVABLE_API_KEY");
 
+  const gatewayFetch = (input: string | URL | Request, init?: RequestInit) => {
+    const rawUrl = input instanceof Request ? input.url : input.toString();
+    const gatewayUrl = rawUrl.replace("https://api.stripe.com", GATEWAY_STRIPE_BASE);
+    return fetch(gatewayUrl, {
+      ...init,
+      headers: {
+        ...Object.fromEntries(new Headers(init?.headers).entries()),
+        "X-Connection-Api-Key": connectionApiKey,
+        "Lovable-API-Key": lovableApiKey,
+      },
+    });
+  };
+
   return new Stripe(connectionApiKey, {
     apiVersion: "2026-03-25.dahlia",
-    httpClient: Stripe.createFetchHttpClient(((url: string | URL, init?: RequestInit) => {
-      const gatewayUrl = url.toString().replace("https://api.stripe.com", GATEWAY_STRIPE_BASE);
-      return fetch(gatewayUrl, {
-        ...init,
-        headers: {
-          ...Object.fromEntries(new Headers(init?.headers).entries()),
-          "X-Connection-Api-Key": connectionApiKey,
-          "Lovable-API-Key": lovableApiKey,
-        },
-      });
-    }) as unknown as typeof fetch),
+    httpClient: Stripe.createFetchHttpClient(gatewayFetch),
   });
 }
 

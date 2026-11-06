@@ -77,6 +77,8 @@ function AnalyticsPage() {
     setLoading(true);
     getDoctorAnalytics({ data: { userId: user.id } })
       .then((r) => alive && setData(r))
+      // Rejection → data stays null → the Arabic "couldn't load" state below.
+      .catch(() => alive && setData(null))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;

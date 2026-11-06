@@ -10,14 +10,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-// The generated Supabase Database types don't yet include the `articles`
-// table — regenerate via `supabase gen types` after applying the
-// 20260528000000_articles.sql migration to refresh them. Until then we
-// cast through a relaxed shape so the server functions compile. RLS on
-// the table still enforces admin-only writes / public read of published.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const sb = supabaseAdmin as unknown as { from: (t: string) => any };
-
 export interface ArticleSeoData {
   id: string;
   slug: string;
@@ -39,7 +31,7 @@ export const loadArticleForSeo = createServerFn({ method: "GET" })
     return slug;
   })
   .handler(async ({ data: slug }): Promise<ArticleSeoData | null> => {
-    const { data, error } = await sb
+    const { data, error } = await supabaseAdmin
       .from("articles")
       .select(
         "id, slug, language, title, excerpt, body_md, cover_image, specialty_slug, author_name, reading_minutes, published_at, updated_at, is_published",
@@ -47,11 +39,12 @@ export const loadArticleForSeo = createServerFn({ method: "GET" })
       .eq("slug", slug)
       .eq("is_published", true)
       .maybeSingle();
+    if (error) console.error("[loadArticleForSeo]", error.message);
     if (error || !data) return null;
     return {
       id: data.id,
       slug: data.slug,
-      language: (data.language === "en" ? "en" : "ar") as "ar" | "en",
+      language: data.language === "en" ? "en" : "ar",
       title: data.title,
       excerpt: data.excerpt,
       bodyMd: data.body_md,
@@ -87,7 +80,7 @@ export const listPublishedArticles = createServerFn({ method: "GET" })
       .parse(raw),
   )
   .handler(async ({ data }): Promise<ArticleListItem[]> => {
-    let q = sb
+    let q = supabaseAdmin
       .from("articles")
       .select("slug, title, excerpt, cover_image, language, published_at, reading_minutes, specialty_slug")
       .eq("is_published", true)
@@ -95,14 +88,14 @@ export const listPublishedArticles = createServerFn({ method: "GET" })
       .limit(data?.limit ?? 20);
     if (data?.language) q = q.eq("language", data.language);
     if (data?.specialtySlug) q = q.eq("specialty_slug", data.specialtySlug);
-    const { data: rows } = await q;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((rows ?? []) as any[]).map((r) => ({
+    const { data: rows, error } = await q;
+    if (error) console.error("[listPublishedArticles]", error.message);
+    return (rows ?? []).map((r) => ({
       slug: r.slug,
       title: r.title,
       excerpt: r.excerpt,
       coverImage: r.cover_image,
-      language: (r.language === "en" ? "en" : "ar") as "ar" | "en",
+      language: r.language === "en" ? ("en" as const) : ("ar" as const),
       publishedAt: r.published_at,
       readingMinutes: r.reading_minutes ?? 5,
       specialtySlug: r.specialty_slug,
@@ -110,7 +103,7 @@ export const listPublishedArticles = createServerFn({ method: "GET" })
   });
 
 export const listAllArticleSlugs = createServerFn({ method: "GET" }).handler(async () => {
-  const { data } = await sb
+  const { data } = await supabaseAdmin
     .from("articles")
     .select("slug, updated_at, language")
     .eq("is_published", true);

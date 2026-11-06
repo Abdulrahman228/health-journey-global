@@ -38,8 +38,8 @@ function HowItWorksPage() {
       icon: Search,
       title: t("Search & Compare", "ابحث وقارن"),
       desc: t(
-        "Browse 2,500+ verified doctors by specialty, city, price, and rating. Read real reviews from patients.",
-        "تصفّح أكثر من 2,500 طبيب موثّق حسب التخصص والمدينة والسعر والتقييم — اقرأ مراجعات حقيقية من المرضى.",
+        "Browse verified doctors by specialty, city, price, and rating. Read real reviews from patients.",
+        "تصفّح الأطباء الموثّقين حسب التخصص والمدينة والسعر والتقييم — اقرأ مراجعات حقيقية من المرضى.",
       ),
     },
     {
@@ -97,8 +97,8 @@ function HowItWorksPage() {
       icon: Users,
       title: t("Manage Patients", "إدارة المرضى"),
       desc: t(
-        "Calendar, online queue, masked-call privacy, electronic medical records, and instant Stripe payouts.",
-        "تقويم، طابور كشف أونلاين، مكالمات بأرقام مقنّعة لحماية الخصوصية، سجلات طبية إلكترونية، وتحويلات Stripe فورية.",
+        "Calendar, online queue, masked-call privacy, electronic medical records, and wallet withdrawals to your bank.",
+        "تقويم، طابور كشف أونلاين، مكالمات بأرقام مقنّعة لحماية الخصوصية، سجلات طبية إلكترونية، وسحب أرباحك من المحفظة لحسابك البنكي.",
       ),
     },
   ];
@@ -117,7 +117,7 @@ function HowItWorksPage() {
     {
       icon: CheckCircle2,
       title: t("Secure Payments", "دفع آمن"),
-      desc: t("Stripe + bank-grade encryption", "Stripe وتشفير مصرفي"),
+      desc: t("Licensed payment gateway + encryption", "بوابة دفع مرخّصة وتشفير كامل"),
     },
     {
       icon: Star,

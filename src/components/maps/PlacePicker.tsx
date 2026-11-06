@@ -42,6 +42,7 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [lookupFailed, setLookupFailed] = useState(false);
   const sessionRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
   const debounceRef = useRef<number | null>(null);
 
@@ -66,10 +67,26 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
           input,
           sessionToken: sessionRef.current,
         });
-        setSuggestions(result as unknown as Suggestion[]);
+        setSuggestions(
+          result.flatMap((r) =>
+            r.placePrediction
+              ? [
+                  {
+                    placePrediction: {
+                      placeId: r.placePrediction.placeId,
+                      text: { text: r.placePrediction.text.text },
+                    },
+                  },
+                ]
+              : [],
+          ),
+        );
         setOpen(true);
+        setLookupFailed(false);
       } catch (e) {
         console.error("autocomplete error", e);
+        setSuggestions([]);
+        setLookupFailed(true);
       } finally {
         setLoading(false);
       }
@@ -125,6 +142,7 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
       sessionRef.current = null;
     } catch (e) {
       console.error("place details error", e);
+      setLookupFailed(true);
     } finally {
       setLoading(false);
     }
@@ -147,6 +165,11 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
       {error && (
         <p className="mt-1 text-xs text-muted-foreground">
           بحث Google غير مفعّل حاليًا — أدخِل عنوان العيادة يدويًا في الحقول بالأسفل.
+        </p>
+      )}
+      {!error && lookupFailed && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          تعذّر البحث في خرائط جوجل الآن — أدخِل عنوان العيادة يدويًا في الحقول بالأسفل.
         </p>
       )}
       {open && suggestions.length > 0 && (

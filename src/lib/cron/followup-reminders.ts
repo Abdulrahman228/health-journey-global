@@ -38,20 +38,53 @@ export async function runFollowupReminders(opts: {
   const rows = due ?? [];
   if (rows.length === 0) return result;
 
-  const notifications = rows
-    .filter((r) => Boolean(r.patient_user_id))
-    .map((r) => {
-      const name = (r.doctor_name ?? "").trim() || "طبيبك";
-      return {
-        user_id: r.patient_user_id,
+  // The RPC returns appointments.patient_id (= profiles.id, NOT the auth uid)
+  // and doctor_details.id. notifications.user_id is the auth uid, so resolve
+  // patient profile → user_id and doctor_details → profile → full_name here.
+  const patientProfileIds = Array.from(new Set(rows.map((r) => r.patient_id)));
+  const doctorDetailIds = Array.from(new Set(rows.map((r) => r.doctor_id)));
+  const [patientsRes, doctorsRes] = await Promise.all([
+    supabaseAdmin.from("profiles").select("id, user_id").in("id", patientProfileIds),
+    supabaseAdmin.from("doctor_details").select("id, profile_id").in("id", doctorDetailIds),
+  ]);
+  if (patientsRes.error) {
+    result.errors.push(`patient_lookup_failed: ${patientsRes.error.message}`);
+    return result;
+  }
+  if (doctorsRes.error) result.errors.push(`doctor_lookup_failed: ${doctorsRes.error.message}`);
+
+  const userIdByPatient = new Map((patientsRes.data ?? []).map((p) => [p.id, p.user_id]));
+  const doctorProfileIds = (doctorsRes.data ?? [])
+    .map((d) => d.profile_id)
+    .filter((id): id is string => Boolean(id));
+  const { data: doctorProfiles } = doctorProfileIds.length
+    ? await supabaseAdmin.from("profiles").select("id, full_name").in("id", doctorProfileIds)
+    : { data: [] };
+  const nameByProfile = new Map((doctorProfiles ?? []).map((p) => [p.id, p.full_name]));
+  const doctorNameById = new Map(
+    (doctorsRes.data ?? []).map((d) => [
+      d.id,
+      d.profile_id ? (nameByProfile.get(d.profile_id) ?? null) : null,
+    ]),
+  );
+
+  const notifications = rows.flatMap((r) => {
+    // Managed (shell) patients have no auth account → nobody to notify in-app.
+    const userId = userIdByPatient.get(r.patient_id);
+    if (!userId) return [];
+    const name = (doctorNameById.get(r.doctor_id) ?? "").trim() || "طبيبك";
+    return [
+      {
+        user_id: userId,
         kind: "followup_reminder",
         title: "متابعة طبية - طبيبك بانتظارك",
         body: `لقد حان وقت متابعة حالتك الطبية مع دكتور ${name}. احجز موعدك الآن لضمان صحتك.`,
         // Deep-link to the doctor's booking page.
         link: `/doctor/${r.doctor_id}`,
         metadata: { appointment_id: r.appointment_id, doctor_id: r.doctor_id },
-      };
-    });
+      },
+    ];
+  });
 
   if (notifications.length === 0) return result;
 

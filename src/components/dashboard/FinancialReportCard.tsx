@@ -14,10 +14,14 @@ const CATEGORY_LABEL: Record<string, string> = {
   consultation_clinic: "كشوفات العيادة",
   rent: "إيجار",
   salaries: "رواتب",
+  staff: "رواتب",
   supplies: "مستلزمات",
   utilities: "مرافق وفواتير",
   marketing: "تسويق",
   equipment: "معدات",
+  tax: "ضرائب",
+  software: "برامج",
+  training: "تدريب",
   other: "أخرى",
 };
 
@@ -36,31 +40,52 @@ const money = (n: number, cur = "EGP") =>
  * profit, with a CSV export. Mirrors the clinic P&L a doctor's accountant expects.
  */
 export function FinancialReportCard({ year, month }: { year: number; month: number }) {
-  const { profile } = useAuth();
+  const { profile, isLoading: authLoading } = useAuth();
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!profile?.id) return;
-    setLoading(true);
-    const { data: dd } = await supabase
-      .from("doctor_details")
-      .select("id")
-      .eq("profile_id", profile.id)
-      .maybeSingle();
-    if (!dd) {
-      setRows([]);
-      setLoading(false);
+    if (!profile?.id) {
+      if (!authLoading) setLoading(false);
       return;
     }
-    const { data } = await supabase.rpc("doctor_financial_report", {
-      _doctor_details_id: dd.id,
-      _year: year,
-      _month: month,
-    });
-    setRows((data as ReportRow[]) ?? []);
-    setLoading(false);
-  }, [profile?.id, year, month]);
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: dd, error: ddErr } = await supabase
+        .from("doctor_details")
+        .select("id")
+        .eq("profile_id", profile.id)
+        .maybeSingle();
+      if (ddErr) throw ddErr;
+      if (!dd) {
+        setRows([]);
+        return;
+      }
+      const { data, error: rpcErr } = await supabase.rpc("doctor_financial_report", {
+        _doctor_details_id: dd.id,
+        _year: year,
+        _month: month,
+      });
+      if (rpcErr) throw rpcErr;
+      setRows(
+        (data ?? []).map((r) => ({
+          direction: r.direction === "expense" ? "expense" : "income",
+          category: r.category,
+          amount: Number(r.amount),
+        })),
+      );
+    } catch (e) {
+      setRows([]);
+      setError(
+        "تعذّر تحميل التقرير المالي" +
+          (e && typeof e === "object" && "message" in e ? ` — ${String(e.message)}` : ""),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.id, authLoading, year, month]);
 
   useEffect(() => {
     void load();
@@ -113,6 +138,12 @@ export function FinancialReportCard({ year, month }: { year: number; month: numb
           CSV
         </button>
       </div>
+
+      {error && (
+        <p role="alert" className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* Income */}

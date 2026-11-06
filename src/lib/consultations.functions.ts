@@ -22,6 +22,32 @@ type ConsultationStatus =
 
 const PROPOSAL_TTL_HOURS = 48;
 
+/**
+ * In-app notification to the auth user behind a PROFILE id (best effort — an
+ * unclaimed profile has no auth user; `_notify` dedupes on event key).
+ */
+async function notifyProfile(
+  profileId: string | null | undefined,
+  n: { kind: string; title: string; body: string; link: string; eventKey: string },
+): Promise<void> {
+  if (!profileId) return;
+  const { data: p } = await supabaseAdmin
+    .from("profiles")
+    .select("user_id")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (!p?.user_id) return;
+  const { error } = await supabaseAdmin.rpc("_notify", {
+    p_user_id: p.user_id,
+    p_kind: n.kind,
+    p_title: n.title,
+    p_body: n.body,
+    p_link: n.link,
+    p_event_key: n.eventKey,
+  });
+  if (error) console.warn("[consultations] notify failed:", error.message);
+}
+
 // ---------------------------------------------------------------------------
 // Patient: submit a new consultation request
 // ---------------------------------------------------------------------------
@@ -46,10 +72,16 @@ export const submitConsultationRequest = createServerFn({ method: "POST" })
       .eq("patient_id", patientProfileId)
       .eq("doctor_details_id", data.doctorDetailsId)
       .in("status", ["pending_doctor", "proposed", "accepted"])
-      .maybeSingle();
-    if (existing) {
+      .limit(1);
+    if ((existing ?? []).length > 0) {
       throw new Error("لديك طلب مفتوح بالفعل مع هذا الطبيب");
     }
+    const { data: doctor } = await supabaseAdmin
+      .from("doctor_details")
+      .select("id, profile_id")
+      .eq("id", data.doctorDetailsId)
+      .maybeSingle();
+    if (!doctor) throw new Error("الطبيب غير موجود");
 
     const { data: row, error } = await supabaseAdmin
       .from("consultation_requests")
@@ -63,7 +95,14 @@ export const submitConsultationRequest = createServerFn({ method: "POST" })
       })
       .select("id, status, created_at")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر إرسال الطلب: " + error.message);
+    await notifyProfile(doctor.profile_id, {
+      kind: "consultation_request",
+      title: "طلب كشف أونلاين جديد",
+      body: "لديك طلب كشف أونلاين جديد — اقترح موعداً ورسم الكشف أو اعتذر.",
+      link: "/dashboard",
+      eventKey: `creq:new:${row.id}`,
+    });
     return row;
   });
 
@@ -86,7 +125,7 @@ export const proposeConsultationSlot = createServerFn({ method: "POST" })
     // Verify caller owns the doctor_details on this request.
     const { data: req } = await supabaseAdmin
       .from("consultation_requests")
-      .select("id, status, doctor_details_id")
+      .select("id, status, doctor_details_id, patient_id")
       .eq("id", data.requestId)
       .maybeSingle();
     if (!req) throw new Error("الطلب غير موجود");
@@ -126,7 +165,14 @@ export const proposeConsultationSlot = createServerFn({ method: "POST" })
       .eq("id", data.requestId)
       .select("id, status, proposed_slot, fee_cents, expires_at")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر حفظ الاقتراح: " + error.message);
+    await notifyProfile(req.patient_id, {
+      kind: "consultation_proposed",
+      title: "اقترح الطبيب موعداً لكشفك أونلاين",
+      body: "راجع الموعد والرسم المقترحين ثم اقبل وادفع أو ارفض (صالح 48 ساعة).",
+      link: "/appointments",
+      eventKey: `creq:proposed:${row.id}`,
+    });
     return row;
   });
 
@@ -142,16 +188,11 @@ export const doctorRejectRequest = createServerFn({ method: "POST" })
     }).parse,
   )
   .handler(async ({ data, context }) => {
-    const { data: reqRaw } = await supabaseAdmin
+    const { data: req } = await supabaseAdmin
       .from("consultation_requests")
-      .select("id, status, doctor_details_id")
+      .select("id, status, doctor_details_id, patient_id")
       .eq("id", data.requestId)
       .maybeSingle();
-    const req = reqRaw as {
-      id: string;
-      status: ConsultationStatus;
-      doctor_details_id: string;
-    } | null;
     if (!req) throw new Error("الطلب غير موجود");
     if (!["pending_doctor", "proposed"].includes(req.status)) {
       throw new Error("لا يمكن رفض طلب في هذه الحالة");
@@ -174,7 +215,14 @@ export const doctorRejectRequest = createServerFn({ method: "POST" })
         responded_at: new Date().toISOString(),
       })
       .eq("id", data.requestId);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر رفض الطلب: " + error.message);
+    await notifyProfile(req.patient_id, {
+      kind: "consultation_rejected",
+      title: "اعتذر الطبيب عن طلب الكشف أونلاين",
+      body: "يمكنك طلب كشف من طبيب آخر.",
+      link: "/appointments",
+      eventKey: `creq:rejected:${req.id}`,
+    });
     return { ok: true };
   });
 
@@ -251,11 +299,12 @@ export const acceptConsultationProposal = createServerFn({ method: "POST" })
       })
       .select("id")
       .single();
-    if (apptErr) throw new Error(apptErr.message);
+    if (apptErr) throw new Error("تعذّر إنشاء الموعد: " + apptErr.message);
     const appt = apptRaw as { id: string };
 
-    // Mark request accepted + link appointment.
-    await supabaseAdmin
+    // Mark request accepted + link appointment (the inbox's "complete payment"
+    // link reads appointment_id, so this must not fail silently).
+    const { error: linkErr } = await supabaseAdmin
       .from("consultation_requests")
       .update({
         status: "accepted" as ConsultationStatus,
@@ -263,6 +312,7 @@ export const acceptConsultationProposal = createServerFn({ method: "POST" })
         responded_at: new Date().toISOString(),
       })
       .eq("id", req.id);
+    if (linkErr) throw new Error("تم إنشاء الموعد لكن تعذّر تحديث الطلب: " + linkErr.message);
 
     // Payment is settled through the platform's manual-transfer / Paymob flow
     // (/pay shows the amount + reference; the webhook or admin confirms it).
@@ -341,7 +391,7 @@ export const listMyConsultationRequests = createServerFn({ method: "GET" })
     const { data: asPatientRaw } = await supabaseAdmin
       .from("consultation_requests")
       .select(
-        "id, status, reason, consultation_type, proposed_slot, proposed_duration_minutes, fee_cents, currency, doctor_note, expires_at, created_at, doctor_details_id",
+        "id, status, reason, consultation_type, proposed_slot, proposed_duration_minutes, fee_cents, currency, doctor_note, expires_at, created_at, doctor_details_id, appointment_id, doctor:doctor_details!consultation_requests_doctor_details_id_fkey(specialty, profile:profiles!doctor_details_profile_id_fkey(full_name))",
       )
       .eq(
         "patient_id",

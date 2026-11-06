@@ -11,6 +11,8 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertSelf } from "./_authz";
@@ -88,13 +90,108 @@ async function getDoctorDetailsIdForUser(userId: string): Promise<string | null>
 }
 
 async function isAdminUser(userId: string): Promise<boolean> {
+  // limit(1): a user may hold BOTH admin and super_admin — maybeSingle() alone
+  // errors on 2 rows and would silently lock that admin out.
   const { data } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
     .in("role", ["admin", "super_admin"])
+    .limit(1)
     .maybeSingle();
   return Boolean(data);
+}
+
+// Tier → commission on ONLINE consultations (mirrors subscription_plans.commission_pct).
+const TIER_FEE_PCT: Record<string, number> = { free: 15, premium: 12, gold: 10 };
+
+/** Clinic visits ('in_person' and the web booking's 'clinic') carry 0% commission. */
+function isInPersonType(t: string | null | undefined): boolean {
+  const v = t ?? "in_person";
+  return v === "in_person" || v === "clinic";
+}
+
+/** Effective online commission: tier rate, unless an admin override is lower. */
+async function effectiveOnlineFeePct(
+  ddId: string,
+  settingsPct: number | null | undefined,
+): Promise<number> {
+  const { data: tierRow } = await supabaseAdmin.rpc("doctor_active_tier", {
+    doctor_details_id: ddId,
+  });
+  const tierPct = TIER_FEE_PCT[tierRow ?? "free"] ?? DEFAULT_FEE_PCT;
+  return settingsPct != null && Number(settingsPct) < tierPct ? Number(settingsPct) : tierPct;
+}
+
+/**
+ * Balance summary. `userClient` MUST be the caller's own JWT client
+ * (context.supabase): doctor_wallet_balance authorizes on auth.uid(), which is
+ * NULL under the service-role key — calling it via supabaseAdmin always raised
+ * `not_authorized` and the wallet silently showed 0 (withdrawals impossible).
+ */
+async function computeDoctorBalance(
+  ddId: string,
+  userClient: SupabaseClient<Database>,
+): Promise<DoctorBalance> {
+  const [{ data: settings }, { data: txs }, { data: pendingAppts }, walletRes] =
+    await Promise.all([
+      supabaseAdmin
+        .from("doctor_billing_settings")
+        .select("platform_fee_pct, minimum_payout")
+        .eq("doctor_details_id", ddId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("doctor_transactions")
+        .select("type, net_amount, status, currency")
+        .eq("doctor_details_id", ddId),
+      supabaseAdmin
+        .from("appointments")
+        .select("fee, appointment_type")
+        .eq("doctor_id", ddId)
+        .in("status", ["confirmed", "in_progress"]),
+      // Withdrawable balance = the DB's single source of truth
+      // (doctor_wallet_balance: ONLINE net earnings only — clinic cash was never
+      // collected by the platform — minus paid + still-reserved withdrawals).
+      userClient.rpc("doctor_wallet_balance", { _doctor_details_id: ddId }),
+    ]);
+  if (walletRes.error) {
+    throw new Error("تعذّر حساب رصيد المحفظة: " + walletRes.error.message);
+  }
+
+  // Resolve tier-based commission for the *online* portion of pending earnings.
+  const onlineFeePct = await effectiveOnlineFeePct(ddId, settings?.platform_fee_pct);
+  const minPayout = settings?.minimum_payout ?? DEFAULT_MIN_PAYOUT;
+  const currency = txs?.[0]?.currency || "EGP";
+
+  let lifetime = 0;
+  for (const t of txs ?? []) {
+    if (t.status !== "completed") continue;
+    if (t.type === "consultation" || t.type === "adjustment" || t.type === "bonus") {
+      lifetime += Number(t.net_amount ?? 0);
+    }
+  }
+
+  const wallet = walletRes.data?.[0];
+  const available = Number(wallet?.withdrawable ?? 0);
+  const totalWithdrawn = Number(wallet?.total_paid_out ?? 0);
+
+  // Pending preview: clinic visits → 0% commission; online → tier rate.
+  let pending = 0;
+  for (const a of pendingAppts ?? []) {
+    const gross = Number(a.fee ?? 0);
+    const fee = isInPersonType(a.appointment_type) ? 0 : onlineFeePct;
+    pending += gross * (1 - fee / 100);
+  }
+
+  return {
+    available: Math.max(0, Math.round(available * 100) / 100),
+    pending: Math.round(pending * 100) / 100,
+    lifetimeEarnings: Math.round(lifetime * 100) / 100,
+    totalWithdrawn: Math.round(totalWithdrawn * 100) / 100,
+    currency,
+    platformFeePct: Number(onlineFeePct),
+    minimumPayout: Number(minPayout),
+  };
 }
 
 // ============================================================
@@ -107,87 +204,7 @@ export const getDoctorBalance = createServerFn({ method: "GET" })
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return null;
-
-    const [
-      { data: settings },
-      { data: txs },
-      { data: wds },
-      { data: pendingAppts },
-      { data: tierRow },
-    ] = await Promise.all([
-      supabaseAdmin
-        .from("doctor_billing_settings")
-        .select("platform_fee_pct, minimum_payout")
-        .eq("doctor_details_id", ddId)
-        .maybeSingle(),
-      supabaseAdmin
-        .from("doctor_transactions")
-        .select("type, net_amount, status, currency")
-        .eq("doctor_details_id", ddId),
-      supabaseAdmin
-        .from("doctor_withdrawals")
-        .select("amount, status")
-        .eq("doctor_details_id", ddId),
-      supabaseAdmin
-        .from("appointments")
-        .select("fee, appointment_type")
-        .eq("doctor_id", ddId)
-        .in("status", ["confirmed", "in_progress"]),
-      supabaseAdmin.rpc("doctor_active_tier", { doctor_details_id: ddId }),
-    ]);
-
-    // Resolve tier-based commission for the *online* portion of pending earnings.
-    const tier = (tierRow as string | null) ?? "free";
-    const tierPctMap: Record<string, number> = { free: 15, premium: 12, gold: 10 };
-    const tierPct = tierPctMap[tier] ?? 15;
-
-    // doctor_billing_settings can override (admin VIP / partnership deals).
-    const settingsPct = settings?.platform_fee_pct as number | null;
-    const onlineFeePct =
-      settingsPct != null && settingsPct < tierPct ? Number(settingsPct) : tierPct;
-    const minPayout = (settings?.minimum_payout as number | null) ?? DEFAULT_MIN_PAYOUT;
-    const currency = ((txs?.[0]?.currency as string | null) ?? "EGP") || "EGP";
-
-    let lifetime = 0;
-    for (const t of txs ?? []) {
-      const net = Number(t.net_amount ?? 0);
-      const status = t.status as DoctorTransaction["status"];
-      const type = t.type as DoctorTransaction["type"];
-      if (status !== "completed") continue;
-      if (type === "consultation" || type === "adjustment" || type === "bonus") lifetime += net;
-    }
-
-    // Withdrawable balance = the DB's single source of truth
-    // (doctor_wallet_balance: ONLINE net earnings only — clinic cash was never
-    // collected by the platform — minus paid + still-reserved withdrawals).
-    const { data: walletRows } = await supabaseAdmin.rpc("doctor_wallet_balance", {
-      _doctor_details_id: ddId,
-    });
-    const wallet = (
-      walletRows as Array<{ withdrawable: number; total_paid_out: number }> | null
-    )?.[0];
-    const available = Number(wallet?.withdrawable ?? 0);
-    const totalWithdrawn = Number(wallet?.total_paid_out ?? 0);
-    void wds;
-
-    // Pending preview: in-person visits → 0% commission; online → tier rate.
-    let pending = 0;
-    for (const a of pendingAppts ?? []) {
-      const gross = Number(a.fee ?? 0);
-      const t = (a.appointment_type as string | null) ?? "in_person";
-      const fee = t === "in_person" ? 0 : onlineFeePct;
-      pending += gross * (1 - fee / 100);
-    }
-
-    return {
-      available: Math.max(0, Math.round(available * 100) / 100),
-      pending: Math.round(pending * 100) / 100,
-      lifetimeEarnings: Math.round(lifetime * 100) / 100,
-      totalWithdrawn: Math.round(totalWithdrawn * 100) / 100,
-      currency,
-      platformFeePct: Number(onlineFeePct),
-      minimumPayout: Number(minPayout),
-    };
+    return computeDoctorBalance(ddId, context.supabase);
   });
 
 // ============================================================
@@ -207,7 +224,7 @@ export const getDoctorTransactions = createServerFn({ method: "GET" })
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return [];
-    const { data: txs } = await supabaseAdmin
+    const { data: txs, error } = await supabaseAdmin
       .from("doctor_transactions")
       .select(
         "id, type, gross_amount, platform_fee, net_amount, currency, status, description, appointment_id, created_at",
@@ -215,6 +232,7 @@ export const getDoctorTransactions = createServerFn({ method: "GET" })
       .eq("doctor_details_id", ddId)
       .order("created_at", { ascending: false })
       .limit(data.limit);
+    if (error) throw new Error("تعذّر تحميل المعاملات: " + error.message);
 
     return (txs ?? []).map((t) => ({
       id: t.id as string,
@@ -240,13 +258,14 @@ export const getDoctorWithdrawals = createServerFn({ method: "GET" })
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return [];
-    const { data: wds } = await supabaseAdmin
+    const { data: wds, error } = await supabaseAdmin
       .from("doctor_withdrawals")
       .select(
         "id, amount, currency, method, status, reference, doctor_note, admin_note, requested_at, processed_at",
       )
       .eq("doctor_details_id", ddId)
       .order("created_at", { ascending: false });
+    if (error) throw new Error("تعذّر تحميل طلبات السحب: " + error.message);
     return (wds ?? []).map(mapWd);
   });
 
@@ -282,11 +301,18 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
-    if (!ddId) return { ok: false as const, error: "Not a doctor" };
+    if (!ddId) return { ok: false as const, error: "هذا الحساب ليس حساب طبيب" };
 
     // Check balance (same RPC the mobile apps use → one rule everywhere)
-    const balance = await getDoctorBalance({ data: { userId: data.userId } });
-    if (!balance) return { ok: false as const, error: "Balance unavailable" };
+    let balance: DoctorBalance;
+    try {
+      balance = await computeDoctorBalance(ddId, context.supabase);
+    } catch (e) {
+      return {
+        ok: false as const,
+        error: e instanceof Error ? e.message : "تعذّر حساب الرصيد",
+      };
+    }
     if (data.amount > balance.available) {
       return { ok: false as const, error: "المبلغ يتجاوز الرصيد المتاح" };
     }
@@ -327,8 +353,8 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
       .select("id")
       .single();
 
-    if (error) return { ok: false as const, error: error.message };
-    return { ok: true as const, withdrawalId: ins?.id as string };
+    if (error) return { ok: false as const, error: "تعذّر تقديم طلب السحب: " + error.message };
+    return { ok: true as const, withdrawalId: ins.id };
   });
 
 // ============================================================
@@ -347,14 +373,18 @@ export const cancelMyWithdrawal = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
-    if (!ddId) return { ok: false as const, error: "Not a doctor" };
-    const { error } = await supabaseAdmin
+    if (!ddId) return { ok: false as const, error: "هذا الحساب ليس حساب طبيب" };
+    const { data: rows, error } = await supabaseAdmin
       .from("doctor_withdrawals")
       .update({ status: "cancelled" })
       .eq("id", data.withdrawalId)
       .eq("doctor_details_id", ddId)
-      .eq("status", "requested");
-    if (error) return { ok: false as const, error: error.message };
+      .eq("status", "requested")
+      .select("id");
+    if (error) return { ok: false as const, error: "تعذّر إلغاء الطلب: " + error.message };
+    if (!rows || rows.length === 0) {
+      return { ok: false as const, error: "لا يمكن إلغاء هذا الطلب — ربما تمت مراجعته بالفعل" };
+    }
     return { ok: true as const };
   });
 
@@ -368,11 +398,15 @@ export const getMyBillingSettings = createServerFn({ method: "GET" })
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
     if (!ddId) return null;
-    const { data: row } = await supabaseAdmin
+    const { data: row, error } = await supabaseAdmin
       .from("doctor_billing_settings")
       .select("*")
       .eq("doctor_details_id", ddId)
       .maybeSingle();
+    if (error) throw new Error("تعذّر تحميل إعدادات الدفع: " + error.message);
+    // Show the commission actually charged (tier rate / admin override), not
+    // the raw column default.
+    const feePct = await effectiveOnlineFeePct(ddId, row?.platform_fee_pct);
     if (!row) {
       return {
         payoutMethod: "bank",
@@ -384,7 +418,7 @@ export const getMyBillingSettings = createServerFn({ method: "GET" })
         instapayHandle: null,
         taxId: null,
         vatRegistered: false,
-        platformFeePct: DEFAULT_FEE_PCT,
+        platformFeePct: feePct,
         minimumPayout: DEFAULT_MIN_PAYOUT,
       };
     }
@@ -398,7 +432,7 @@ export const getMyBillingSettings = createServerFn({ method: "GET" })
       instapayHandle: (row.instapay_handle as string | null) ?? null,
       taxId: (row.tax_id as string | null) ?? null,
       vatRegistered: Boolean(row.vat_registered),
-      platformFeePct: Number(row.platform_fee_pct ?? DEFAULT_FEE_PCT),
+      platformFeePct: feePct,
       minimumPayout: Number(row.minimum_payout ?? DEFAULT_MIN_PAYOUT),
     };
   });
@@ -424,7 +458,7 @@ export const upsertMyBillingSettings = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
-    if (!ddId) return { ok: false as const, error: "Not a doctor" };
+    if (!ddId) return { ok: false as const, error: "هذا الحساب ليس حساب طبيب" };
     const { error } = await supabaseAdmin.from("doctor_billing_settings").upsert(
       {
         doctor_details_id: ddId,
@@ -476,34 +510,32 @@ export const adminListWithdrawals = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false })
       .limit(200);
     if (data.status !== "all") q = q.eq("status", data.status);
-    const { data: wds } = await q;
+    const { data: wds, error: wdErr } = await q;
+    if (wdErr) throw new Error("تعذّر تحميل طلبات السحب: " + wdErr.message);
     if (!wds || wds.length === 0) return [];
 
-    const ddIds = Array.from(new Set(wds.map((w) => w.doctor_details_id as string)));
-    const { data: details } = await supabaseAdmin
+    const ddIds = Array.from(new Set(wds.map((w) => w.doctor_details_id)));
+    const { data: details, error: ddErr } = await supabaseAdmin
       .from("doctor_details")
       .select("id, profile_id, specialty")
       .in("id", ddIds);
-    const profileIds = (details ?? []).map((d) => d.profile_id as string);
-    const { data: profs } = await supabaseAdmin
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", profileIds);
+    if (ddErr) throw new Error("تعذّر تحميل بيانات الأطباء: " + ddErr.message);
+    const profileIds = (details ?? []).flatMap((d) => (d.profile_id ? [d.profile_id] : []));
+    const { data: profs, error: profErr } = profileIds.length
+      ? await supabaseAdmin.from("profiles").select("id, full_name").in("id", profileIds)
+      : { data: [], error: null };
+    if (profErr) throw new Error("تعذّر تحميل أسماء الأطباء: " + profErr.message);
 
-    const ddMap = new Map(
-      (details ?? []).map((d) => [d.id as string, d as Record<string, unknown>]),
-    );
-    const profMap = new Map(
-      (profs ?? []).map((p) => [p.id as string, p as Record<string, unknown>]),
-    );
+    const ddMap = new Map((details ?? []).map((d) => [d.id, d]));
+    const profMap = new Map((profs ?? []).map((p) => [p.id, p]));
 
     return wds.map((w) => {
-      const dd = ddMap.get(w.doctor_details_id as string);
-      const prof = dd ? profMap.get(dd.profile_id as string) : undefined;
+      const dd = ddMap.get(w.doctor_details_id);
+      const prof = dd?.profile_id ? profMap.get(dd.profile_id) : undefined;
       return {
         ...mapWd(w),
-        doctorName: ((prof?.full_name as string | null) ?? null) || null,
-        doctorSpecialty: (dd?.specialty as string | null) ?? null,
+        doctorName: prof?.full_name || null,
+        doctorSpecialty: dd?.specialty ?? null,
         payoutDetails:
           (w.payout_details_snapshot as Record<string, string | number | boolean | null> | null) ??
           null,
@@ -546,30 +578,40 @@ export const adminUpdateWithdrawal = createServerFn({ method: "POST" })
     if (data.reference) update.reference = data.reference;
     if (data.adminNote) update.admin_note = data.adminNote;
 
-    const { error } = await supabaseAdmin
+    // Only open requests may move; a paid/rejected/cancelled one is final. This
+    // also stops a double "paid" click from posting the withdrawal twice.
+    const { data: wd, error } = await supabaseAdmin
       .from("doctor_withdrawals")
       .update(update)
-      .eq("id", data.withdrawalId);
-    if (error) return { ok: false as const, error: error.message };
+      .eq("id", data.withdrawalId)
+      .in("status", ["requested", "approved", "processing"])
+      .select("doctor_details_id, amount, currency")
+      .maybeSingle();
+    if (error) return { ok: false as const, error: "تعذّر تحديث الطلب: " + error.message };
+    if (!wd) {
+      return {
+        ok: false as const,
+        error: "لا يمكن تعديل هذا الطلب — تم إغلاقه (مدفوع/مرفوض/ملغى) أو غير موجود",
+      };
+    }
 
     // When marked paid, record a withdrawal transaction (negative net)
     if (data.status === "paid") {
-      const { data: wd } = await supabaseAdmin
-        .from("doctor_withdrawals")
-        .select("doctor_details_id, amount, currency")
-        .eq("id", data.withdrawalId)
-        .maybeSingle();
-      if (wd) {
-        await supabaseAdmin.from("doctor_transactions").insert({
-          doctor_details_id: wd.doctor_details_id as string,
-          type: "withdrawal",
-          gross_amount: 0,
-          platform_fee: 0,
-          net_amount: -Number(wd.amount ?? 0),
-          currency: (wd.currency as string) ?? "EGP",
-          status: "completed",
-          description: `Withdrawal paid (#${data.reference ?? data.withdrawalId.slice(0, 8)})`,
-        });
+      const { error: txErr } = await supabaseAdmin.from("doctor_transactions").insert({
+        doctor_details_id: wd.doctor_details_id,
+        type: "withdrawal",
+        gross_amount: 0,
+        platform_fee: 0,
+        net_amount: -Number(wd.amount ?? 0),
+        currency: wd.currency || "EGP",
+        status: "completed",
+        description: `Withdrawal paid (#${data.reference ?? data.withdrawalId.slice(0, 8)})`,
+      });
+      if (txErr) {
+        return {
+          ok: false as const,
+          error: "تم تحديث الطلب لكن تعذّر تسجيل حركة السحب: " + txErr.message,
+        };
       }
     }
     return { ok: true as const };

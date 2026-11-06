@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Megaphone, AlertTriangle, Pill, ImagePlus, X, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,11 +14,18 @@ export const Route = createFileRoute("/feed/new")({
 
 function NewPostPage() {
   const { t, language } = useLanguage();
-  const { user, role, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
 
   const [profileId, setProfileId] = useState<string | null>(null);
-  const [isVerifiedDoctor, setIsVerifiedDoctor] = useState(false);
+  // RLS "Create posts with role rules": the author's profile must have a
+  // doctor_details row (any post), and 'awareness' additionally needs a
+  // VERIFIED doctor on the GOLD tier.
+  const [isDoctor, setIsDoctor] = useState(false);
+  const [canAwareness, setCanAwareness] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [city, setCity] = useState<string | null>(null);
 
   const [type, setType] = useState<PostType>("question");
@@ -32,36 +39,69 @@ function NewPostPage() {
   const [previews, setPreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  const userId = user?.id ?? null;
   useEffect(() => {
-    if (!user) return;
+    if (!userId) {
+      setChecking(false);
+      return;
+    }
+    let cancelled = false;
+    setChecking(true);
+    setLoadFailed(false);
     (async () => {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, city")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (!profile) return;
-      setProfileId(profile.id);
-      setCity(profile.city);
+      try {
+        const { data: profile, error: pErr } = await supabase
+          .from("profiles")
+          .select("id, city")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (pErr) throw pErr;
+        if (cancelled || !profile) return;
+        setProfileId(profile.id);
+        setCity(profile.city);
 
-      const { data: dd } = await supabase
-        .from("doctor_details")
-        .select("is_verified")
-        .eq("profile_id", profile.id)
-        .maybeSingle();
-      setIsVerifiedDoctor(!!dd?.is_verified);
+        const { data: dd, error: dErr } = await supabase
+          .from("doctor_details")
+          .select("id, is_verified")
+          .eq("profile_id", profile.id)
+          .maybeSingle();
+        if (dErr) throw dErr;
+        if (cancelled) return;
+        setIsDoctor(!!dd);
+        if (dd?.is_verified) {
+          const { data: tier } = await supabase.rpc("doctor_active_tier", {
+            doctor_details_id: dd.id,
+          });
+          if (!cancelled) setCanAwareness(tier === "gold");
+        }
+      } catch (e) {
+        console.error("[feed/new] profile lookup failed:", e);
+        if (!cancelled) setLoadFailed(true);
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
     })();
-  }, [user]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, reloadKey]);
 
-  useEffect(() => {
-    return () => previews.forEach((u) => URL.revokeObjectURL(u));
-  }, [previews]);
+  // Revoke object URLs only on unmount (removeFile revokes single ones). A
+  // [previews]-dependent cleanup revoked the still-shown thumbnails every time
+  // another photo was added.
+  const previewsRef = useRef<string[]>([]);
+  previewsRef.current = previews;
+  useEffect(() => () => previewsRef.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
   const handleFiles = (selected: FileList | null) => {
     if (!selected) return;
-    const list = Array.from(selected)
-      .slice(0, 4 - files.length)
-      .filter((f) => f.size <= 5 * 1024 * 1024);
+    const picked = Array.from(selected).slice(0, 4 - files.length);
+    const list = picked.filter((f) => f.size <= 5 * 1024 * 1024 && f.type.startsWith("image/"));
+    if (list.length < picked.length) {
+      toast.error(
+        t("Only images up to 5 MB each are allowed.", "مسموح بالصور فقط وبحد أقصى 5 ميجا للصورة."),
+      );
+    }
     if (list.length === 0) return;
     setFiles((prev) => [...prev, ...list]);
     setPreviews((prev) => [...prev, ...list.map((f) => URL.createObjectURL(f))]);
@@ -75,7 +115,6 @@ function NewPostPage() {
     });
   };
 
-  const canAwareness = isVerifiedDoctor;
   const types: {
     key: PostType;
     labelEn: string;
@@ -96,7 +135,19 @@ function NewPostPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !profileId) return;
+    if (!user || !profileId || !isDoctor) {
+      toast.error(t("Your doctor account isn't ready yet.", "حساب الطبيب الخاص بك غير جاهز بعد."));
+      return;
+    }
+    if (type === "awareness" && !canAwareness) {
+      toast.error(
+        t(
+          "Awareness posts need a verified doctor on the Gold plan.",
+          "بوستات التوعية متاحة للأطباء الموثّقين المشتركين في جولد فقط.",
+        ),
+      );
+      return;
+    }
     if (title.trim().length < 3) {
       toast.error(t("Title is too short", "العنوان قصير جداً"));
       return;
@@ -119,7 +170,9 @@ function NewPostPage() {
       }
       const id = await createPost({
         authorProfileId: profileId,
-        authorRole: (role ?? "patient") as "doctor" | "patient" | "admin",
+        // Only doctors can post (RLS) — and the CHECK constraint only knows
+        // doctor/patient/pharmacist/admin, never the raw app role.
+        authorRole: "doctor",
         postType: type,
         title: title.trim(),
         body: body.trim(),
@@ -142,14 +195,26 @@ function NewPostPage() {
       toast.success(t("Post published!", "تم نشر البوست!"));
       navigate({ to: "/feed/post/$id", params: { id } });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      toast.error(t("Failed to publish: ", "فشل النشر: ") + msg);
+      console.error("[feed/new] publish failed:", err);
+      const msg = (err instanceof Error ? err.message : String(err ?? "")).toLowerCase();
+      toast.error(
+        msg.includes("row-level security") || msg.includes("not_allowed")
+          ? t(
+              "You're not allowed to publish this type of post.",
+              "غير مسموح لك بنشر هذا النوع من البوستات.",
+            )
+          : msg.includes("not_an_image") ||
+              msg.includes("mime") ||
+              msg.includes("payload too large")
+            ? t("One of the photos couldn't be uploaded.", "تعذّر رفع إحدى الصور.")
+            : t("Failed to publish — try again.", "فشل النشر — حاول مرة أخرى."),
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading || (isAuthenticated && checking)) {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-12">
         <div className="h-96 animate-pulse rounded-2xl bg-muted" />
@@ -174,9 +239,26 @@ function NewPostPage() {
     );
   }
 
-  // Patients may post questions / missing-drug reports (RLS allows these);
-  // awareness posts stay doctor-only (canAwareness).
-  if (role !== "doctor" && role !== "admin" && role !== "patient") {
+  if (loadFailed) {
+    return (
+      <div className="mx-auto w-full max-w-2xl px-4 py-12 text-center">
+        <p className="text-destructive">
+          {t("Couldn't load your account details.", "تعذّر تحميل بيانات حسابك.")}
+        </p>
+        <button
+          type="button"
+          onClick={() => setReloadKey((k) => k + 1)}
+          className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          {t("Try again", "حاول مرة أخرى")}
+        </button>
+      </div>
+    );
+  }
+
+  // Posting is doctors-only (RLS since the rbac_phase1_lockdown migration);
+  // everyone else can read, react and reply.
+  if (!isDoctor) {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-12 text-center">
         <Lock className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -240,8 +322,8 @@ function NewPostPage() {
           {!canAwareness && (
             <p className="mt-2 text-xs text-muted-foreground">
               {t(
-                "Awareness posts are limited to verified doctors.",
-                "بوستات التوعية متاحة للأطباء الموثّقين فقط.",
+                "Awareness posts are limited to verified doctors on the Gold plan.",
+                "بوستات التوعية متاحة للأطباء الموثّقين المشتركين في جولد فقط.",
               )}
             </p>
           )}

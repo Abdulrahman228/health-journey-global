@@ -27,7 +27,8 @@ type AttachmentType = "lab_result" | "xray" | "mri" | "ct" | "ecg" | "prescripti
 interface LabRow {
   id: string;
   type: AttachmentType;
-  fileUrl: string;
+  /** Signed URL; null when signing failed (the stored value is a storage path, not a link). */
+  fileUrl: string | null;
   fileName: string | null;
   notes: string | null;
   uploadedAt: string;
@@ -51,6 +52,7 @@ function LabResultsPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<LabRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -61,6 +63,7 @@ function LabResultsPage() {
     let alive = true;
     (async () => {
       setLoading(true);
+      setLoadFailed(false);
       try {
         // Fetch attachments authored by someone OTHER than the patient
         // (uploaded_by ≠ patient) — that's the labs/imaging the doctor sent.
@@ -133,7 +136,7 @@ function LabResultsPage() {
           attachments.map((a) => ({
             id: a.id,
             type: a.type,
-            fileUrl: signedMap.get(a.id) ?? a.file_url,
+            fileUrl: signedMap.get(a.id) ?? null,
             fileName: a.file_name,
             notes: a.notes,
             uploadedAt: a.uploaded_at,
@@ -142,6 +145,9 @@ function LabResultsPage() {
               : null,
           })),
         );
+      } catch (e) {
+        console.error("[lab-results] load failed", e);
+        if (alive) setLoadFailed(true);
       } finally {
         if (alive) setLoading(false);
       }
@@ -225,7 +231,14 @@ function LabResultsPage() {
         )}
       </p>
 
-      {rows.length === 0 ? (
+      {loadFailed ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center text-sm text-destructive">
+          {t(
+            "Could not load your results. Please try again.",
+            "تعذّر تحميل نتائجك. حاول مرة أخرى.",
+          )}
+        </div>
+      ) : rows.length === 0 ? (
         <div className="bg-card border border-border rounded-2xl p-8 text-center">
           <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
           <p className="text-muted-foreground">
@@ -271,16 +284,22 @@ function LabResultsPage() {
                           </p>
                         )}
                       </div>
-                      <a
-                        href={r.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg px-3 py-2 text-sm font-medium shrink-0"
-                      >
-                        <Download className="h-4 w-4" />
-                        {t("View", "عرض")}
-                        <ArrowUpRight className="h-3 w-3" />
-                      </a>
+                      {r.fileUrl ? (
+                        <a
+                          href={r.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg px-3 py-2 text-sm font-medium shrink-0"
+                        >
+                          <Download className="h-4 w-4" />
+                          {t("View", "عرض")}
+                          <ArrowUpRight className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {t("Not available yet", "غير متاح حاليًا")}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>

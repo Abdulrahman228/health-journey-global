@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { CreditCard, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useLanguage } from "@/hooks/useLanguage";
 
@@ -32,12 +33,45 @@ export function PaymobPayButton({
       const { data, error } = await supabase.functions.invoke("paymob-initiate", {
         body: { kind: "appointment", appointmentId },
       });
-      if (error) throw error;
-      const url = (data as { url?: string; error?: string })?.url;
-      if (!url) throw new Error((data as { error?: string })?.error ?? "no_checkout_url");
+      if (error) {
+        // The edge fn answers non-2xx with { error: "<English code>" }.
+        let code = "";
+        if (error instanceof FunctionsHttpError) {
+          try {
+            const body: unknown = await error.context.json();
+            if (body && typeof body === "object" && "error" in body) code = String(body.error);
+          } catch {
+            /* non-JSON body */
+          }
+        }
+        throw new Error(code || error.message);
+      }
+      const url = (data as { url?: string } | null)?.url;
+      if (!url) throw new Error("no_checkout_url");
       window.location.href = url;
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t("Could not start payment", "تعذّر بدء الدفع"));
+      console.error("[paymob] initiate failed", e);
+      const code = e instanceof Error ? e.message : "";
+      const messages: Record<string, string> = {
+        "Already paid": t("This appointment is already paid", "هذا الموعد مدفوع بالفعل"),
+        "Appointment is not payable": t(
+          "This appointment can no longer be paid",
+          "لا يمكن دفع هذا الموعد (ملغي أو منتهي)",
+        ),
+        "Appointment has no payable fee": t(
+          "Nothing to pay for this appointment",
+          "لا يوجد مبلغ مستحق لهذا الموعد",
+        ),
+        "Appointment not found": t("Appointment not found", "الموعد غير موجود"),
+        Unauthorized: t("Please sign in first", "يجب تسجيل الدخول أولاً"),
+        "Paymob is not configured yet.": t(
+          "Online payment is not available yet",
+          "الدفع الإلكتروني غير متاح حاليًا",
+        ),
+      };
+      toast.error(
+        messages[code] ?? t("Could not start payment, please try again", "تعذّر بدء الدفع، حاول مرة أخرى"),
+      );
       setBusy(false);
     }
   };

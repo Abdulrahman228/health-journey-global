@@ -58,10 +58,15 @@ function AdminPatientsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: roles } = await supabase
+    const { data: roles, error: rolesErr } = await supabase
       .from("user_roles")
       .select("user_id")
       .eq("role", "patient");
+    if (rolesErr) {
+      toast.error("تعذّر تحميل المرضى: " + rolesErr.message);
+      setLoading(false);
+      return;
+    }
     const userIds = Array.from(new Set((roles ?? []).map((role) => role.user_id)));
     if (userIds.length === 0) {
       setRows([]);
@@ -69,16 +74,23 @@ function AdminPatientsPage() {
       return;
     }
 
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profErr } = await supabase
       .from("profiles")
       .select("id, user_id, full_name, city, country, avatar_url, created_at, status")
       .in("user_id", userIds)
       .order("created_at", { ascending: false });
+    if (profErr) {
+      toast.error("تعذّر تحميل ملفات المرضى: " + profErr.message);
+      setLoading(false);
+      return;
+    }
 
+    // appointments.patient_id = profiles.id (not the auth uid).
     const profileIds = (profiles ?? []).map((profile) => profile.id);
-    const { data: appointments } = profileIds.length
+    const { data: appointments, error: apptErr } = profileIds.length
       ? await supabase.from("appointments").select("patient_id").in("patient_id", profileIds)
-      : { data: [] };
+      : { data: [], error: null };
+    if (apptErr) toast.error("تعذّر حساب الحجوزات: " + apptErr.message);
 
     const appointmentCountByPatient = new Map<string, number>();
     (appointments ?? []).forEach((appointment) => {
@@ -87,10 +99,19 @@ function AdminPatientsPage() {
     });
 
     setRows(
-      (profiles ?? []).map((profile) => ({
-        ...profile,
-        appointments_count: appointmentCountByPatient.get(profile.id) ?? 0,
-      })),
+      // Filtered by user_id above, so user_id is always set; narrow it for the type.
+      (profiles ?? []).flatMap((profile) =>
+        profile.user_id
+          ? [
+              {
+                ...profile,
+                user_id: profile.user_id,
+                status: profile.status ?? "active",
+                appointments_count: appointmentCountByPatient.get(profile.id) ?? 0,
+              },
+            ]
+          : [],
+      ),
     );
     setLoading(false);
   }, []);
@@ -293,7 +314,9 @@ function BanUserModal({
       toast.success(isUnban ? "تم رفع الحظر عن المستخدم" : "تم حظر المستخدم");
       onDone(isUnban ? "active" : "banned");
     } catch (e) {
-      toast.error((isUnban ? "فشل رفع الحظر: " : "فشل الحظر: ") + (e as Error).message);
+      toast.error(
+        (isUnban ? "فشل رفع الحظر: " : "فشل الحظر: ") + (e instanceof Error ? e.message : String(e)),
+      );
     } finally {
       setBusy(false);
     }

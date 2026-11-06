@@ -43,6 +43,11 @@ function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+function int(v: unknown): number | null {
+  const n = num(v);
+  return n === null ? null : Math.round(n);
+}
+
 export const Route = createFileRoute("/api/public/web-vitals")({
   server: {
     handlers: {
@@ -61,9 +66,8 @@ export const Route = createFileRoute("/api/public/web-vitals")({
           const path = clip(body.path, 512) ?? "/";
           const url = clip(body.url, 2048) ?? path;
 
-          await getSupabase()
+          const { error } = await getSupabase()
             .from("web_vitals_events")
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .insert({
               metric,
               value,
@@ -76,10 +80,12 @@ export const Route = createFileRoute("/api/public/web-vitals")({
               user_agent: clip(body.user_agent, 512),
               connection: clip(body.connection, 16),
               device_type: clip(body.device_type, 16),
-              viewport_width: num(body.viewport_width),
-              viewport_height: num(body.viewport_height),
+              // integer columns — a fractional value would fail the whole row.
+              viewport_width: int(body.viewport_width),
+              viewport_height: int(body.viewport_height),
               session_id: clip(body.session_id, 64),
-            } as never);
+            });
+          if (error) console.warn("[web-vitals] insert failed", error.message);
         } catch (e) {
           if (typeof console !== "undefined") console.warn("[web-vitals] insert failed", e);
         }

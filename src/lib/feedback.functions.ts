@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
+import { getDoctorForUser, getProfileIdForUser } from "@/lib/_identity";
 
 /**
  * Phase 5 — Private encrypted feedback.
@@ -11,6 +11,20 @@ import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "
  *   pepper. Only the doctor (via SECURITY DEFINER RPC) can decrypt.
  * - These server functions delegate to the SQL functions for that gating.
  */
+
+/** SQL exception codes raised by the *_private_feedback_admin functions → Arabic. */
+function feedbackError(message: string): Error {
+  const map: Record<string, string> = {
+    patient_required: "لم يتم العثور على ملفك الشخصي — أكمل بيانات حسابك أولاً",
+    message_invalid: "الرسالة يجب أن تكون بين 5 و5000 حرف",
+    rating_invalid: "التقييم يجب أن يكون من 1 إلى 5",
+    feedback_not_found: "الملاحظة غير موجودة",
+    cannot_reply_anonymous: "لا يمكن الرد على ملاحظة مجهولة",
+    empty_reply: "اكتب نص الرد أولاً",
+  };
+  const key = Object.keys(map).find((k) => message.includes(k));
+  return new Error(key ? map[key] : "تعذّر تنفيذ العملية: " + message);
+}
 
 export const submitPrivateFeedback = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -23,20 +37,19 @@ export const submitPrivateFeedback = createServerFn({ method: "POST" })
     }).parse,
   )
   .handler(async ({ data, context }) => {
-    const { data: id, error } = await (
-      supabaseAdmin.rpc as unknown as (
-        fn: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ data: unknown; error: { message: string } | null }>
-    )("submit_private_feedback_admin", {
+    // p_patient_id is a PROFILE id (FK doctor_private_feedback.patient_profile_id
+    // → profiles.id) — never fall back to the auth uid.
+    const patientProfileId = await getProfileIdForUser(context.userId);
+    if (!patientProfileId) throw feedbackError("patient_required");
+    const { data: id, error } = await supabaseAdmin.rpc("submit_private_feedback_admin", {
       p_doctor_details_id: data.doctorDetailsId,
-      p_patient_id: (await getProfileIdForUser(context.userId)) ?? context.userId,
+      p_patient_id: patientProfileId,
       p_message: data.message,
-      p_rating: data.rating ?? null,
+      p_rating: data.rating ?? undefined,
       p_anonymous: data.anonymous,
     });
-    if (error) throw new Error(error.message);
-    return { id: id as string };
+    if (error) throw feedbackError(error.message);
+    return { id };
   });
 
 export const readMyPrivateFeedback = createServerFn({ method: "GET" })
@@ -47,57 +60,19 @@ export const readMyPrivateFeedback = createServerFn({ method: "GET" })
     }).parse,
   )
   .handler(async ({ data, context }) => {
-    // Use a request-scoped client with the user's auth so SECURITY DEFINER fn
-    // sees auth.uid() = the doctor. We'll use the admin client and pass the
-    // user id by setting JWT — but supabaseAdmin can't impersonate. Instead,
-    // call the SQL fn passing the user id via SET LOCAL through a wrapper.
-    // Simpler: query the underlying table directly with admin and decrypt
-    // server-side using the same key derivation.
-    const { data: dd, error: ddErr } = await supabaseAdmin
-      .from("doctor_details")
-      .select("id")
-      .eq(
-        "id",
-        (await getDoctorForUser(context.userId))?.doctorDetailsId ??
-          "00000000-0000-0000-0000-000000000000",
-      )
-      .maybeSingle();
-    if (ddErr) throw new Error(ddErr.message);
-    if (!dd) throw new Error("Doctor profile not found");
+    // The caller's own doctor_details; the service-role-only *_admin RPC then
+    // decrypts just that doctor's notes (ownership is resolved here).
+    const me = await getDoctorForUser(context.userId);
+    if (!me) throw new Error("لم يتم العثور على ملف الطبيب لهذا الحساب");
 
-    const { data: rows, error } = await (
-      supabaseAdmin.rpc as unknown as (
-        fn: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ data: unknown; error: { message: string } | null }>
-    )("read_my_private_feedback_admin", { p_doctor_details_id: dd.id, p_limit: data.limit });
-    if (error) {
-      // Fallback to client-decrypt-less listing (no message text) if the
-      // admin RPC isn't installed yet. This still returns metadata so the UI
-      // is useful immediately after deploy.
-      const { data: meta } = await supabaseAdmin
-        .from("doctor_private_feedback")
-        .select("id, is_anonymous, patient_profile_id, rating, created_at")
-        .eq("doctor_details_id", dd.id)
-        .order("created_at", { ascending: false })
-        .limit(data.limit);
-      return (meta ?? []).map((m) => ({
-        ...m,
-        message: "[encrypted — install read fn]",
-        doctor_reply: null,
-        doctor_replied_at: null,
-      }));
-    }
-    return rows as Array<{
-      id: string;
-      is_anonymous: boolean;
-      patient_profile_id: string | null;
-      message: string;
-      rating: number | null;
-      created_at: string;
-      doctor_reply: string | null;
-      doctor_replied_at: string | null;
-    }>;
+    const { data: rows, error } = await supabaseAdmin.rpc("read_my_private_feedback_admin", {
+      p_doctor_details_id: me.doctorDetailsId,
+      p_limit: data.limit,
+    });
+    // (No silent placeholder fallback any more: the RPC is installed and a
+    // failure here — e.g. a missing vault pepper — must surface to the doctor.)
+    if (error) throw new Error("تعذّر فك تشفير الملاحظات: " + error.message);
+    return rows ?? [];
   });
 
 /**
@@ -114,28 +89,14 @@ export const replyToPrivateFeedback = createServerFn({ method: "POST" })
     }).parse,
   )
   .handler(async ({ data, context }) => {
-    const { data: dd, error: ddErr } = await supabaseAdmin
-      .from("doctor_details")
-      .select("id")
-      .eq(
-        "id",
-        (await getDoctorForUser(context.userId))?.doctorDetailsId ??
-          "00000000-0000-0000-0000-000000000000",
-      )
-      .maybeSingle();
-    if (ddErr) throw new Error(ddErr.message);
-    if (!dd) throw new Error("Doctor profile not found");
+    const me = await getDoctorForUser(context.userId);
+    if (!me) throw new Error("لم يتم العثور على ملف الطبيب لهذا الحساب");
 
-    const { error } = await (
-      supabaseAdmin.rpc as unknown as (
-        fn: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ data: unknown; error: { message: string } | null }>
-    )("reply_private_feedback_admin", {
+    const { error } = await supabaseAdmin.rpc("reply_private_feedback_admin", {
       p_feedback_id: data.feedbackId,
-      p_doctor_details_id: dd.id,
+      p_doctor_details_id: me.doctorDetailsId,
       p_reply: data.reply,
     });
-    if (error) throw new Error(error.message);
+    if (error) throw feedbackError(error.message);
     return { ok: true as const };
   });

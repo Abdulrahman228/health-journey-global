@@ -67,9 +67,16 @@ function LabOrdersPage() {
   const load = useCallback(async () => {
     if (!profile?.id) return;
     setLoading(true);
-    setOrders(await listMyLabOrders());
-    setDoctors(await listMyDoctors(profile.id));
-    setLoading(false);
+    try {
+      const [o, d] = await Promise.all([listMyLabOrders(), listMyDoctors(profile.id)]);
+      setOrders(o);
+      setDoctors(d);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("Failed to load", "تعذّر التحميل"));
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
 
   useEffect(() => {
@@ -322,8 +329,13 @@ function NewOrderForm({ doctors, onDone }: { doctors: MyDoctor[]; onDone: () => 
 
   const searchLabs = useCallback(async () => {
     setSearching(true);
-    setLabs(await listActiveLabs(city));
-    setSearching(false);
+    try {
+      setLabs(await listActiveLabs(city));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("Failed to load", "تعذّر التحميل"));
+    } finally {
+      setSearching(false);
+    }
   }, [city]);
 
   useEffect(() => {

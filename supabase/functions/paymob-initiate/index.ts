@@ -88,7 +88,11 @@ Deno.serve(async (req) => {
       if (appt.currency && String(appt.currency).toUpperCase() !== "EGP") {
         return json({ error: "Only EGP appointments can be paid through Paymob" }, 400);
       }
-      const cents = appt.consultation_fee_cents ?? (appt.fee != null ? Math.round(Number(appt.fee) * 100) : 0);
+      // appointments.fee is authoritative (applyCoupon rewrites it; the legacy
+      // Stripe-only consultation_fee_cents is not). paymob-webhook mirrors this.
+      const cents = appt.fee != null
+        ? Math.round(Number(appt.fee) * 100)
+        : (appt.consultation_fee_cents ?? 0);
       if (!Number.isInteger(cents) || cents < 100) return json({ error: "Appointment has no payable fee" }, 400);
 
       amountCents = cents;

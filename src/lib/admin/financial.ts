@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { createStripeClient, type StripeEnv } from "@/lib/stripe.server";
-import type { Database } from "@/integrations/supabase/types";
+import { createStripeClient } from "@/lib/stripe.server";
 import { resolveAdmin, runAdminAction } from "./_kit";
 import {
   AdminGrantSubscriptionSchema,
@@ -10,11 +9,8 @@ import {
   AdminReviewManualSubscriptionSchema,
 } from "./_schemas";
 
-type Json = Database["public"]["Tables"]["payments"]["Update"]["raw_payload"];
-
-// Stripe only accepts these three reasons; "other" is recorded in our audit but
-// not forwarded to the Stripe API.
-const STRIPE_REASONS = new Set(["duplicate", "fraudulent", "requested_by_customer"]);
+// Stripe only accepts "duplicate" | "fraudulent" | "requested_by_customer";
+// "other" is recorded in our audit but not forwarded to the Stripe API.
 
 /**
  * Refund a payment (level: super_admin — money is high-risk).
@@ -48,7 +44,8 @@ export const adminProcessRefund = createServerFn({ method: "POST" })
         let refundId: string | null = null;
 
         if (payment.provider === "stripe" && payment.provider_payment_id) {
-          const stripe = createStripeClient(payment.environment as StripeEnv);
+          // payments.environment is text; anything but 'sandbox' is the live key.
+          const stripe = createStripeClient(payment.environment === "sandbox" ? "sandbox" : "live");
           // provider_payment_id is a PaymentIntent (pi_) or a Charge (ch_).
           const target = payment.provider_payment_id.startsWith("ch_")
             ? { charge: payment.provider_payment_id }
@@ -56,19 +53,14 @@ export const adminProcessRefund = createServerFn({ method: "POST" })
           const refund = await stripe.refunds.create({
             ...target,
             ...(data.amountMinor ? { amount: data.amountMinor } : {}),
-            ...(STRIPE_REASONS.has(data.reason)
-              ? { reason: data.reason as "duplicate" | "fraudulent" | "requested_by_customer" }
-              : {}),
+            ...(data.reason !== "other" ? { reason: data.reason } : {}),
           });
           refundId = refund.id;
         }
 
-        const priorPayload =
-          payment.raw_payload &&
-          typeof payment.raw_payload === "object" &&
-          !Array.isArray(payment.raw_payload)
-            ? (payment.raw_payload as Record<string, unknown>)
-            : {};
+        // Narrowing the jsonb value to its object branch keeps it typed as Json.
+        const raw = payment.raw_payload;
+        const priorPayload = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
         const newPayload = {
           ...priorPayload,
           refund: {
@@ -83,7 +75,7 @@ export const adminProcessRefund = createServerFn({ method: "POST" })
 
         const { error: updErr } = await supabaseAdmin
           .from("payments")
-          .update({ status: "refunded", raw_payload: newPayload as unknown as Json })
+          .update({ status: "refunded", raw_payload: newPayload })
           .eq("id", data.paymentId);
         if (updErr) throw new Error(updErr.message);
 

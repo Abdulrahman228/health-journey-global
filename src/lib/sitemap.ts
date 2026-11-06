@@ -8,7 +8,8 @@
  * per-sitemap protocol limits as we scale.
  */
 import { createClient } from "@supabase/supabase-js";
-import { siteConfig } from "@/lib/seo";
+import type { Database } from "@/integrations/supabase/types";
+import { siteConfig, specialtyTerms } from "@/lib/seo";
 
 export interface SitemapEntry {
   loc: string;
@@ -95,11 +96,21 @@ export const STATIC_ENTRIES: SitemapEntry[] = [
   { loc: "/terms", changefreq: "yearly", priority: 0.3 },
 ];
 
+/**
+ * Public (anon) client — the sitemap only lists what anonymous visitors may read.
+ * SUPABASE_PUBLISHABLE_KEY is the var wrangler.jsonc actually defines;
+ * SUPABASE_ANON_KEY was never set, so this silently ran with the service role.
+ */
 function getSb() {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key =
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key);
+  return createClient<Database>(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 export async function fetchDoctorEntries(): Promise<SitemapEntry[]> {
@@ -113,17 +124,16 @@ export async function fetchDoctorEntries(): Promise<SitemapEntry[]> {
       .select("id, updated_at, is_verified, profile_id, profiles!inner(slug, profile_visibility)")
       .eq("is_verified", true)
       .limit(5000);
-    if (error || !data) return [];
-    return (
-      data as unknown as Array<{
-        id: string;
-        updated_at: string | null;
-        profiles: { slug: string | null; profile_visibility: string | null } | null;
-      }>
-    )
-      .filter((d) => d.profiles?.profile_visibility !== "private")
+    if (error || !data) {
+      if (error) console.error("[sitemap] doctor fetch failed:", error.message);
+      return [];
+    }
+    return data
+      .filter((d) => d.profiles.profile_visibility !== "private")
       .map((d) => {
-        const slug = d.profiles?.slug;
+        // /d/{slug} is noindex unless the profile is public — list the
+        // directory page /doctor/{id} for unlisted doctors instead.
+        const slug = d.profiles.profile_visibility === "public" ? d.profiles.slug : null;
         return {
           loc: slug ? `/d/${slug}` : `/doctor/${d.id}`,
           lastmod: d.updated_at ? new Date(d.updated_at).toISOString().slice(0, 10) : undefined,
@@ -143,7 +153,7 @@ export async function fetchSpecialtyEntries(): Promise<SitemapEntry[]> {
   try {
     const { data, error } = await sb.from("specialties").select("slug").limit(500);
     if (error || !data) return [];
-    return (data as Array<{ slug: string }>).map((s) => ({
+    return data.map((s) => ({
       loc: `/specialty/${s.slug}`,
       changefreq: "weekly" as const,
       priority: 0.85,
@@ -169,24 +179,19 @@ export async function fetchSpecialtyCityEntries(): Promise<SitemapEntry[]> {
       sb.from("profiles").select("id, city").limit(10000),
     ]);
     if (!specsRes.data || !doctorsRes.data || !profilesRes.data) return [];
-    const cityByProfile = new Map(
-      (profilesRes.data as Array<{ id: string; city: string | null }>).map((p) => [
-        p.id,
-        (p.city ?? "").trim(),
-      ]),
-    );
+    const cityByProfile = new Map(profilesRes.data.map((p) => [p.id, (p.city ?? "").trim()]));
     const cityTermsToSlug = new Map<string, string>();
     for (const c of CITIES) {
       for (const term of cityMatchTerms(c)) cityTermsToSlug.set(term, c.slug);
     }
     const seen = new Set<string>();
-    for (const d of doctorsRes.data as Array<{ profile_id: string; specialty: string | null }>) {
-      const docCity = cityByProfile.get(d.profile_id);
+    for (const d of doctorsRes.data) {
+      const docCity = d.profile_id ? cityByProfile.get(d.profile_id) : undefined;
       if (!docCity || !d.specialty) continue;
       const citySlug = cityTermsToSlug.get(docCity);
       if (!citySlug) continue;
-      for (const spec of specsRes.data as Array<{ slug: string; name_ar: string; name_en: string }>) {
-        if (d.specialty === spec.name_ar || d.specialty === spec.name_en) {
+      for (const spec of specsRes.data) {
+        if (specialtyTerms(spec).includes(d.specialty)) {
           seen.add(`${spec.slug}|${citySlug}`);
         }
       }
@@ -215,7 +220,7 @@ export async function fetchArticleEntries(): Promise<SitemapEntry[]> {
       .eq("is_published", true)
       .limit(5000);
     if (!data) return [];
-    return (data as Array<{ slug: string; updated_at: string | null }>).map((a) => ({
+    return data.map((a) => ({
       loc: `/articles/${a.slug}`,
       lastmod: a.updated_at ? new Date(a.updated_at).toISOString().slice(0, 10) : undefined,
       changefreq: "monthly" as const,

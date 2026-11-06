@@ -14,6 +14,12 @@ import { searchMyPatients, addManagedPatient, importManagedPatients } from "@/li
 import { Loader2, Search, User, Stethoscope, UserPlus, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
+/** Server messages are Arabic; anything else (validation / network) gets the fallback. */
+function arabicOr(e: unknown, fallback: string): string {
+  const msg = e instanceof Error ? e.message : "";
+  return /[؀-ۿ]/.test(msg) ? msg : fallback;
+}
+
 /** Parse a simple CSV of patients: columns name, phone, city (header optional). */
 function parseCsv(text: string): { fullName: string; phone: string; city: string }[] {
   const lines = text
@@ -81,7 +87,9 @@ function PatientsRosterPage() {
       setLoading(true);
       try {
         const data = await searchMyPatients({ data: { userId: user.id, q: qStr } });
-        setRows(data as PatientCard[]);
+        setRows(data);
+      } catch {
+        toast.error("تعذّر تحميل قائمة المرضى — حاول مرة أخرى");
       } finally {
         setLoading(false);
       }
@@ -112,9 +120,9 @@ function PatientsRosterPage() {
     }
     setSaving(true);
     try {
-      const res = (await addManagedPatient({
+      const res = await addManagedPatient({
         data: { userId: user.id, fullName, phone, city, dateOfBirth: dob, notify },
-      })) as { id: string; queued: number; hasPhone: boolean };
+      });
       if (res.queued > 0) {
         toast.success("تمت إضافة المريض وسيتم إرسال رسالة ترحيب له (واتساب/SMS)");
       } else if (notify && phone.trim() && !res.hasPhone) {
@@ -130,7 +138,7 @@ function PatientsRosterPage() {
       setNotify(true);
       load("");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "تعذّرت إضافة المريض");
+      toast.error(arabicOr(e, "تعذّرت إضافة المريض"));
     } finally {
       setSaving(false);
     }
@@ -150,9 +158,9 @@ function PatientsRosterPage() {
     if (!user || !pendingImport) return;
     setImporting(true);
     try {
-      const res = (await importManagedPatients({
+      const res = await importManagedPatients({
         data: { userId: user.id, patients: pendingImport.patients, consentAttested: true },
-      })) as { inserted: number; linked: number; queued: number; withoutPhone: number };
+      });
       const parts = [`تم استيراد ${res.inserted} مريض`];
       if (res.linked > 0) parts.push(`وربط ${res.linked} مريض موجود مسبقاً`);
       if (res.queued > 0) parts.push(`وجدولة ${res.queued} رسالة ترحيب`);
@@ -161,7 +169,7 @@ function PatientsRosterPage() {
       setPendingImport(null);
       load("");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "تعذّر استيراد الملف");
+      toast.error(arabicOr(e, "تعذّر استيراد الملف"));
     } finally {
       setImporting(false);
     }

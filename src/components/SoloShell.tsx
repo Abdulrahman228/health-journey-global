@@ -31,8 +31,12 @@ export function SoloShell({ ctx, children }: Props) {
         style={{ borderTopColor: brand, borderTopWidth: 3 }}
       >
         <div className="mx-auto max-w-5xl px-4 py-3 sm:px-6 flex items-center justify-between gap-4">
+          {/* Home of the white-label site is the doctor's page — "/" would drop
+              the patient onto the marketplace (other doctors). ctx.slug is
+              always set when SoloShell renders (isSolo requires it). */}
           <Link
-            to="/"
+            to="/d/$slug"
+            params={{ slug: ctx.slug ?? "" }}
             className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
             aria-label={clinicName}
           >

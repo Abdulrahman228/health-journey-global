@@ -1,14 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-// The generated Database types don't yet include the `articles` table, so we
-// cast for the local CRUD operations. RLS still enforces admin-only access.
-const sb = supabase as unknown as {
-  from: (t: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [k: string]: any;
-  };
-};
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { AdminShell } from "@/components/admin/AdminNav";
@@ -117,18 +109,21 @@ function AdminArticlesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await sb
+    const { data, error } = await supabase
       .from("articles")
       .select(
         "id,slug,language,title,excerpt,body_md,cover_image,specialty_slug,author_name,reading_minutes,is_published,published_at,updated_at",
       )
       .order("updated_at", { ascending: false });
     if (error) {
-      toast.error("تعذّر تحميل المقالات");
+      toast.error("تعذّر تحميل المقالات: " + error.message);
       setLoading(false);
       return;
     }
-    setRows((data ?? []) as ArticleRow[]);
+    // `language` is text + CHECK (ar|en) in the DB; narrow it for the editor.
+    setRows(
+      (data ?? []).map((r): ArticleRow => ({ ...r, language: r.language === "en" ? "en" : "ar" })),
+    );
     setLoading(false);
   }, []);
 
@@ -211,11 +206,13 @@ function AdminArticlesPage() {
 
     setSaving(true);
     const op = draft.id
-      ? sb.from("articles").update(payload).eq("id", draft.id)
-      : sb.from("articles").insert(payload);
+      ? supabase.from("articles").update(payload).eq("id", draft.id)
+      : supabase.from("articles").insert(payload);
     const { error } = await op;
     if (error) {
-      toast.error(error.message.includes("duplicate") ? "الـ slug موجود بالفعل" : "تعذّر الحفظ");
+      toast.error(
+        error.message.includes("duplicate") ? "الـ slug موجود بالفعل" : "تعذّر الحفظ: " + error.message,
+      );
       setSaving(false);
       return;
     }
@@ -239,9 +236,9 @@ function AdminArticlesPage() {
 
   const remove = async (r: ArticleRow) => {
     if (!confirm(`حذف المقال "${r.title}" نهائياً؟`)) return;
-    const { error } = await sb.from("articles").delete().eq("id", r.id);
+    const { error } = await supabase.from("articles").delete().eq("id", r.id);
     if (error) {
-      toast.error("تعذّر الحذف");
+      toast.error("تعذّر الحذف: " + error.message);
       return;
     }
     toast.success("تم الحذف");
@@ -440,7 +437,7 @@ function AdminArticlesPage() {
                 <select
                   value={draft.language}
                   onChange={(e) =>
-                    setDraft((d) => ({ ...d, language: e.target.value as "ar" | "en" }))
+                    setDraft((d) => ({ ...d, language: e.target.value === "en" ? "en" : "ar" }))
                   }
                   className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 outline-none focus:border-primary"
                 >

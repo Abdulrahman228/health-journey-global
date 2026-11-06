@@ -6,7 +6,10 @@
  * given reminder fires exactly once even if the cron overlaps.
  *
  * Selection window: appointments scheduled between (now + 23h) and (now + 25h)
- * with status confirmed/booked AND payment_status paid AND reminder not yet sent.
+ * with an active status, not refunded/failed, and reminder not yet sent.
+ * (Web bookings are paid at the clinic or by manual transfer, so they stay
+ * payment_status='unpaid' until the visit — requiring 'paid' meant almost no
+ * reminder was ever sent.)
  *
  * Performance: capped at 50 sends per run to stay within Worker CPU limits.
  * If your appointment volume exceeds 50/hour, switch to a Durable Object queue
@@ -19,8 +22,10 @@ const REMINDER_WINDOW_START_HOURS = 23;
 const REMINDER_WINDOW_END_HOURS = 25;
 const MAX_PER_RUN = 50;
 
-const PAID_STATUSES = ["paid", "partially_refunded"] as const;
-const ACTIVE_APPOINTMENT_STATUSES = ["confirmed", "booked", "scheduled"] as const;
+// appointments.status values written by book_slot_appointment / the queue
+// (there is no 'booked' / 'scheduled' status).
+const REMINDABLE_PAYMENT_STATUSES: string[] = ["unpaid", "paid", "partially_refunded"];
+const ACTIVE_APPOINTMENT_STATUSES: string[] = ["confirmed", "waiting"];
 
 export type CronRunResult = {
   scanned: number;
@@ -53,9 +58,9 @@ export async function runAppointmentReminders(opts: {
     )
     .gte("scheduled_at", windowStart.toISOString())
     .lte("scheduled_at", windowEnd.toISOString())
-    .is("reminder_email_sent_at" as never, null) // column added by migration
-    .in("status", ACTIVE_APPOINTMENT_STATUSES as unknown as string[])
-    .in("payment_status", PAID_STATUSES as unknown as string[])
+    .is("reminder_email_sent_at", null)
+    .in("status", ACTIVE_APPOINTMENT_STATUSES)
+    .in("payment_status", REMINDABLE_PAYMENT_STATUSES)
     .limit(MAX_PER_RUN);
 
   if (queryError) {
@@ -76,10 +81,10 @@ export async function runAppointmentReminders(opts: {
   // don't keep re-scanning the same rows; switching the key on later will
   // resume sending without backlog spam.
   if (!isEmailEnabled()) {
-    const ids = candidates.map((a) => a.id as string);
+    const ids = candidates.map((a) => a.id);
     await supabaseAdmin
       .from("appointments")
-      .update({ reminder_email_sent_at: now.toISOString() } as never)
+      .update({ reminder_email_sent_at: now.toISOString() })
       .in("id", ids);
     result.skipped = candidates.length;
     return result;
@@ -187,6 +192,6 @@ export async function runAppointmentReminders(opts: {
 async function markSent(appointmentId: string, when: Date): Promise<void> {
   await supabaseAdmin
     .from("appointments")
-    .update({ reminder_email_sent_at: when.toISOString() } as never)
+    .update({ reminder_email_sent_at: when.toISOString() })
     .eq("id", appointmentId);
 }

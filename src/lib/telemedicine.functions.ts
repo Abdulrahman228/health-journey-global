@@ -35,8 +35,8 @@ export const toggleTelemedicine = createServerFn({ method: "POST" })
           "00000000-0000-0000-0000-000000000000",
       )
       .maybeSingle();
-    if (ddErr) throw new Error(ddErr.message);
-    if (!dd) throw new Error("Doctor profile not found");
+    if (ddErr) throw new Error("تعذّر تحميل ملف الطبيب: " + ddErr.message);
+    if (!dd) throw new Error("لم يتم العثور على ملف الطبيب");
 
     // Gate: block enabling for unverified doctors, and log the attempt.
     if (data.enabled && dd.is_verified !== true) {
@@ -58,14 +58,14 @@ export const toggleTelemedicine = createServerFn({ method: "POST" })
           attempted: "enable_telemedicine",
         },
       });
-      throw new Error("Verification required to enable online consultations");
+      throw new Error("يجب توثيق حسابك أولاً لتفعيل الاستشارات أونلاين");
     }
 
     const { error } = await supabaseAdmin
       .from("doctor_details")
       .update({ telemedicine_enabled: data.enabled })
       .eq("id", dd.id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر حفظ الإعداد: " + error.message);
 
     return {
       ok: true as const,

@@ -3,7 +3,6 @@
  * verified → new, and attributed peer referrals. Admin-gated; read-only.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertAdmin } from "./_kit";
@@ -18,20 +17,19 @@ export interface OnboardingFunnel {
   seededOptedOut: number;
 }
 
-/** Resolve a supabase count query to a plain number (0 on any error). */
-async function countOf(query: PromiseLike<{ count: number | null }>): Promise<number> {
-  try {
-    const { count } = await query;
-    return count ?? 0;
-  } catch {
-    return 0;
-  }
+/** Resolve a supabase count query to a plain number; surfaces query errors
+ *  instead of silently reporting 0 (a fake-looking funnel). */
+async function countOf(
+  query: PromiseLike<{ count: number | null; error: { message: string } | null }>,
+): Promise<number> {
+  const { count, error } = await query;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 export const adminOnboardingFunnel = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) => z.object({ userId: z.string().uuid() }).parse(x))
-  .handler(async ({ data, context }): Promise<OnboardingFunnel> => {
+  .handler(async ({ context }): Promise<OnboardingFunnel> => {
     await assertAdmin(context.userId);
 
     const since30 = new Date(Date.now() - 30 * 86_400_000).toISOString();

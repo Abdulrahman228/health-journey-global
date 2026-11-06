@@ -30,7 +30,7 @@ const DEMO_DOCTOR_NAMES = new Set(["Dr. Test", "د. تجربة الطبيب"]);
 export const Route = createFileRoute("/doctors")({
   head: () => ({
     meta: buildMeta({
-      title: "ابحث عن طبيب أونلاين — 2,500+ طبيب موثّق | طبانا",
+      title: "ابحث عن طبيب أونلاين — أطباء موثّقون | طبانا",
       description:
         "تصفّح أفضل الأطباء حسب التخصص والمدينة والتقييم. احجز موعدك حضورياً أو عبر فيديو خلال دقائق على منصة طبانا.",
       path: "/doctors",
@@ -175,7 +175,7 @@ function DoctorsPage() {
     if (km) setMaxDistanceKm(km);
   }, [specialties, language]);
 
-  const { data: doctors = [], isLoading } = useQuery({
+  const { data: doctors = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["doctors-with-clinics"],
     queryFn: async () => {
       // Hide seeded/demo doctors from the public patient-facing list so patients
@@ -188,16 +188,20 @@ function DoctorsPage() {
       // old single embed always failed and fell back to "no clinics" (day filter,
       // distance sort and clinic city never worked). Three plain queries instead,
       // public columns only (anon column privileges, 2026-11-04).
+      // Verified doctors only — the same rule as the specialty pages, the home
+      // "featured" row and both mobile apps (this page used to list everyone,
+      // including unverified sign-ups, under a "verified doctors" heading).
       const { data: docs, error } = await supabase
         .from("doctor_details")
         .select(PUBLIC_DOCTOR_COLUMNS)
+        .eq("is_verified", true)
         .order("rating", { ascending: false, nullsFirst: false })
         .limit(200);
       if (error) throw error;
       const rows = docs ?? [];
       const profileIds = rows.map((d) => d.profile_id).filter((x): x is string => !!x);
       const doctorIds = rows.map((d) => d.id);
-      const [{ data: profs }, { data: clinicRows }] = await Promise.all([
+      const [{ data: profs, error: profErr }, { data: clinicRows, error: clinicErr }] = await Promise.all([
         profileIds.length
           ? supabase.from("profiles").select("id, full_name, city, avatar_url").in("id", profileIds)
           : Promise.resolve({
@@ -207,6 +211,7 @@ function DoctorsPage() {
                 city: string | null;
                 avatar_url: string | null;
               }>,
+              error: null,
             }),
         doctorIds.length
           ? supabase
@@ -215,8 +220,10 @@ function DoctorsPage() {
                 "id, doctor_id, city, lat, lng, consultation_fee, currency, clinic_schedules(day_of_week)",
               )
               .in("doctor_id", doctorIds)
-          : Promise.resolve({ data: [] }),
+          : Promise.resolve({ data: [], error: null }),
       ]);
+      if (profErr) throw profErr;
+      if (clinicErr) throw clinicErr;
       const profMap = new Map((profs ?? []).map((p) => [p.id, p]));
       const clinicsByDoctor = new Map<string, unknown[]>();
       for (const c of (clinicRows ?? []) as Array<{ doctor_id: string }>) {
@@ -299,6 +306,23 @@ function DoctorsPage() {
     });
   }, [doctors, userLoc]);
 
+  // A doctor's stored specialty is free text ("طب عام", "General Practice",
+  // the sign-up placeholder "General", …). Accept every name of the selected
+  // specialty instead of one exact Arabic string.
+  const specAliases = useMemo(() => {
+    if (!specialty) return null;
+    const sel = normalizeArabicText(specialty);
+    const set = new Set<string>([sel]);
+    const row = specialties.find((s) =>
+      [s.name_ar, s.name_en, s.slug].some((v) => normalizeArabicText(v ?? "") === sel),
+    );
+    if (row) {
+      for (const v of [row.name_ar, row.name_en, row.slug]) if (v) set.add(normalizeArabicText(v));
+      if (row.slug === "general") set.add("general");
+    }
+    return set;
+  }, [specialty, specialties]);
+
   const filtered = useMemo(() => {
     const minF = minFee ? Number(minFee) : null;
     const maxF = maxFee ? Number(maxFee) : null;
@@ -312,8 +336,7 @@ function DoctorsPage() {
       const name = normalizeArabicText(d.profiles?.full_name ?? "");
       const matchesSearch =
         !q || name.includes(q) || normalizeArabicText(d.specialty ?? "").includes(q);
-      const matchesSpec =
-        !specialty || normalizeArabicText(d.specialty ?? "") === normalizeArabicText(specialty);
+      const matchesSpec = !specAliases || specAliases.has(normalizeArabicText(d.specialty ?? ""));
       const matchesCity =
         !city ||
         (d.profiles?.city ?? "").toLowerCase().includes(city.toLowerCase()) ||
@@ -338,7 +361,7 @@ function DoctorsPage() {
       return Number(b.rating ?? 0) - Number(a.rating ?? 0);
     });
     return out;
-  }, [enriched, search, specialty, city, minFee, maxFee, dayFilter, sort, maxDistanceKm]);
+  }, [enriched, search, specAliases, city, minFee, maxFee, dayFilter, sort, maxDistanceKm]);
 
   // Same search/specialty/city filters applied to seeded listings (fee/day/
   // distance don't apply — seeded rows have no schedule/clinic geometry here).
@@ -579,6 +602,19 @@ function DoctorsPage() {
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
+        ) : isError ? (
+          <div className="text-center py-16 border border-dashed border-border rounded-xl px-4">
+            <p className="font-medium text-foreground">
+              {t("Couldn't load doctors.", "تعذّر تحميل الأطباء.")}
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-3 text-sm font-medium text-primary hover:underline"
+            >
+              {t("Try again", "حاول مرة أخرى")}
+            </button>
+          </div>
         ) : filtered.length === 0 && seededFiltered.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-border rounded-xl px-4">
             <Stethoscope className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -736,7 +772,11 @@ function DoctorCard({
             {doctor.is_verified && <BadgeCheck className="h-4 w-4 text-primary shrink-0" />}
             <TierBadge tier={tier} size="sm" />
           </div>
-          <p className="text-sm text-muted-foreground truncate">{doctor.specialty}</p>
+          <p className="text-sm text-muted-foreground truncate">
+            {/^general$/i.test((doctor.specialty ?? "").trim())
+              ? t("General Practice", "طب عام")
+              : doctor.specialty}
+          </p>
           {doctor.profiles?.city && (
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
               <MapPin className="h-3 w-3" /> {doctor.profiles.city}

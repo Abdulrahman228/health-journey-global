@@ -130,9 +130,10 @@ function Hero({ t, isAr }: { t: T; isAr: boolean }) {
 
             <div className="mt-10 grid grid-cols-3 gap-4 sm:gap-6">
               {[
-                { n: "2,500+", l: t("Verified doctors", "طبيب موثّق") },
-                { n: "50K+", l: t("Consultations", "استشارة") },
-                { n: "4.8/5", l: t("Patient rating", "تقييم المرضى") },
+                // Product facts only — no made-up network statistics.
+                { n: t("0 EGP", "0 ج.م"), l: t("Booking commission", "عمولة على الحجز") },
+                { n: "10–15%", l: t("Only on online consults", "على الكشف الأونلاين فقط") },
+                { n: t("2 min", "دقيقتان"), l: t("To register", "للتسجيل") },
               ].map((s, i) => (
                 <div key={i} className="border-s border-white/20 ps-4">
                   <div className="text-2xl font-bold sm:text-3xl">{s.n}</div>
@@ -189,8 +190,8 @@ function WhyJoin({ t }: { t: T }) {
       color: "text-emerald-600 bg-emerald-50",
       title: t("Extra income", "دخل إضافى"),
       desc: t(
-        "From online consultations, paid securely via Stripe in EGP.",
-        "من الكشف الأونلاين، تُحوّل بأمان عبر Stripe بالجنيه المصرى.",
+        "From online consultations, paid securely in EGP.",
+        "من الكشف الأونلاين، تُحوّل بأمان بالجنيه المصرى.",
       ),
     },
     {
@@ -524,7 +525,7 @@ function IncomeCalculator({ t, isAr }: { t: T; isAr: boolean }) {
 function TrustBar({ t }: { t: T }) {
   const items = [
     { Icon: Shield, label: t("TLS 1.3 encryption", "تشفير TLS 1.3") },
-    { Icon: CreditCard, label: t("Stripe secured", "Stripe المعتمدة") },
+    { Icon: CreditCard, label: t("Secure payments", "مدفوعات آمنة") },
     { Icon: BadgeCheck, label: t("Licenced & regulated", "مرخّصة ومنظّمة") },
     { Icon: HeadphonesIcon, label: t("24/7 support", "دعم 24/7") },
   ];
@@ -555,15 +556,15 @@ function Faq({ t }: { t: T }) {
     {
       q: t("How much commission does Tebana take?", "كم تأخذ طبانا عمولة؟"),
       a: t(
-        "Commission applies only to online consultations: 15% on the Free plan, 12% on Premium, and 10% on Gold. Booking in-clinic appointments through Tebana is completely free for both you and the patient.",
-        "العمولة على الكشف الأونلاين فقط: 15% على الخطة المجانية، 12% على بريميوم، و10% على جولد. حجز المواعيد الحضورية عبر طبانا مجانى تماماً للطبيب والمريض على السواء.",
+        "Commission applies only to online consultations: 15% on the Free plan and 10% on Gold. Booking in-clinic appointments through Tebana is completely free for both you and the patient.",
+        "العمولة على الكشف الأونلاين فقط: 15% على الخطة المجانية و10% على جولد. حجز المواعيد الحضورية عبر طبانا مجانى تماماً للطبيب والمريض على السواء.",
       ),
     },
     {
       q: t("When do I receive my earnings?", "متى أستلم أرباحى؟"),
       a: t(
-        "Earnings are paid out weekly via bank transfer (Egyptian banks) or to your Stripe account after a 7-day clearance period from the consultation date.",
-        "تُحوَّل الأرباح أسبوعياً عبر تحويل بنكى (بنوك مصرية) أو لحساب Stripe الخاص بك بعد فترة تسوية 7 أيام من تاريخ الاستشارة.",
+        "Your online-consultation earnings collect in your Tebana wallet; request a withdrawal from your dashboard and it is transferred to your bank account after review.",
+        "تتجمّع أرباح الكشف الأونلاين في محفظتك على طبانا؛ اطلب السحب من لوحة التحكم ويُحوَّل المبلغ لحسابك البنكى بعد المراجعة.",
       ),
     },
     {

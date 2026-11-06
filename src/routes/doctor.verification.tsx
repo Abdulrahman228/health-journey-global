@@ -21,7 +21,7 @@ interface DoctorRow {
   id: string;
   syndicate_number: string | null;
   national_id_last4: string | null;
-  is_verified: boolean;
+  is_verified: boolean | null;
   verification_status: string | null;
   verification_notes: string | null;
   verification_submitted_at: string | null;
@@ -51,9 +51,11 @@ function VerificationPage() {
       .select("id,syndicate_number,national_id_last4,is_verified,verification_status,verification_notes,verification_submitted_at")
       .eq("profile_id", profile.id)
       .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setDoctor(data as DoctorRow);
+      .then(({ data, error }) => {
+        if (error) {
+          toast.error("تعذّر تحميل بيانات التوثيق: " + error.message);
+        } else if (data) {
+          setDoctor(data);
           setSyndicate(data.syndicate_number ?? "");
           setNidLast4(data.national_id_last4 ?? "");
         }
@@ -73,7 +75,8 @@ function VerificationPage() {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase
+    // .select() so a write silently dropped by RLS (0 rows) is caught too.
+    const { data: saved, error } = await supabase
       .from("doctor_details")
       .update({
         syndicate_number: syndicate,
@@ -82,10 +85,11 @@ function VerificationPage() {
         verification_submitted_at: new Date().toISOString(),
         verification_notes: null,
       })
-      .eq("id", doctor.id);
+      .eq("id", doctor.id)
+      .select("id");
     setSubmitting(false);
-    if (error) {
-      toast.error("حصل خطأ، جرّب تاني");
+    if (error || !saved || saved.length === 0) {
+      toast.error("حصل خطأ، جرّب تاني" + (error ? ` — ${error.message}` : ""));
       return;
     }
     toast.success("تم إرسال طلب التوثيق، هتتم المراجعة خلال 24-48 ساعة");
@@ -169,7 +173,7 @@ function VerificationPage() {
             value={syndicate}
             onChange={(e) => setSyndicate(e.target.value.replace(/\D/g, ""))}
             placeholder="مثال: 123456"
-            disabled={doctor.is_verified}
+            disabled={doctor.is_verified === true}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
           />
           <p className="mt-1 text-xs text-muted-foreground">
@@ -186,7 +190,7 @@ function VerificationPage() {
             value={nidLast4}
             onChange={(e) => setNidLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
             placeholder="####"
-            disabled={doctor.is_verified}
+            disabled={doctor.is_verified === true}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
           />
           <p className="mt-1 text-xs text-muted-foreground">

@@ -34,14 +34,14 @@ export const submitManualSubscription = createServerFn({ method: "POST" })
       .select("id, full_name")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!profile) throw new Error("Profile not found.");
+    if (!profile) throw new Error("لم يتم العثور على الملف الشخصي.");
 
     const { data: doctor } = await supabaseAdmin
       .from("doctor_details")
       .select("id")
       .eq("profile_id", profile.id)
       .maybeSingle();
-    if (!doctor) throw new Error("Only doctors can submit a subscription receipt.");
+    if (!doctor) throw new Error("رفع إيصال الاشتراك متاح للأطباء فقط.");
 
     // The plan must exist and actually be a Gold plan.
     const { data: plan } = await supabaseAdmin
@@ -50,16 +50,20 @@ export const submitManualSubscription = createServerFn({ method: "POST" })
       .eq("code", data.planCode)
       .maybeSingle();
     if (!plan || plan.tier !== "gold") {
-      throw new Error("Invalid plan.");
+      throw new Error("الخطة غير صالحة.");
     }
 
     // Idempotency: if a pending manual request already exists, don't stack.
+    // (limit(1): with 2+ pending rows maybeSingle() errored → data null → a
+    // further duplicate row was inserted.)
     const { data: existing } = await supabaseAdmin
       .from("subscriptions")
       .select("id")
       .eq("user_id", context.userId)
       .eq("is_manual", true)
       .eq("access_status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (existing) {
       return {
@@ -91,14 +95,18 @@ export const submitManualSubscription = createServerFn({ method: "POST" })
         receipt_url: data.receiptUrl,
         current_period_start: grantedAt,
         current_period_end: periodEnd,
-        environment: "production",
+        // Must be "live" (same as admin Grant Gold + paymob-webhook): the web
+        // useSubscription filters environment = getStripeEnvironment() ("live"
+        // in production). "production" matched nothing, so a doctor who had
+        // just paid saw "no active subscription" on /billing and /pricing.
+        environment: "live",
         stripe_customer_id: `manual_${context.userId}`,
         stripe_subscription_id: syntheticSubId,
         price_id: `manual_${data.planCode}`,
       })
       .select("id")
       .single();
-    if (insErr) throw new Error(insErr.message);
+    if (insErr) throw new Error("تعذّر تسجيل طلب الاشتراك: " + insErr.message);
 
     // Notify all admins so the receipt surfaces in the review queue.
     const { data: admins } = await supabaseAdmin

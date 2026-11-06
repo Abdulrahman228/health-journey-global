@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { getCurrentSubdomain } from "@/lib/subdomain";
+import { getCurrentSubdomain, type SubdomainInfo } from "@/lib/subdomain";
 
 export interface SoloDoctor {
   doctor_id: string;
@@ -30,36 +31,39 @@ export interface SoloContext {
  * page should hide global marketplace navigation.
  */
 export function useSoloMode(): SoloContext {
-  const [info] = useState<ReturnType<typeof getCurrentSubdomain>>(() => {
+  // Host never changes for the life of the page (SSR-safe: nulls on the server).
+  const [host] = useState<SubdomainInfo>(() => getCurrentSubdomain());
+  // The path DOES change on client-side navigation and this hook lives in the
+  // root layout (never remounts), so derive path mode from the router: /d/{slug}
+  // is branded when reached via a <Link>, and leaving it removes the branding.
+  const { pathname } = useLocation();
+  const info = useMemo<SubdomainInfo>(() => {
     // 1) White-label subdomain: {slug}.mytabibi.com (needs wildcard DNS).
-    const sub = getCurrentSubdomain();
-    if (sub.isSubdomain && sub.slug) return sub;
+    if (host.isSubdomain && host.slug) return host;
     // 2) Apex path /d/{slug} — the SAME white-label page with zero DNS setup,
     //    so it works instantly for every doctor. Slug rules match the DB.
-    if (typeof window !== "undefined") {
-      const m = window.location.pathname.match(/^\/d\/([a-z0-9][a-z0-9-]{1,79})(?=\/|$)/i);
-      if (m) return { isSubdomain: true, slug: m[1].toLowerCase(), apex: null };
-    }
-    return sub;
-  });
+    const m = pathname.match(/^\/d\/([a-z0-9][a-z0-9-]{1,79})(?=\/|$)/i);
+    if (m) return { isSubdomain: true, slug: m[1].toLowerCase(), apex: null };
+    return host;
+  }, [host, pathname]);
   const [doctor, setDoctor] = useState<SoloDoctor | null>(null);
   const [loading, setLoading] = useState(info.isSubdomain);
 
   useEffect(() => {
-    if (!info.isSubdomain || !info.slug) {
+    // Drop the previous doctor's branding as soon as the slug changes.
+    setDoctor(null);
+    const slug = info.isSubdomain ? info.slug : null;
+    if (!slug) {
       setLoading(false);
       return;
     }
+    setLoading(true);
     let mounted = true;
     (async () => {
-      const { data, error } = await supabase.rpc("get_doctor_by_slug", { p_slug: info.slug as string });
+      // Returns 0 or 1 row: verified doctors with a public/unlisted profile.
+      const { data, error } = await supabase.rpc("get_doctor_by_slug", { p_slug: slug });
       if (!mounted) return;
-      if (error || !data || (Array.isArray(data) && data.length === 0)) {
-        setDoctor(null);
-      } else {
-        const row = (Array.isArray(data) ? data[0] : data) as SoloDoctor;
-        setDoctor(row);
-      }
+      setDoctor(error ? null : (data?.[0] ?? null));
       setLoading(false);
     })();
     return () => {

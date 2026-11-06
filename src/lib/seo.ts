@@ -17,7 +17,7 @@
  * Falls back to production domain placeholder.
  */
 export const SITE_URL: string =
-  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_SITE_URL) ||
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_SITE_URL) ||
   "https://mytabibi.com";
 
 export const siteConfig = {
@@ -99,6 +99,17 @@ export const siteConfig = {
     addressCountry: "EG",
   },
 } as const;
+
+/**
+ * doctor_details.specialty is free text: doctors type the Arabic or English
+ * name, and older sign-ups stored the placeholder "General" (now "طب عام").
+ * Match every accepted spelling (same rule as /doctors and search_doctors_nearby).
+ */
+export function specialtyTerms(spec: { name_ar: string; name_en: string; slug: string }): string[] {
+  const terms = new Set([spec.name_ar, spec.name_en, spec.slug]);
+  if (spec.slug === "general") terms.add("General");
+  return [...terms];
+}
 
 /** Build a fully-qualified canonical URL from a path. */
 export function canonicalUrl(path: string = "/"): string {

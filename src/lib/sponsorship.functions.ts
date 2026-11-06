@@ -13,14 +13,15 @@ async function getDoctorIdAndTier(
     .select("id, profiles!inner(user_id)")
     .eq("profiles.user_id", userId)
     .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!dd) throw new Error("Not a doctor");
+  if (error) throw new Error("تعذّر تحميل بيانات الطبيب: " + error.message);
+  if (!dd) throw new Error("هذه الصفحة للأطباء فقط");
 
   const { data: tierRow } = await supabaseAdmin.rpc("doctor_active_tier", {
     doctor_details_id: dd.id,
   });
-  const tier = (tierRow as "free" | "premium" | "gold" | null) ?? "free";
-  return { doctorId: dd.id as string, tier };
+  const tier: "free" | "premium" | "gold" =
+    tierRow === "gold" || tierRow === "premium" ? tierRow : "free";
+  return { doctorId: dd.id, tier };
 }
 
 // ---------------------------------------------------------------------------
@@ -38,13 +39,13 @@ export const listMySlots = createServerFn({ method: "GET" })
         id, status, monthly_budget_cents, daily_cap_cents, cpc_bid_cents,
         spent_total_cents, spent_today_cents, starts_at, ends_at, created_at,
         governorate_id, city_id, specialty,
-        governorate:governorate_id (name_ar, name_en),
-        city:city_id (name_ar, name_en)
+        governorate:regions!sponsored_slots_governorate_id_fkey (name_ar, name_en),
+        city:regions!sponsored_slots_city_id_fkey (name_ar, name_en)
       `,
       )
       .eq("doctor_id", doctorId)
       .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر تحميل الحملات: " + error.message);
 
     // Last-30d analytics
     const since = new Date(Date.now() - 30 * 86400 * 1000).toISOString();
@@ -117,12 +118,14 @@ export const upsertSponsoredSlot = createServerFn({ method: "POST" })
     };
 
     if (data.slotId) {
-      const { error } = await supabaseAdmin
+      const { data: updated, error } = await supabaseAdmin
         .from("sponsored_slots")
         .update({ ...payload, updated_at: new Date().toISOString() })
         .eq("id", data.slotId)
-        .eq("doctor_id", doctorId);
-      if (error) throw new Error(error.message);
+        .eq("doctor_id", doctorId)
+        .select("id");
+      if (error) throw new Error("تعذّر حفظ الحملة: " + error.message);
+      if (!updated || updated.length === 0) throw new Error("الحملة غير موجودة");
       return { ok: true, slotId: data.slotId };
     }
 
@@ -131,7 +134,7 @@ export const upsertSponsoredSlot = createServerFn({ method: "POST" })
       .insert(payload)
       .select("id")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر حفظ الحملة: " + error.message);
     return { ok: true, slotId: row.id };
   });
 
@@ -148,13 +151,19 @@ export const setSlotStatus = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data, context }) => {
-    const { doctorId } = await getDoctorIdAndTier(context.userId);
-    const { error } = await supabaseAdmin
+    const { doctorId, tier } = await getDoctorIdAndTier(context.userId);
+    // Re-activating spends budget → same Gold gate as creating a campaign.
+    if (data.status === "active" && tier !== "gold") {
+      throw new Error("الإعلانات الممولة متاحة فقط لاشتراكات Gold");
+    }
+    const { data: updated, error } = await supabaseAdmin
       .from("sponsored_slots")
       .update({ status: data.status, updated_at: new Date().toISOString() })
       .eq("id", data.slotId)
-      .eq("doctor_id", doctorId);
-    if (error) throw new Error(error.message);
+      .eq("doctor_id", doctorId)
+      .select("id");
+    if (error) throw new Error("تعذّر تحديث حالة الحملة: " + error.message);
+    if (!updated || updated.length === 0) throw new Error("الحملة غير موجودة");
     return { ok: true };
   });
 
@@ -181,12 +190,17 @@ export const trackSponsoredEvent = createServerFn({ method: "POST" })
     const { data: slot, error } = await supabaseAdmin
       .from("sponsored_slots")
       .select(
-        "id, doctor_id, status, cpc_bid_cents, monthly_budget_cents, daily_cap_cents, spent_total_cents, spent_today_cents, spent_today_date",
+        "id, doctor_id, status, starts_at, ends_at, cpc_bid_cents, monthly_budget_cents, daily_cap_cents, spent_total_cents, spent_today_cents, spent_today_date",
       )
       .eq("id", data.slotId)
       .maybeSingle();
     if (error || !slot) return { ok: false };
     if (slot.status !== "active") return { ok: false };
+    // Outside the campaign window → not billable (SponsoredDoctorsRow hides
+    // these, but this endpoint is public).
+    const nowMs = Date.now();
+    if (slot.starts_at && Date.parse(slot.starts_at) > nowMs) return { ok: false };
+    if (slot.ends_at && Date.parse(slot.ends_at) < nowMs) return { ok: false };
 
     let cost = data.eventType === "click" || data.eventType === "book" ? slot.cpc_bid_cents : 0;
 

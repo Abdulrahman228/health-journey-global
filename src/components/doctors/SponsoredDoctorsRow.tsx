@@ -63,7 +63,7 @@ export function SponsoredDoctorsRow({ specialty, governorateId }: Props) {
       let q = supabase
         .from("sponsored_slots")
         .select(`
-          id, doctor_id, cpc_bid_cents, specialty, governorate_id,
+          id, doctor_id, cpc_bid_cents, specialty, governorate_id, starts_at, ends_at,
           doctor:doctor_id (
             id, specialty, rating, is_verified, consultation_fee, currency,
             profiles:profile_id ( full_name, city, avatar_url )
@@ -80,7 +80,23 @@ export function SponsoredDoctorsRow({ specialty, governorateId }: Props) {
         setLoading(false);
         return;
       }
-      let rows = (data ?? []) as unknown as SponsoredItem[];
+      // The query returns the slot as `id`; the old cast to SponsoredItem hid
+      // that `slot_id` was always undefined, so no impression/click was ever
+      // recorded (trackSponsoredEvent rejects a missing slotId).
+      const now = Date.now();
+      let rows: SponsoredItem[] = [];
+      for (const r of data ?? []) {
+        if (!r.doctor) continue;
+        // status stays "active" past the campaign window — respect the dates too.
+        if (Date.parse(r.starts_at) > now) continue;
+        if (r.ends_at && Date.parse(r.ends_at) <= now) continue;
+        rows.push({
+          slot_id: r.id,
+          doctor_id: r.doctor_id,
+          cpc_bid_cents: r.cpc_bid_cents,
+          doctor: r.doctor,
+        });
+      }
       if (specialty) {
         const s = specialty.toLowerCase();
         rows = rows.filter(

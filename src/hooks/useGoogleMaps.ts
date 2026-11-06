@@ -9,7 +9,11 @@ declare global {
   }
 }
 
-const BROWSER_KEY = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as
+// VITE_GOOGLE_MAPS_BROWSER_KEY is the project's own key (Google Cloud project with
+// billing, HTTP-referrer restricted to mytabibi.com). The Lovable connector key is
+// only a fallback: its Google project has billing disabled (BillingNotEnabledMapError).
+const BROWSER_KEY = ((import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY as string | undefined) ||
+  (import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as string | undefined)) as
   | string
   | undefined;
 const CHANNEL = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID as

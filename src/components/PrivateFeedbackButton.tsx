@@ -66,7 +66,7 @@ export function PrivateFeedbackButton({ doctorDetailsId, doctorName }: Props) {
             </div>
 
             <p className="text-xs text-muted-foreground mb-3">
-              مشفّرة من طرف لطرف — لن يقرأها أحد سوى الطبيب نفسه. لن تظهر في
+              تُحفظ مشفّرة ولا يطّلع عليها إلا الطبيب نفسه. لن تظهر في
               التقييمات العامة.
             </p>
 
@@ -143,7 +143,9 @@ export function PrivateFeedbackButton({ doctorDetailsId, doctorName }: Props) {
                     setRating(null);
                     setAnonymous(false);
                   } catch (e) {
-                    toast.error((e as Error).message);
+                    toast.error(
+                      e instanceof Error && e.message ? e.message : "تعذّر إرسال الملاحظة",
+                    );
                   } finally {
                     setSubmitting(false);
                   }

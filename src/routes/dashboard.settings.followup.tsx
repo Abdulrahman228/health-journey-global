@@ -54,26 +54,26 @@ function FollowupSettingsPage() {
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const s = await getMyFollowupSettings({ data: { userId: user.id } });
-    if (!s) {
-      setIsDoctor(false);
-    } else {
-      const sx = s as {
-        consultationFee: number;
-        followupPeriodDays: number;
-        freeFollowupDays: number;
-        followupFee: number;
-        maxFreeFollowups: number;
-      };
-      setConsultationFee(sx.consultationFee);
-      setForm({
-        followupPeriodDays: sx.followupPeriodDays,
-        freeFollowupDays: sx.freeFollowupDays,
-        followupFee: sx.followupFee,
-        maxFreeFollowups: sx.maxFreeFollowups,
-      });
+    try {
+      const s = await getMyFollowupSettings({ data: { userId: user.id } });
+      if (!s) {
+        setIsDoctor(false);
+      } else {
+        setConsultationFee(s.consultationFee);
+        setForm({
+          followupPeriodDays: s.followupPeriodDays,
+          freeFollowupDays: s.freeFollowupDays,
+          followupFee: s.followupFee,
+          maxFreeFollowups: s.maxFreeFollowups,
+        });
+      }
+    } catch (err) {
+      toast.error(
+        "تعذّر تحميل إعدادات المتابعة" + (err instanceof Error ? ` — ${err.message}` : ""),
+      );
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [user]);
 
   useEffect(() => {
@@ -88,16 +88,26 @@ function FollowupSettingsPage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    setSaving(true);
-    const res = await updateMyFollowupSettings({
-      data: { userId: user.id, ...form },
-    });
-    setSaving(false);
-    if (!res.ok) {
-      toast.error("فشل الحفظ: " + res.error);
+    if (!Number.isFinite(form.followupFee) || form.followupFee < 0) {
+      toast.error("أدخل سعر متابعة صحيحاً (0 أو أكثر)");
       return;
     }
-    toast.success("تم حفظ إعدادات المتابعة");
+    setSaving(true);
+    try {
+      const res = await updateMyFollowupSettings({
+        data: { userId: user.id, ...form },
+      });
+      if (!res.ok) {
+        toast.error("فشل الحفظ: " + res.error);
+        return;
+      }
+      toast.success("تم حفظ إعدادات المتابعة");
+    } catch (err) {
+      toast.error("فشل الحفظ — تحقّق من القيم المدخلة");
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (authLoading || loading) {

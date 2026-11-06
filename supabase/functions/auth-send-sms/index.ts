@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
       const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
-      await admin.from("outbox_messages").insert({
+      const { error } = await admin.from("outbox_messages").insert({
         to_phone: phone,
         template_key: "otp",
         params: {},
@@ -84,12 +84,16 @@ Deno.serve(async (req) => {
         error: out.error ?? null,
         sent_at: out.ok ? new Date().toISOString() : null,
       });
+      // supabase-js reports insert failures in { error } — it does not throw.
+      if (error) console.warn("[auth-send-sms] audit insert failed:", error.message);
     } catch (e) {
       console.warn("[auth-send-sms] audit failed:", e instanceof Error ? e.message : e);
     }
   };
-  // deno-lint-ignore no-explicit-any
-  const rt = (globalThis as any).EdgeRuntime;
+  // Supabase Edge global (not in Deno lib types): keeps the audit write alive
+  // after the response so the ~5 s hook budget is spent on delivery only.
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } })
+    .EdgeRuntime;
   if (rt?.waitUntil) rt.waitUntil(audit()); else await audit();
 
   if (!out.ok) {

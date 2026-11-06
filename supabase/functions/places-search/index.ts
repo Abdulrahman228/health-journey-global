@@ -36,19 +36,38 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 // Confirm the caller is a real, signed-in Supabase user (protects our billed key).
-async function isAuthenticated(authHeader: string | null): Promise<boolean> {
-  if (!authHeader) return false;
+// Returns the user id, or null.
+async function authenticatedUserId(authHeader: string | null): Promise<string | null> {
+  if (!authHeader) return null;
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!supabaseUrl || !anon) return false;
+  if (!supabaseUrl || !anon) return null;
   try {
     const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: authHeader, apikey: anon },
     });
-    return res.ok;
+    if (!res.ok) return null;
+    const user = (await res.json()) as { id?: string };
+    return typeof user.id === "string" ? user.id : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+// Best-effort per-user limit (per function instance): typing a clinic name is a
+// few dozen calls; this stops one account from draining the Places quota.
+const RATE_LIMIT = 60;
+const RATE_WINDOW_MS = 60_000;
+const calls = new Map<string, { start: number; count: number }>();
+function allow(userId: string): boolean {
+  const now = Date.now();
+  const entry = calls.get(userId);
+  if (!entry || now - entry.start > RATE_WINDOW_MS) {
+    calls.set(userId, { start: now, count: 1 });
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= RATE_LIMIT;
 }
 
 type AddressComponent = { longText?: string; types?: string[] };
@@ -78,8 +97,12 @@ Deno.serve(async (req) => {
   const apiKey = Deno.env.get("PLACES_API_KEY");
   if (!apiKey) return jsonResponse({ error: "places_key_not_configured" }, 500);
 
-  if (!(await isAuthenticated(req.headers.get("Authorization")))) {
+  const userId = await authenticatedUserId(req.headers.get("Authorization"));
+  if (!userId) {
     return jsonResponse({ error: "unauthorized" }, 401);
+  }
+  if (!allow(userId)) {
+    return jsonResponse({ error: "rate_limited" }, 429);
   }
 
   let body: Body;
@@ -109,7 +132,8 @@ Deno.serve(async (req) => {
         }),
       });
       if (!res.ok) {
-        return jsonResponse({ error: "places_error", detail: await res.text() }, 502);
+        console.error("places api error", res.status, await res.text());
+        return jsonResponse({ error: "places_error", status: res.status }, 502);
       }
       const data = await res.json();
       const suggestions = (data.suggestions ?? [])
@@ -144,7 +168,8 @@ Deno.serve(async (req) => {
         },
       );
       if (!res.ok) {
-        return jsonResponse({ error: "places_error", detail: await res.text() }, 502);
+        console.error("places api error", res.status, await res.text());
+        return jsonResponse({ error: "places_error", status: res.status }, 502);
       }
       const d = await res.json();
       const { city, country } = extractCityCountry(d.addressComponents);
@@ -165,6 +190,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ error: "unknown_action" }, 400);
   } catch (e) {
-    return jsonResponse({ error: "internal_error", detail: String(e) }, 500);
+    console.error("places-search failed", e);
+    return jsonResponse({ error: "internal_error" }, 500);
   }
 });

@@ -105,7 +105,7 @@ export function DoctorDocumentsUploader() {
       const res = await list();
       setDocs(res.documents as DocRow[]);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(e instanceof Error && e.message ? e.message : "تعذّر تنفيذ العملية");
     } finally {
       setLoading(false);
     }
@@ -137,7 +137,7 @@ export function DoctorDocumentsUploader() {
       toast.success("تم رفع المستند");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(e instanceof Error && e.message ? e.message : "تعذّر تنفيذ العملية");
     } finally {
       setUploadingType(null);
     }
@@ -150,7 +150,7 @@ export function DoctorDocumentsUploader() {
       toast.success("تم الحذف");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(e instanceof Error && e.message ? e.message : "تعذّر تنفيذ العملية");
     }
   };
 
@@ -159,7 +159,7 @@ export function DoctorDocumentsUploader() {
       const { url } = await sign({ data: { documentId: id } });
       if (url) window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(e instanceof Error && e.message ? e.message : "تعذّر تنفيذ العملية");
     }
   };
 

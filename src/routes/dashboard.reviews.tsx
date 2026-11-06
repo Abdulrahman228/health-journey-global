@@ -37,6 +37,18 @@ import { toast } from "sonner";
 
 type FilterKey = "all" | "published" | "unpublished" | "pending" | "rejected";
 
+/** reviews.functions returns machine codes (shared with doctor.$id) → Arabic. */
+function reviewErrorText(code: string): string {
+  const map: Record<string, string> = {
+    review_not_approved_yet: "لا يمكن النشر — لم يوافق المشرف على هذا التقييم بعد.",
+    review_not_found: "التقييم غير موجود.",
+    forbidden: "غير مسموح — هذا التقييم ليس لك.",
+    not_a_doctor: "هذه الصفحة للأطباء فقط.",
+    profile_not_found: "لم يتم العثور على الملف الشخصي.",
+  };
+  return map[code] ?? (code ? `تعذّر تنفيذ العملية: ${code}` : "تعذّر تنفيذ العملية");
+}
+
 export const Route = createFileRoute("/dashboard/reviews")({
   head: () => ({
     meta: [
@@ -59,7 +71,11 @@ function DoctorReviewsPage() {
     if (!user) navigate({ to: "/login" });
   }, [authLoading, user, navigate]);
 
-  const { data: rows = [], isLoading } = useQuery({
+  const {
+    data: rows = [],
+    isLoading,
+    error: listError,
+  } = useQuery({
     queryKey: ["doctor-my-reviews", user?.id, filter],
     enabled: !!user?.id,
     queryFn: () =>
@@ -73,16 +89,7 @@ function DoctorReviewsPage() {
       }),
     onSuccess: (res, vars) => {
       if (!res.ok) {
-        if (res.error === "review_not_approved_yet") {
-          toast.error(
-            t(
-              "Cannot publish — admin has not approved this review yet.",
-              "لا يمكن النشر — لم يوافق المشرف على هذا التقييم بعد.",
-            ),
-          );
-        } else {
-          toast.error(res.error);
-        }
+        toast.error(reviewErrorText(res.error));
         return;
       }
       toast.success(
@@ -92,7 +99,7 @@ function DoctorReviewsPage() {
       );
       qc.invalidateQueries({ queryKey: ["doctor-my-reviews"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(reviewErrorText(e.message)),
   });
 
   const stats = useMemo(() => {
@@ -198,6 +205,13 @@ function DoctorReviewsPage() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
+      ) : listError ? (
+        <p
+          role="alert"
+          className="text-center py-12 text-sm text-destructive border border-destructive/30 rounded-2xl"
+        >
+          {reviewErrorText(listError.message)}
+        </p>
       ) : rows.length === 0 ? (
         <p className="text-center py-12 text-sm text-muted-foreground border border-dashed border-border rounded-2xl">
           {t("No reviews in this view yet.", "لا توجد تقييمات في هذا العرض.")}
@@ -305,12 +319,14 @@ function ReviewCard({
         data: { userId, reviewId: review.id, response },
       });
       if (!res.ok) {
-        toast.error(res.error);
+        toast.error(reviewErrorText(res.error));
         return;
       }
       toast.success(t("Response saved", "تم حفظ الرد"));
       setEditingResponse(false);
       onResponseSaved();
+    } catch (e) {
+      toast.error(reviewErrorText(e instanceof Error ? e.message : ""));
     } finally {
       setSavingResponse(false);
     }

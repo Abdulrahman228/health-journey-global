@@ -42,7 +42,15 @@ export default function RequestConsultationModal({
       setOpen(false);
       setReason("");
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => {
+      // Server messages are Arabic; validation / network errors get a fallback.
+      const msg = (e as Error).message ?? "";
+      toast.error(
+        /[؀-ۿ]/.test(msg)
+          ? msg
+          : t("Could not submit the request", "تعذّر إرسال الطلب — تأكد من تسجيل الدخول وحاول مرة أخرى"),
+      );
+    },
   });
 
   return (

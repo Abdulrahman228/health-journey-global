@@ -87,7 +87,11 @@ function SupportPage() {
     };
   }, [authLoading, user, profile?.id, navigate]);
 
-  const { data: tickets = [], isLoading } = useQuery({
+  const {
+    data: tickets = [],
+    isLoading,
+    isError: ticketsError,
+  } = useQuery({
     queryKey: ["my-support-tickets", user?.id],
     queryFn: async () =>
       user?.id
@@ -136,7 +140,7 @@ function SupportPage() {
       setForm({ subject: "", body: "", category: "general" });
       qc.invalidateQueries({ queryKey: ["my-support-tickets", user.id] });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "error");
+      toast.error(err instanceof Error && err.message ? err.message : "تعذّر إرسال التذكرة");
     } finally {
       setSubmitting(false);
     }
@@ -223,6 +227,10 @@ function SupportPage() {
         <h2 className="font-semibold mb-3">{t("My tickets", "تذاكري السابقة")}</h2>
         {isLoading ? (
           <div className="text-sm text-muted-foreground">…</div>
+        ) : ticketsError ? (
+          <div role="alert" className="text-sm text-destructive bg-destructive/10 rounded-lg p-4 text-center">
+            {t("Couldn't load your tickets", "تعذّر تحميل تذاكرك")}
+          </div>
         ) : tickets.length === 0 ? (
           <div className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-4 text-center">
             {t("No tickets yet", "لا توجد تذاكر بعد")}

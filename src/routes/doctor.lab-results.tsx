@@ -46,11 +46,19 @@ function DoctorLabResultsPage() {
     if (!isLoading && !isAuthenticated) navigate({ to: "/login" });
   }, [isLoading, isAuthenticated, navigate]);
 
+  // Wait for the session: an anon query returns [] under RLS and was never retried.
   const load = useCallback(async () => {
+    if (!user?.id) return;
     setLoading(true);
-    setOrders(await listAuthorizedLabOrders());
-    setLoading(false);
-  }, []);
+    try {
+      setOrders(await listAuthorizedLabOrders());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("Failed to load", "تعذّر التحميل"));
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useEffect(() => {
     void load();

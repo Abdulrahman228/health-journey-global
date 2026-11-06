@@ -50,11 +50,16 @@ function AdminWithdrawalsPage() {
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const r = await adminListWithdrawals({
-      data: { userId: user.id, status: filter },
-    });
-    setRows(r as AdminWithdrawalRow[]);
-    setLoading(false);
+    try {
+      const r = await adminListWithdrawals({
+        data: { userId: user.id, status: filter },
+      });
+      setRows(r);
+    } catch (e) {
+      toast.error("تعذّر تحميل طلبات السحب: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setLoading(false);
+    }
   }, [user, filter]);
 
   useEffect(() => {
@@ -155,18 +160,25 @@ function WithdrawalCard({
   const handle = async (status: "approved" | "processing" | "paid" | "rejected") => {
     if (!user) return;
     setBusy(status);
-    const res = await adminUpdateWithdrawal({
-      data: {
-        userId: user.id,
-        withdrawalId: w.id,
-        status,
-        reference: reference || undefined,
-        adminNote: adminNote || undefined,
-      },
-    });
-    setBusy(null);
+    let res: Awaited<ReturnType<typeof adminUpdateWithdrawal>>;
+    try {
+      res = await adminUpdateWithdrawal({
+        data: {
+          userId: user.id,
+          withdrawalId: w.id,
+          status,
+          reference: reference || undefined,
+          adminNote: adminNote || undefined,
+        },
+      });
+    } catch (e) {
+      toast.error("تعذّر تحديث الطلب: " + (e instanceof Error ? e.message : String(e)));
+      return;
+    } finally {
+      setBusy(null);
+    }
     if (!res.ok) {
-      toast.error(res.error);
+      toast.error(res.error === "Unauthorized" ? "غير مصرّح: صلاحية الأدمن مطلوبة" : res.error);
       return;
     }
     toast.success("تم التحديث");

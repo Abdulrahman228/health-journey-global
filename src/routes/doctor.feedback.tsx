@@ -48,13 +48,17 @@ function FeedbackInbox() {
       navigate({ to: "/login" });
       return;
     }
-    if (role !== "doctor") return;
+    if (role !== "doctor") {
+      // Not a doctor → stop the spinner so the "doctors only" notice renders.
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         const r = await fetchFeedback({ data: { limit: 100 } });
-        setRows(r as FeedbackRow[]);
+        setRows(r);
       } catch (e) {
-        toast.error((e as Error).message);
+        toast.error(e instanceof Error && e.message ? e.message : "تعذّر تحميل الملاحظات");
       } finally {
         setLoading(false);
       }
@@ -127,7 +131,7 @@ function FeedbackItem({
       setText("");
       toast.success("تم إرسال الرد للمريض");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(e instanceof Error && e.message ? e.message : "تعذّر إرسال الرد");
     } finally {
       setSaving(false);
     }

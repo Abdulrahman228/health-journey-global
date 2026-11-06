@@ -21,6 +21,8 @@ interface SeriesRow {
   net_income: number;
   expenses: number;
   profit: number;
+  /** Arabic month label for the chart X axis. */
+  label: string;
 }
 
 const AR_MONTHS = ["ين", "فبر", "مار", "أبر", "ماي", "يون", "يول", "أغس", "سبت", "أكت", "نوف", "ديس"];
@@ -37,39 +39,54 @@ const money = (n: number) => n.toLocaleString("ar-EG", { maximumFractionDigits: 
  * consistent with the financial report (same ledger source).
  */
 export function RevenueAnalytics() {
-  const { profile } = useAuth();
+  const { profile, isLoading: authLoading } = useAuth();
   const [rows, setRows] = useState<SeriesRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!profile?.id) return;
-    setLoading(true);
-    const { data: dd } = await supabase
-      .from("doctor_details")
-      .select("id")
-      .eq("profile_id", profile.id)
-      .maybeSingle();
-    if (!dd) {
-      setRows([]);
-      setLoading(false);
+    if (!profile?.id) {
+      if (!authLoading) setLoading(false);
       return;
     }
-    const { data } = await supabase.rpc("doctor_revenue_series", {
-      _doctor_details_id: dd.id,
-      _months: 12,
-    });
-    setRows(
-      ((data as SeriesRow[]) ?? []).map((r) => ({
-        ...r,
-        net_income: Number(r.net_income),
-        expenses: Number(r.expenses),
-        profit: Number(r.profit),
-        bookings: Number(r.bookings),
-        label: monthLabel(r.ym),
-      })) as SeriesRow[],
-    );
-    setLoading(false);
-  }, [profile?.id]);
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: dd, error: ddErr } = await supabase
+        .from("doctor_details")
+        .select("id")
+        .eq("profile_id", profile.id)
+        .maybeSingle();
+      if (ddErr) throw ddErr;
+      if (!dd) {
+        setRows([]);
+        return;
+      }
+      const { data, error: rpcErr } = await supabase.rpc("doctor_revenue_series", {
+        _doctor_details_id: dd.id,
+        _months: 12,
+      });
+      if (rpcErr) throw rpcErr;
+      setRows(
+        (data ?? []).map((r) => ({
+          ym: r.ym,
+          net_income: Number(r.net_income),
+          expenses: Number(r.expenses),
+          profit: Number(r.profit),
+          bookings: Number(r.bookings),
+          label: monthLabel(r.ym),
+        })),
+      );
+    } catch (e) {
+      setRows([]);
+      setError(
+        "تعذّر تحميل تحليلات الإيرادات" +
+          (e && typeof e === "object" && "message" in e ? ` — ${String(e.message)}` : ""),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.id, authLoading]);
 
   useEffect(() => {
     void load();
@@ -97,7 +114,15 @@ export function RevenueAnalytics() {
     );
   }
 
-  const chartData = rows as unknown as (SeriesRow & { label: string })[];
+  const chartData = rows;
+
+  if (error) {
+    return (
+      <p role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+        {error}
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-4">

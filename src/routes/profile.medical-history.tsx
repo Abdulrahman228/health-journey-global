@@ -119,6 +119,9 @@ function PatientMedicalHistoryPage() {
         });
       }
       setHistory(hist as MedicalRecord[]);
+    } catch (e) {
+      console.error("[medical-history] load failed", e);
+      toast.error("تعذّر تحميل ملفك الطبي، حاول مرة أخرى");
     } finally {
       setLoading(false);
     }
@@ -177,7 +180,9 @@ function PatientMedicalHistoryPage() {
     e.preventDefault();
     if (!user) return;
     setSaving(true);
-    const res = await upsertMyMedicalProfile({
+    let res: Awaited<ReturnType<typeof upsertMyMedicalProfile>>;
+    try {
+      res = await upsertMyMedicalProfile({
       data: {
         userId: user.id,
         bloodType: form.bloodType || null,
@@ -197,10 +202,18 @@ function PatientMedicalHistoryPage() {
         smoking: form.smoking,
         alcohol: form.alcohol,
       },
-    });
-    setSaving(false);
+      });
+    } catch (err) {
+      console.error("[medical-history] save failed", err);
+      toast.error("فشل الحفظ، حاول مرة أخرى");
+      return;
+    } finally {
+      setSaving(false);
+    }
     if (!res.ok) {
-      toast.error("فشل الحفظ: " + res.error);
+      // res.error is a raw DB / auth code (English) — log it, show Arabic.
+      console.error("[medical-history] save failed", res.error);
+      toast.error("فشل الحفظ، حاول مرة أخرى");
       return;
     }
     toast.success("تم حفظ ملفك الطبي");

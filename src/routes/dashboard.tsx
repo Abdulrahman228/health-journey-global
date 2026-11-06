@@ -54,7 +54,7 @@ export const Route = createFileRoute("/dashboard")({
 
 interface DoctorDetails {
   id: string;
-  profile_id: string;
+  profile_id: string | null;
   specialty: string | null;
   bio: string | null;
   clinic_name: string | null;
@@ -100,11 +100,32 @@ function DashboardHomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const { data: details, isLoading: detailsLoading } = useQuery({
+    queryKey: ["doctor_details", profile?.id],
+    enabled: !!profile?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("doctor_details")
+        .select("*")
+        .eq("profile_id", profile!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data as DoctorDetails | null;
+    },
+  });
+
   useEffect(() => {
     if (authLoading) return;
-    if (!user) navigate({ to: "/login" });
-    else if (role && role !== "doctor") navigate({ to: "/appointments" });
-  }, [authLoading, user, role, navigate]);
+    if (!user) {
+      navigate({ to: "/login" });
+      return;
+    }
+    if (!role || role === "doctor") return;
+    // useAuth resolves a doctor+admin account to role "admin" (priority order),
+    // so an admin who owns a doctor_details row is still a doctor here.
+    if ((role === "admin" || role === "super_admin") && (detailsLoading || details)) return;
+    navigate({ to: "/appointments" });
+  }, [authLoading, user, role, navigate, detailsLoading, details]);
 
   // Attribute a peer referral captured from ?ref= on /join-doctor, once the
   // invited doctor is signed in. Idempotent server-side; cleared on success.
@@ -128,20 +149,6 @@ function DashboardHomePage() {
       }
     })();
   }, [authLoading, role]);
-
-  const { data: details, isLoading: detailsLoading } = useQuery({
-    queryKey: ["doctor_details", profile?.id],
-    enabled: !!profile?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("doctor_details")
-        .select("*")
-        .eq("profile_id", profile!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data as DoctorDetails | null;
-    },
-  });
 
   const { data: activeTier } = useQuery({
     queryKey: ["doctor_active_tier", details?.id],
@@ -209,7 +216,8 @@ function DashboardHomePage() {
       );
       queryClient.invalidateQueries({ queryKey: ["doctor_appointments"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) =>
+      toast.error(`${t("Could not update the appointment", "تعذّر تحديث الموعد")} — ${e.message}`),
   });
 
   const stats = useMemo(() => {
@@ -255,7 +263,7 @@ function DashboardHomePage() {
           : 0;
 
     const uniquePatients = new Set(
-      appointments.filter((a) => a.status === "completed").map((a: any) => a.patient_id),
+      appointments.filter((a) => a.status === "completed").map((a) => a.patient_id),
     ).size;
 
     return {
@@ -498,6 +506,7 @@ export function DoctorProfileEditor({
   profileId: string | null;
 }) {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     specialty: details?.specialty ?? "",
@@ -508,6 +517,23 @@ export function DoctorProfileEditor({
     currency: details?.currency ?? "EGP",
     years_experience: details?.years_experience?.toString() ?? "",
   });
+
+  const specialtiesQuery = useQuery({
+    queryKey: ["specialties", "picker"],
+    staleTime: 60 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("specialties")
+        .select("slug, name_ar, name_en")
+        .order("name_ar");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const specialtyNames = useMemo(
+    () => new Set((specialtiesQuery.data ?? []).map((s) => s.name_ar)),
+    [specialtiesQuery.data],
+  );
 
   useEffect(() => {
     if (details) {
@@ -525,7 +551,7 @@ export function DoctorProfileEditor({
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!profileId) throw new Error("No profile");
+      if (!profileId) throw new Error(t("Complete your profile first", "أكمل ملفك الشخصي أولاً"));
       const payload = {
         profile_id: profileId,
         specialty: form.specialty || null,
@@ -543,7 +569,11 @@ export function DoctorProfileEditor({
           .eq("id", details.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("doctor_details").insert(payload);
+        // user_id too: several doctor_details / appointments RLS policies key
+        // on doctor_details.user_id = auth.uid().
+        const { error } = await supabase
+          .from("doctor_details")
+          .insert({ ...payload, user_id: user?.id ?? null });
         if (error) throw error;
       }
     },
@@ -551,7 +581,8 @@ export function DoctorProfileEditor({
       toast.success(t("Profile updated", "تم تحديث الملف"));
       queryClient.invalidateQueries({ queryKey: ["doctor_details"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) =>
+      toast.error(`${t("Could not save the profile", "تعذّر حفظ ملف العيادة")} — ${e.message}`),
   });
 
   return (
@@ -565,13 +596,36 @@ export function DoctorProfileEditor({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label={t("Specialty", "التخصص")}>
-          <input
-            type="text"
+          {/* A fixed list, stored as specialties.name_ar: free text ("طب جراحه",
+              "General") never matched the doctor search / specialty filters. */}
+          <select
             value={form.specialty}
             onChange={(e) => setForm({ ...form, specialty: e.target.value })}
-            placeholder={t("e.g. Cardiology", "مثال: قلب وأوعية دموية")}
+            disabled={specialtiesQuery.isLoading}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
+          >
+            <option value="">
+              {specialtiesQuery.isLoading
+                ? t("Loading…", "جارٍ التحميل…")
+                : t("Choose your specialty", "اختر التخصص")}
+            </option>
+            {/* Keep a legacy free-text value selectable so saving never drops it. */}
+            {form.specialty && !specialtyNames.has(form.specialty) && (
+              <option value={form.specialty}>
+                {form.specialty} {t("(current)", "(الحالي)")}
+              </option>
+            )}
+            {(specialtiesQuery.data ?? []).map((s) => (
+              <option key={s.slug} value={s.name_ar}>
+                {t(s.name_en, s.name_ar)}
+              </option>
+            ))}
+          </select>
+          {specialtiesQuery.isError && (
+            <p className="mt-1 text-xs text-destructive">
+              {t("Could not load the specialties list.", "تعذّر تحميل قائمة التخصصات.")}
+            </p>
+          )}
         </Field>
 
         <Field label={t("Consultation Fee", "سعر الكشف")}>

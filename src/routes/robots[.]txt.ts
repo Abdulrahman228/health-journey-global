@@ -18,7 +18,7 @@ function buildRobots(): string {
     "Disallow: /billing",
     "Disallow: /checkout",
     "Disallow: /consultation/",
-    "Disallow: /admin/",
+    "Disallow: /admin", // also covers the /admin index page itself
     "Disallow: /doctor/verification",
     "Disallow: /pharmacy/dashboard",
     "Disallow: /feed/new",

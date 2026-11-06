@@ -46,8 +46,12 @@ function DoctorAppointmentsPage() {
     if (!authLoading && !isAuthenticated) navigate({ to: "/login" });
   }, [authLoading, isAuthenticated, navigate]);
 
-  const { data: details } = useQuery({
-    queryKey: ["doctor_details", profile?.id],
+  // NOTE: distinct query keys from the /dashboard home — it caches the FULL
+  // doctor_details row and appointment rows without the patient embed under
+  // ["doctor_details"] / ["doctor_appointments", id]; sharing a key would feed
+  // each page the other's shape (blank patient names / "unverified" banner).
+  const { data: details, isLoading: detailsLoading } = useQuery({
+    queryKey: ["doctor_details_id", profile?.id],
     enabled: !!profile?.id,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -56,14 +60,18 @@ function DoctorAppointmentsPage() {
         .eq("profile_id", profile!.id)
         .maybeSingle();
       if (error) throw error;
-      return data as { id: string } | null;
+      return data;
     },
   });
 
-  const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ["doctor_appointments", details?.id],
+  const {
+    data: appointments = [],
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["doctor_appointments", details?.id, "with_patient"],
     enabled: !!details?.id,
-    queryFn: async () => {
+    queryFn: async (): Promise<Appt[]> => {
       // Include the patient (name) — the doctor must see WHO the appointment is for.
       const { data, error } = await supabase
         .from("appointments")
@@ -74,18 +82,19 @@ function DoctorAppointmentsPage() {
         .order("scheduled_at", { ascending: false })
         .limit(300);
       if (error) throw error;
-      return (data ?? []) as unknown as Appt[];
+      return data ?? [];
     },
   });
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       if (status === "completed") {
-        // complete_visit sets ended_at and recomputes the queue ETAs; it needs a
-        // clinic-bound appointment — doctor-booked follow-ups without a clinic
-        // fall back to a plain status update (the revenue trigger still fires).
+        // complete_visit sets ended_at, recomputes the queue ETAs and already
+        // handles clinic-less (doctor-booked follow-up) appointments; its
+        // error is Arabic and must surface — no silent fallback update.
         const { error: rpcErr } = await supabase.rpc("complete_visit", { p_appointment_id: id });
-        if (!rpcErr) return;
+        if (rpcErr) throw rpcErr;
+        return;
       }
       const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
       if (error) throw error;
@@ -100,18 +109,27 @@ function DoctorAppointmentsPage() {
       );
       queryClient.invalidateQueries({ queryKey: ["doctor_appointments"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) =>
+      toast.error(`${t("Could not update the appointment", "تعذّر تحديث الموعد")} — ${e.message}`),
   });
 
   const pending = appointments.filter((a) => a.status === "pending");
   const upcoming = appointments.filter((a) => UPCOMING_STATUSES.includes(a.status));
   const history = appointments.filter((a) => HISTORY_STATUSES.includes(a.status)).slice(0, 50);
 
-  if (authLoading || isLoading) {
+  if (authLoading || detailsLoading || isLoading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
+        {t("Could not load appointments.", "تعذّر تحميل المواعيد — حاول تحديث الصفحة.")}
+      </p>
     );
   }
 

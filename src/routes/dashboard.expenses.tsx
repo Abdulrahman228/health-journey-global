@@ -79,6 +79,10 @@ function ExpensesPage() {
       setExpenses(exps);
       setPnl(p);
       setAccessDenied(p === null);
+    } catch (err) {
+      // (`t` is re-created every render, so it must stay out of the deps.)
+      const msg = err instanceof Error ? err.message : "";
+      toast.error("تعذّر تحميل المصاريف" + (msg ? ` — ${msg}` : ""));
     } finally {
       setLoading(false);
     }
@@ -125,7 +129,7 @@ function ExpensesPage() {
         toast.error(t("Premium plan required", "هذه الميزة لباقتي بريميوم وجولد فقط"));
         setAccessDenied(true);
       } else {
-        toast.error(msg);
+        toast.error(msg || t("Failed to add expense", "تعذّر إضافة المصروف"));
       }
     } finally {
       setSubmitting(false);
@@ -140,8 +144,8 @@ function ExpensesPage() {
       toast.success(t("Deleted", "تم الحذف"));
       await load();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "error";
-      toast.error(msg);
+      const msg = err instanceof Error ? err.message : "";
+      toast.error(msg || t("Failed to delete", "تعذّر الحذف"));
     }
   };
 

@@ -1,7 +1,16 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
 export type PostType = "awareness" | "question" | "missing_drug";
+/** Values allowed by the posts/post_replies `author_role` CHECK constraint. */
 export type AuthorRole = "doctor" | "patient" | "pharmacist" | "admin";
+
+type PostRow = Database["public"]["Tables"]["posts"]["Row"];
+type ReplyRow = Database["public"]["Tables"]["post_replies"]["Row"];
+type DrugInfoRow = Pick<
+  Database["public"]["Tables"]["post_drug_info"]["Row"],
+  "drug_name" | "dosage" | "alternative_suggested"
+>;
 
 export interface FeedPost {
   id: string;
@@ -55,6 +64,76 @@ export interface FeedReply {
   };
 }
 
+const POST_TYPES: readonly PostType[] = ["awareness", "question", "missing_drug"];
+const AUTHOR_ROLES: readonly AuthorRole[] = ["doctor", "patient", "pharmacist", "admin"];
+
+function asPostType(v: string): PostType {
+  return POST_TYPES.find((p) => p === v) ?? "question";
+}
+function asAuthorRole(v: string): AuthorRole {
+  return AUTHOR_ROLES.find((r) => r === v) ?? "patient";
+}
+
+/**
+ * app_role(s) → the `author_role` the CHECK constraint accepts
+ * ('doctor' | 'patient' | 'pharmacist' | 'admin'). Raw app roles such as
+ * `super_admin`, `pharmacy` or `lab` violate it and the insert fails.
+ */
+export function toAuthorRole(roles: readonly string[]): AuthorRole {
+  if (roles.includes("doctor")) return "doctor";
+  if (roles.includes("admin") || roles.includes("super_admin")) return "admin";
+  if (roles.includes("pharmacy")) return "pharmacist";
+  return "patient";
+}
+
+type PostRowWithDrug = PostRow & { drug_info?: DrugInfoRow | DrugInfoRow[] | null };
+
+/** DB row (nullable arrays/flags) → FeedPost with safe defaults. */
+function toFeedPost(row: PostRowWithDrug): FeedPost {
+  const di = Array.isArray(row.drug_info) ? (row.drug_info[0] ?? null) : (row.drug_info ?? null);
+  return {
+    id: row.id,
+    author_profile_id: row.author_profile_id,
+    author_role: asAuthorRole(row.author_role),
+    post_type: asPostType(row.post_type),
+    title: row.title,
+    body: row.body,
+    specialty_id: row.specialty_id,
+    tags: row.tags ?? [],
+    media_urls: row.media_urls ?? [],
+    city: row.city,
+    country: row.country,
+    is_pinned: row.is_pinned ?? false,
+    is_resolved: row.is_resolved ?? false,
+    reactions_count: row.reactions_count ?? 0,
+    replies_count: row.replies_count ?? 0,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    drug_info: di,
+  };
+}
+
+function toFeedReply(row: ReplyRow): FeedReply {
+  return {
+    id: row.id,
+    post_id: row.post_id,
+    author_profile_id: row.author_profile_id,
+    author_role: asAuthorRole(row.author_role),
+    body: row.body,
+    parent_reply_id: row.parent_reply_id,
+    is_doctor_verified: row.is_doctor_verified ?? false,
+    created_at: row.created_at,
+  };
+}
+
+/**
+ * PostgREST `.or()` value: double-quoted so a search containing `,` `.` `:`
+ * `(` `)` cannot break (or inject into) the filter tree.
+ */
+function orQuoted(v: string): string {
+  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 export interface ListPostsFilters {
   type?: PostType | "all";
   specialtyId?: string;
@@ -78,41 +157,40 @@ export async function listPosts(filters: ListPostsFilters = {}): Promise<FeedPos
   if (filters.specialtyId) q = q.eq("specialty_id", filters.specialtyId);
   if (filters.city) q = q.ilike("city", `%${filters.city}%`);
   if (filters.country) q = q.ilike("country", `%${filters.country}%`);
-  if (filters.search) q = q.or(`title.ilike.%${filters.search}%,body.ilike.%${filters.search}%`);
+  if (filters.search) {
+    const pattern = orQuoted(`%${filters.search}%`);
+    q = q.or(`title.ilike.${pattern},body.ilike.${pattern}`);
+  }
   if (filters.resolved === "open") q = q.eq("is_resolved", false);
   if (filters.resolved === "resolved") q = q.eq("is_resolved", true);
 
   const { data, error } = await q;
   if (error) throw error;
-  let posts = (data ?? []) as unknown as FeedPost[];
+  let posts = (data ?? []).map(toFeedPost);
 
   if (filters.drugName) {
     const needle = filters.drugName.toLowerCase();
-    posts = posts.filter((p) => {
-      const di = Array.isArray(p.drug_info) ? p.drug_info[0] : p.drug_info;
-      return di?.drug_name?.toLowerCase().includes(needle);
-    });
+    posts = posts.filter((p) => p.drug_info?.drug_name?.toLowerCase().includes(needle));
   }
   if (posts.length === 0) return [];
 
   const profileIds = Array.from(new Set(posts.map((p) => p.author_profile_id)));
 
-  const [{ data: profiles }, { data: doctorRows }] = await Promise.all([
-    fetchAuthorCards(profileIds).then((rows) => ({ data: rows })),
+  const [profiles, { data: doctorRows }] = await Promise.all([
+    fetchAuthorCards(profileIds),
     supabase
       .from("doctor_details")
       .select("id, profile_id, is_verified, specialty")
       .in("profile_id", profileIds),
   ]);
 
-  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const profileMap = new Map(profiles.map((p) => [p.id, p]));
   const doctorMap = new Map((doctorRows ?? []).map((d) => [d.profile_id, d]));
 
   return posts.map((p) => {
     const dd = doctorMap.get(p.author_profile_id);
     return {
       ...p,
-      drug_info: Array.isArray(p.drug_info) ? (p.drug_info[0] ?? null) : p.drug_info,
       author: profileMap.get(p.author_profile_id) ?? undefined,
       is_author_verified_doctor: dd?.is_verified ?? false,
       author_doctor_id: dd?.id ?? null,
@@ -159,10 +237,10 @@ export async function getPost(id: string): Promise<FeedPost | null> {
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const post = data as unknown as FeedPost;
+  const post = toFeedPost(data);
 
-  const [{ data: profile }, { data: dd }] = await Promise.all([
-    fetchAuthorCards([post.author_profile_id]).then((rows) => ({ data: rows[0] ?? null })),
+  const [cards, { data: dd }] = await Promise.all([
+    fetchAuthorCards([post.author_profile_id]),
     supabase
       .from("doctor_details")
       .select("id, is_verified, specialty")
@@ -172,8 +250,7 @@ export async function getPost(id: string): Promise<FeedPost | null> {
 
   return {
     ...post,
-    drug_info: Array.isArray(post.drug_info) ? (post.drug_info[0] ?? null) : post.drug_info,
-    author: profile ?? undefined,
+    author: cards[0] ?? undefined,
     is_author_verified_doctor: dd?.is_verified ?? false,
     author_specialty: dd?.specialty ?? null,
     author_doctor_id: dd?.id ?? null,
@@ -188,7 +265,7 @@ export async function listReplies(postId: string): Promise<FeedReply[]> {
     .order("is_doctor_verified", { ascending: false })
     .order("created_at", { ascending: true });
   if (error) throw error;
-  const replies = (data ?? []) as unknown as FeedReply[];
+  const replies = (data ?? []).map(toFeedReply);
   if (replies.length === 0) return [];
 
   const profileIds = Array.from(new Set(replies.map((r) => r.author_profile_id)));
@@ -242,7 +319,11 @@ export async function createPost(input: CreatePostInput): Promise<string> {
       dosage: input.drugInfo.dosage ?? null,
       alternative_suggested: input.drugInfo.alternativeSuggested ?? null,
     });
-    if (drugErr) throw drugErr;
+    if (drugErr) {
+      // Never leave a "missing drug" post without its drug — undo and report.
+      await supabase.from("posts").delete().eq("id", data.id);
+      throw drugErr;
+    }
   }
   return data.id;
 }
@@ -265,12 +346,13 @@ export async function createReply(input: {
 }
 
 export async function toggleReaction(postId: string, userId: string): Promise<"added" | "removed"> {
-  const { data: existing } = await supabase
+  const { data: existing, error: readErr } = await supabase
     .from("post_reactions")
     .select("id")
     .eq("post_id", postId)
     .eq("user_id", userId)
     .maybeSingle();
+  if (readErr) throw readErr;
 
   if (existing) {
     const { error } = await supabase.from("post_reactions").delete().eq("id", existing.id);
@@ -288,30 +370,44 @@ export async function toggleReaction(postId: string, userId: string): Promise<"a
 
 export async function getUserReactions(userId: string, postIds: string[]): Promise<Set<string>> {
   if (postIds.length === 0) return new Set();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("post_reactions")
     .select("post_id")
     .eq("user_id", userId)
     .in("post_id", postIds);
+  if (error) console.warn("[feed] reactions lookup failed:", error.message);
   return new Set((data ?? []).map((r) => r.post_id));
 }
 
+/** RLS silently filters rows it refuses — treat "0 rows changed" as an error. */
+const NOT_ALLOWED = "not_allowed";
+
 export async function setResolved(postId: string, resolved: boolean): Promise<void> {
-  const { error } = await supabase.from("posts").update({ is_resolved: resolved }).eq("id", postId);
+  const { data, error } = await supabase
+    .from("posts")
+    .update({ is_resolved: resolved })
+    .eq("id", postId)
+    .select("id");
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error(NOT_ALLOWED);
 }
 
 export async function deletePost(postId: string): Promise<void> {
-  const { error } = await supabase.from("posts").delete().eq("id", postId);
+  const { data, error } = await supabase.from("posts").delete().eq("id", postId).select("id");
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error(NOT_ALLOWED);
 }
 
 export async function uploadPostImage(file: File, userId: string): Promise<string> {
-  const ext = file.name.split(".").pop() ?? "jpg";
+  if (!file.type.startsWith("image/")) throw new Error("not_an_image");
+  const ext =
+    (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  // First folder MUST be the auth uid — storage policy "Users upload own post media".
   const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const { error } = await supabase.storage.from("post-media").upload(path, file, {
     cacheControl: "3600",
     upsert: false,
+    contentType: file.type,
   });
   if (error) throw error;
   const { data } = supabase.storage.from("post-media").getPublicUrl(path);
@@ -334,13 +430,10 @@ type AuthorCard = {
 async function fetchAuthorCards(ids: string[]): Promise<AuthorCard[]> {
   const unique = Array.from(new Set(ids.filter(Boolean)));
   if (unique.length === 0) return [];
-  const { data, error } = await supabase.rpc(
-    "public_profile_cards" as never,
-    { p_ids: unique } as never,
-  );
+  const { data, error } = await supabase.rpc("public_profile_cards", { p_ids: unique });
   if (error) {
     console.warn("[feed] public_profile_cards failed:", error.message);
     return [];
   }
-  return (data as unknown as AuthorCard[] | null) ?? [];
+  return data ?? [];
 }

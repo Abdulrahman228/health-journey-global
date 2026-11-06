@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PatientConsentModal, CONSENT_TEXT_VERSION } from "@/components/PatientConsentModal";
-import { createAppointmentCheckout } from "@/lib/payments.functions";
 import { validateCoupon, applyCoupon, type CouponValidationResult } from "@/lib/coupons.functions";
 import { syncVisitType, previewVisitPricing } from "@/lib/clinical.classification";
 import { handleEmergencyBooking } from "@/lib/emergency.booking";
@@ -90,6 +89,14 @@ function formatWait(minutes: number): string {
   const m = Math.round(minutes - h * 60);
   return m === 0 ? `${h} ساعة` : `${h}س ${m}د`;
 }
+
+// book_slot_appointment raises a few English messages — show them in Arabic.
+const BOOKING_ERRORS_AR: Record<string, string> = {
+  "Not authenticated": "سجّل الدخول لإتمام الحجز",
+  "Cannot book in the past": "لا يمكن الحجز في تاريخ سابق",
+  "Clinic closed on this date": "العيادة مغلقة في هذا اليوم، اختر يومًا آخر",
+  "Doctor not available on this day": "الطبيب غير متاح في هذا اليوم، اختر يومًا آخر",
+};
 
 function formatTime(timeStr: string): string {
   const [h, m] = timeStr.split(":").map(Number);
@@ -223,7 +230,7 @@ export function BookingCard({
       data_processing_consent: boolean;
       recording_consent: boolean;
     }) => {
-      if (!user || !profile) throw new Error("Login required");
+      if (!user || !profile) throw new Error("سجّل الدخول لإتمام الحجز");
       if (!selectedSlot || !effectiveClinicId) throw new Error("اختر وقتًا متاحًا أولاً");
 
       if (appointmentType === "online") {
@@ -244,16 +251,30 @@ export function BookingCard({
         p_appointment_type: appointmentType,
         p_notes: notes || undefined,
       });
-      if (error) throw error;
+      if (error) throw new Error(BOOKING_ERRORS_AR[error.message] ?? error.message);
+      if (!data?.id) throw new Error("تعذّر إتمام الحجز، حاول مرة أخرى");
 
-      const result = data as { id: string };
+      // The RPC stamps the authoritative fee (clinic fee / online fee).
+      const result = { id: data.id, payable: Number(data.fee ?? 0) };
 
       // Apply the validated coupon to the row (fee + discount stamped server-side).
       if (coupon?.valid && coupon.code) {
         try {
-          await applyCoupon({ data: { appointmentId: result.id, code: coupon.code } });
+          const applied = await applyCoupon({
+            data: { appointmentId: result.id, code: coupon.code },
+          });
+          if (applied.valid) {
+            result.payable = applied.finalAmount;
+          } else {
+            toast.error(applied.message || "تعذّر تطبيق كود الخصم — سيتم احتساب السعر الكامل");
+          }
         } catch (e) {
           console.warn("[booking] coupon apply failed", e);
+          toast.error(
+            e instanceof Error && e.message
+              ? e.message
+              : "تعذّر تطبيق كود الخصم — سيتم احتساب السعر الكامل",
+          );
         }
       }
 
@@ -275,7 +296,7 @@ export function BookingCard({
 
       // Record telemedicine consent for online appointments.
       if (appointmentType === "online" && consents) {
-        await supabase.from("patient_appointment_consent").insert({
+        const { error: consentErr } = await supabase.from("patient_appointment_consent").insert({
           appointment_id: result.id,
           patient_id: profile.id,
           doctor_id: doctorId,
@@ -285,6 +306,15 @@ export function BookingCard({
           consent_text_version: CONSENT_TEXT_VERSION,
           user_agent: navigator.userAgent,
         });
+        if (consentErr) {
+          console.error("[booking] consent insert failed", consentErr);
+          toast.error(
+            t(
+              "Booked, but your consent could not be saved — please contact support.",
+              "تم الحجز لكن تعذّر حفظ الموافقة — تواصل مع الدعم.",
+            ),
+          );
+        }
       }
 
       return result;
@@ -301,7 +331,9 @@ export function BookingCard({
       // patient chose "pay online". Otherwise it's a confirmed booking to be
       // paid at the clinic (or free).
       const shouldCheckout =
-        requiresPayment && (appointmentType === "online" || payMethod === "online");
+        requiresPayment &&
+        result.payable > 0 &&
+        (appointmentType === "online" || payMethod === "online");
 
       if (shouldCheckout && result?.id) {
         // Local manual transfer (InstaPay / Vodafone Cash) — no card gateway
@@ -311,7 +343,7 @@ export function BookingCard({
         toast.success(
           t("Booked. Complete the transfer to confirm.", "تم الحجز. أكمل التحويل لتأكيد الدفع."),
         );
-        window.location.href = `/pay?amount=${Math.round(coupon?.valid ? coupon.finalAmount : consultationFee)}&ref=${result.id}`;
+        window.location.href = `/pay?amount=${Math.round(result.payable)}&ref=${result.id}`;
         return;
       } else if (requiresPayment) {
         toast.success(t("Booked — pay at the clinic", "تم الحجز — الدفع في العيادة"));
@@ -321,7 +353,8 @@ export function BookingCard({
 
       navigate({ to: "/appointments" });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) =>
+      toast.error(e.message || t("Booking failed, please try again", "تعذّر إتمام الحجز، حاول مرة أخرى")),
   });
 
   const handleBook = () => {

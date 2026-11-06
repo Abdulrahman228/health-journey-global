@@ -42,7 +42,7 @@ function AdminSupportPage() {
     if (!user) navigate({ to: "/login" });
   }, [authLoading, roleLoading, user, navigate]);
 
-  const { data: tickets = [], isLoading } = useQuery({
+  const { data: tickets = [], isLoading, error: loadError } = useQuery({
     queryKey: ["admin-tickets", user?.id, filter],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -95,6 +95,10 @@ function AdminSupportPage() {
 
       {isLoading ? (
         <div className="text-sm text-muted-foreground">…</div>
+      ) : loadError ? (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          تعذّر تحميل التذاكر: {loadError instanceof Error ? loadError.message : String(loadError)}
+        </p>
       ) : tickets.length === 0 ? (
         <EmptyState description="لا توجد تذاكر دعم في هذه الحالة." />
       ) : (
@@ -153,7 +157,7 @@ function AdminTicketRow({
       onResponded();
       setOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "error");
+      toast.error("تعذّر إرسال الرد" + (err instanceof Error ? ": " + err.message : ""));
     } finally {
       setBusy(false);
     }
@@ -204,7 +208,7 @@ function AdminTicketRow({
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-          {labelFor(ticket.status as TicketStatus)}
+          {labelFor(ticket.status)}
         </span>
         <button
           onClick={() => setOpen((v) => !v)}

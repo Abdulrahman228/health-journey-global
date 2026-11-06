@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { buildMeta, buildSeoLinks, siteConfig, truncate } from "@/lib/seo";
 import {
@@ -51,27 +52,25 @@ export const Route = createFileRoute("/d/$slug")({
     const path = `/d/${params.slug}`;
 
     return {
-      meta: [
-        // unlisted profiles must not be indexed
-        ...(p.visibility === "unlisted"
-          ? [{ name: "robots", content: "noindex, nofollow" }]
-          : []),
-        ...buildMeta({
-          title,
-          description: truncate(description, 160),
-          path,
-          image: p.avatarUrl ?? undefined,
-          type: "profile",
-          keywords: [
-            drName,
-            p.doctor.specialty ?? "",
-            p.city ?? "",
-            "حجز موعد",
-            siteConfig.brand.en,
-            siteConfig.brand.ar,
-          ].filter(Boolean),
-        }),
-      ],
+      // Unlisted profiles must not be indexed. Pass it through buildMeta: a
+      // separate robots tag placed before buildMeta's own "index, follow" tag
+      // is dropped by TanStack's head de-duplication (the last tag wins).
+      meta: buildMeta({
+        title,
+        description: truncate(description, 160),
+        path,
+        image: p.avatarUrl ?? undefined,
+        type: "profile",
+        noindex: p.visibility !== "public",
+        keywords: [
+          drName,
+          p.doctor.specialty ?? "",
+          p.city ?? "",
+          "حجز موعد",
+          siteConfig.brand.en,
+          siteConfig.brand.ar,
+        ].filter(Boolean),
+      }),
       links: buildSeoLinks(path),
       scripts: [
         {
@@ -129,15 +128,28 @@ function DoctorPublicPage() {
     }
   }, []);
 
+  // Profile-view analytics (same RPC as /doctor/$id) — fire-and-forget, once
+  // per mount, not counted when the doctor views their own page.
+  const { profile: viewer, isLoading: authLoading } = useAuth();
+  const doctorDetailsId = profile.doctor!.id;
+  useEffect(() => {
+    if (authLoading || viewer?.id === profile.id) return;
+    supabase.rpc("track_doctor_view", { _doctor_details_id: doctorDetailsId }).then(
+      () => {},
+      () => {},
+    );
+  }, [doctorDetailsId, profile.id, viewer?.id, authLoading]);
+
   // Load clinics for the location list.
-  const { data: clinics = [] } = useQuery({
-    queryKey: ["public-doctor-clinics", profile.doctor!.id],
+  const { data: clinics = [], isError: clinicsError } = useQuery({
+    queryKey: ["public-doctor-clinics", doctorDetailsId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("clinics")
         .select("id, name, address, city, phone, lat, lng, is_primary")
-        .eq("doctor_id", profile.doctor!.id)
+        .eq("doctor_id", doctorDetailsId)
         .order("is_primary", { ascending: false });
+      if (error) throw error;
       return data ?? [];
     },
   });
@@ -266,6 +278,7 @@ function DoctorPublicPage() {
             doctorId={profile.doctor!.id}
             doctorName={drName}
             consultationFee={profile.doctor!.consultationFee ?? 0}
+            onlineConsultationFee={profile.doctor!.onlineConsultationFee ?? null}
             currency={profile.doctor!.currency ?? "EGP"}
             isVerified={profile.doctor!.isVerified}
             telemedicineEnabled={profile.doctor!.telemedicineEnabled}
@@ -283,6 +296,11 @@ function DoctorPublicPage() {
         )}
 
         {/* Clinics */}
+        {clinicsError && (
+          <p role="alert" className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {t("Could not load clinic locations.", "تعذّر تحميل أماكن العيادات، حدّث الصفحة وحاول مرة أخرى.")}
+          </p>
+        )}
         {clinics.length > 0 && (
           <section className="mt-6 rounded-2xl border border-border bg-card p-6">
             <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">

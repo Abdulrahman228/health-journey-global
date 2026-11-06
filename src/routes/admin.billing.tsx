@@ -71,22 +71,28 @@ function AdminBillingPage() {
 
   const loadPayments = useCallback(async () => {
     setLoadingPayments(true);
-    const { data: pays } = await supabase
+    const { data: pays, error: paysErr } = await supabase
       .from("payments")
       .select("id, user_id, amount_cents, currency, provider, status, created_at")
       .order("created_at", { ascending: false })
       .limit(100);
-    const list = (pays ?? []) as Omit<PaymentRow, "payerName">[];
+    if (paysErr) {
+      toast.error("تعذّر تحميل المدفوعات: " + paysErr.message);
+      setLoadingPayments(false);
+      return;
+    }
+    const list = pays ?? [];
     const userIds = Array.from(new Set(list.map((p) => p.user_id)));
     const nameByUser = new Map<string, string | null>();
     if (userIds.length) {
+      // payments.user_id is the auth uid → match profiles.user_id (not profiles.id).
       const { data: profs } = await supabase
         .from("profiles")
         .select("user_id, full_name")
         .in("user_id", userIds);
-      (profs ?? []).forEach((p) =>
-        nameByUser.set(p.user_id as string, (p.full_name as string | null) ?? null),
-      );
+      (profs ?? []).forEach((p) => {
+        if (p.user_id) nameByUser.set(p.user_id, p.full_name ?? null);
+      });
     }
     setPayments(list.map((p) => ({ ...p, payerName: nameByUser.get(p.user_id) ?? null })));
     setLoadingPayments(false);
@@ -351,7 +357,7 @@ function RefundModal({
       toast.success("تم تنفيذ الاسترداد");
       onDone();
     } catch (e) {
-      toast.error("فشل الاسترداد: " + (e as Error).message);
+      toast.error("فشل الاسترداد: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }

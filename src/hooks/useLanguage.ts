@@ -33,6 +33,9 @@ export const LANGUAGES: { code: Language; label: string; nativeLabel: string; di
 
 const RTL_LANGS: Language[] = ["ar", "ur", "fa"];
 
+/** Broadcast so every mounted useLanguage() instance switches together. */
+const LANG_EVENT = "tabibi-lang-change";
+
 export function isRTL(lang: Language) {
   return RTL_LANGS.includes(lang);
 }
@@ -42,11 +45,19 @@ export function useLanguage() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("tabibi-lang") as Language | null;
-    if (stored && LANGUAGES.some((l) => l.code === stored)) {
-      setLanguageState(stored);
-    }
+    const stored = localStorage.getItem("tabibi-lang");
+    const known = LANGUAGES.find((l) => l.code === stored);
+    if (known) setLanguageState(known.code);
     setIsReady(true);
+
+    // Every component has its own useLanguage() state: without this, picking a
+    // language in the Header only re-rendered the Header, not the page.
+    const onChange = (e: Event) => {
+      const next = (e as CustomEvent<Language>).detail;
+      if (LANGUAGES.some((l) => l.code === next)) setLanguageState(next);
+    };
+    window.addEventListener(LANG_EVENT, onChange);
+    return () => window.removeEventListener(LANG_EVENT, onChange);
   }, []);
 
   useEffect(() => {
@@ -59,11 +70,12 @@ export function useLanguage() {
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
+    window.dispatchEvent(new CustomEvent<Language>(LANG_EVENT, { detail: lang }));
   }, []);
 
   const toggleLanguage = useCallback(() => {
-    setLanguageState((prev) => (prev === "en" ? "ar" : "en"));
-  }, []);
+    setLanguage(language === "en" ? "ar" : "en");
+  }, [language, setLanguage]);
 
   /**
    * Translate helper.

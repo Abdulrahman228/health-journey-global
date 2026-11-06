@@ -1,7 +1,8 @@
-import { useAuth } from "./useAuth";
+import { hasAdminRole, useAuth } from "./useAuth";
 
 export function useIsAdmin() {
-  const { role, isLoading } = useAuth();
-  // super_admin is a superset of admin — both may access the admin UI.
-  return { isAdmin: role === "admin" || role === "super_admin", isLoading };
+  const { roles, isLoading } = useAuth();
+  // super_admin is a superset of admin — both may access the admin UI. Checked
+  // against ALL roles: a doctor who is also an admin has primary role "doctor".
+  return { isAdmin: hasAdminRole(roles), isLoading };
 }

@@ -13,6 +13,8 @@ async function assertAdmin(userId: string) {
     .select("role")
     .eq("user_id", userId)
     .in("role", ["admin", "super_admin"])
+    // limit(1): admin + super_admin on one user made maybeSingle() throw.
+    .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("forbidden");

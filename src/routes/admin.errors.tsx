@@ -46,11 +46,11 @@ function AdminErrorsPage() {
     setLoading(true);
     try {
       const data = await adminListErrorGroups({
-        data: { userId: user.id, sinceHours: hours, level: filter },
+        data: { sinceHours: hours, level: filter },
       });
       setRows(data);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "تعذّر تحميل الأخطاء");
+      toast.error(`تعذّر تحميل الأخطاء${e instanceof Error ? `: ${e.message}` : ""}`);
     } finally {
       setLoading(false);
     }
@@ -78,13 +78,15 @@ function AdminErrorsPage() {
   const openDetail = async (sampleId: string) => {
     if (!user) return;
     try {
-      const row = (await adminGetErrorLog({
-        data: { userId: user.id, id: sampleId },
-      })) as ErrorLogRow | null;
+      const row = await adminGetErrorLog({ data: { id: sampleId } });
+      if (!row) {
+        toast.error("لم يعد هذا الخطأ موجوداً");
+        return;
+      }
       setDetail(row);
       setDetailOpen(true);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "تعذّر تحميل التفاصيل");
+      toast.error(`تعذّر تحميل التفاصيل${e instanceof Error ? `: ${e.message}` : ""}`);
     }
   };
 

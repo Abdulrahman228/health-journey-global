@@ -1,22 +1,21 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useAuth } from "./useAuth";
+import { hasAdminRole, homePathForRoles, useAuth } from "./useAuth";
 
 /**
  * Centralized RBAC guard for /admin/* routes.
  *
- * Redirect matrix:
- *   unauthenticated  → /login
- *   role: doctor     → /dashboard
- *   role: pharmacy   → /pharmacy/dashboard
- *   role: patient    → /
- *   role: admin / super_admin → allowed (ready: true)
+ * Redirect matrix (decided from ALL of the user's roles — multi-role users exist):
+ *   unauthenticated                       → /login
+ *   holds admin / super_admin (any combo) → allowed (ready: true)
+ *   otherwise → their own home (doctor → /dashboard, lab → /lab/dashboard,
+ *               pharmacy → /pharmacy/dashboard, patient → /)
  */
 export function useAdminGuard() {
-  const { user, role, isLoading } = useAuth();
+  const { user, roles, isLoading } = useAuth();
   const navigate = useNavigate();
 
-  const isAdmin = role === "admin" || role === "super_admin";
+  const isAdmin = hasAdminRole(roles);
 
   useEffect(() => {
     if (isLoading) return;
@@ -26,20 +25,8 @@ export function useAdminGuard() {
       return;
     }
 
-    switch (role) {
-      case "doctor":
-        void navigate({ to: "/dashboard" });
-        break;
-      case "pharmacy":
-        void navigate({ to: "/pharmacy/dashboard" });
-        break;
-      case "patient":
-        void navigate({ to: "/" });
-        break;
-      default:
-        if (!isAdmin) void navigate({ to: "/" });
-    }
-  }, [isLoading, user, role, isAdmin, navigate]);
+    if (!isAdmin) void navigate({ to: homePathForRoles(roles) });
+  }, [isLoading, user, roles, isAdmin, navigate]);
 
   return {
     isLoading,

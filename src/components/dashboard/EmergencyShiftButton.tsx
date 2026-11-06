@@ -36,7 +36,12 @@ export function EmergencyShiftButton({ doctorId }: { doctorId: string }) {
       );
       setOpen(false);
     } catch (e) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message ?? "";
+      toast.error(
+        /[؀-ۿ]/.test(msg)
+          ? msg
+          : t("Could not shift the queue", "تعذّر ترحيل المواعيد — حاول مرة أخرى"),
+      );
     } finally {
       setBusy(false);
     }

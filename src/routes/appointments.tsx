@@ -91,10 +91,11 @@ function AppointmentsPage() {
   }, [authLoading, user, navigate]);
 
   // For doctors, profile.id is their profile_id but appointments use doctor_details.id.
-  // Resolve the doctor_details.id when role === doctor.
+  // Resolve the doctor_details.id for any signed-in user (not only role === "doctor":
+  // useAuth returns the highest-priority role, so a doctor+admin reports "admin").
   const { data: doctorDetailsId } = useQuery({
     queryKey: ["my-doctor-details-id", profile?.id],
-    enabled: !!profile?.id && role === "doctor",
+    enabled: !!profile?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("doctor_details")
@@ -106,7 +107,11 @@ function AppointmentsPage() {
     },
   });
 
-  const { data: appointments = [], isLoading } = useQuery({
+  const {
+    data: appointments = [],
+    isLoading,
+    isError: loadFailed,
+  } = useQuery({
     queryKey: ["appointments", profile?.id, doctorDetailsId],
     enabled: !!profile?.id,
     queryFn: async (): Promise<EnrichedAppointment[]> => {
@@ -123,37 +128,50 @@ function AppointmentsPage() {
       const doctorIds = Array.from(new Set(data.map((a) => a.doctor_id)));
       const patientProfileIds = Array.from(new Set(data.map((a) => a.patient_id)));
 
+      type DocRow = {
+        id: string;
+        specialty: string | null;
+        currency: string | null;
+        profile_id: string | null;
+      };
+      type NameRow = { id: string; full_name: string | null };
+
       const [docs, pats] = await Promise.all([
         doctorIds.length
           ? supabase
               .from("doctor_details")
               .select("id, specialty, currency, profile_id")
               .in("id", doctorIds)
-          : Promise.resolve({ data: [] as any[], error: null }),
+          : Promise.resolve({ data: [] as DocRow[], error: null }),
         patientProfileIds.length
           ? supabase.from("profiles").select("id, full_name").in("id", patientProfileIds)
-          : Promise.resolve({ data: [] as any[], error: null }),
+          : Promise.resolve({ data: [] as NameRow[], error: null }),
       ]);
+      const docRows: DocRow[] = docs.data ?? [];
+      const patRows: NameRow[] = pats.data ?? [];
 
-      const docProfileIds = (docs.data ?? []).map((d: any) => d.profile_id);
-      const { data: docProfiles = [] } = docProfileIds.length
+      const docProfileIds = docRows
+        .map((d) => d.profile_id)
+        .filter((id): id is string => Boolean(id));
+      const { data: docProfilesData } = docProfileIds.length
         ? await supabase.from("profiles").select("id, full_name").in("id", docProfileIds)
-        : { data: [] as any[] };
+        : { data: [] as NameRow[] };
+      const docProfiles: NameRow[] = docProfilesData ?? [];
 
       const docById = new Map(
-        (docs.data ?? []).map((d: any) => {
-          const p = docProfiles?.find((x: any) => x.id === d.profile_id);
+        docRows.map((d) => {
+          const p = docProfiles.find((x) => x.id === d.profile_id);
           return [
             d.id,
             {
-              name: p?.full_name ?? "Doctor",
-              specialty: d.specialty as string,
-              currency: d.currency as string,
+              name: p?.full_name ?? t("Doctor", "طبيب"),
+              specialty: d.specialty,
+              currency: d.currency,
             },
           ];
         }),
       );
-      const patById = new Map((pats.data ?? []).map((p: any) => [p.id, p.full_name as string]));
+      const patById = new Map(patRows.map((p) => [p.id, p.full_name]));
 
       return data.map((a) => {
         const iAmDoctor = !!doctorDetailsId && a.doctor_id === doctorDetailsId;
@@ -173,10 +191,8 @@ function AppointmentsPage() {
             : (doc?.name ?? t("Doctor", "طبيب")),
           counterpart_subtitle: iAmDoctor ? null : (doc?.specialty ?? null),
           currency: doc?.currency ?? "EGP",
-          payment_status: (a.payment_status as string | null) ?? null,
-          receipt_pending:
-            !!(a as { payment_receipt_url?: string | null }).payment_receipt_url &&
-            a.payment_status === "unpaid",
+          payment_status: a.payment_status ?? null,
+          receipt_pending: !!a.payment_receipt_url && a.payment_status === "unpaid",
         };
       });
     },
@@ -235,18 +251,29 @@ function AppointmentsPage() {
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       if (status === "cancelled") {
         // cancel_appointment frees the slot / queue number and notifies the
-        // other side; a plain status update would leave the queue stale.
+        // other side; a plain status update would leave the queue stale. Its
+        // error (Arabic) is surfaced as-is — falling back to a direct UPDATE
+        // would be silently reverted by guard_appointment_writes.
         const { error: rpcErr } = await supabase.rpc("cancel_appointment", {
           p_appointment_id: id,
         });
-        if (!rpcErr) return;
+        if (rpcErr) throw rpcErr;
+        return;
       }
       if (status === "completed") {
         const { error: rpcErr } = await supabase.rpc("complete_visit", { p_appointment_id: id });
-        if (!rpcErr) return;
+        if (rpcErr) throw rpcErr;
+        return;
       }
-      const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
+      const { data, error } = await supabase
+        .from("appointments")
+        .update({ status })
+        .eq("id", id)
+        .select("id, status");
       if (error) throw error;
+      if (!data?.length || data[0].status !== status) {
+        throw new Error(t("Could not update the appointment", "تعذّر تحديث الموعد"));
+      }
     },
     onSuccess: (_d, vars) => {
       const messages: Record<string, [string, string]> = {
@@ -258,7 +285,8 @@ function AppointmentsPage() {
       if (m) toast.success(t(m[0], m[1]));
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) =>
+      toast.error(e.message || t("Could not update the appointment", "تعذّر تحديث الموعد")),
   });
 
   const grouped = useMemo(() => {
@@ -294,7 +322,14 @@ function AppointmentsPage() {
             : t("Manage your upcoming and past appointments.", "تابع مواعيدك القادمة والسابقة.")}
         </p>
 
-        {appointments.length === 0 ? (
+        {loadFailed ? (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 py-10 text-center text-sm text-destructive">
+            {t(
+              "Could not load your appointments. Please try again.",
+              "تعذّر تحميل مواعيدك. حاول مرة أخرى.",
+            )}
+          </div>
+        ) : appointments.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-border rounded-2xl">
             <Calendar className="mx-auto h-12 w-12 text-muted-foreground" />
             <p className="mt-4 text-muted-foreground">

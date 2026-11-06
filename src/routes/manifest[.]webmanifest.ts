@@ -116,7 +116,9 @@ async function buildManifest(request: Request): Promise<Manifest> {
     name: `${name} — احجز موعدك`,
     short_name: name.slice(0, 24),
     description: doc.specialty ? `${name} — ${doc.specialty}` : name,
-    start_url: "/",
+    // "/" is the marketplace home (no subdomain rewrite exists) — open the
+    // installed clinic app on the doctor's own page instead.
+    start_url: `/d/${info.slug}`,
     scope: "/",
     display: "standalone",
     orientation: "portrait",

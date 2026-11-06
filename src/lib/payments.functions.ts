@@ -210,6 +210,23 @@ export const createAppointmentCheckout = createServerFn({ method: "POST" })
     if (data.userId && data.userId !== userId) {
       throw new Error("Unauthorized");
     }
+    // supabaseAdmin bypasses RLS: the appointment must belong to the caller.
+    const { data: owned } = await supabaseAdmin
+      .from("appointments")
+      .select("id, patient_id, payment_status")
+      .eq("id", data.appointmentId)
+      .maybeSingle();
+    const { data: ownerProfile } = owned
+      ? await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("id", owned.patient_id)
+          .eq("user_id", userId)
+          .maybeSingle()
+      : { data: null };
+    if (!owned || !ownerProfile) throw new Error("غير مصرح");
+    if (owned.payment_status === "paid") throw new Error("هذا الحجز مدفوع بالفعل");
+
     const env: StripeEnv = getStripeEnvironment();
     const stripe = createStripeClient(env);
 
@@ -395,22 +412,22 @@ export const getAppointmentReceipt = createServerFn({ method: "GET" })
 
     let isAdminUser = false;
     if (!isPatient && !isDoctor) {
-      const { data: rolerow } = await supabaseAdmin
+      // Multi-role users (e.g. admin + super_admin) have several rows → limit(1).
+      const { data: rolerows } = await supabaseAdmin
         .from("user_roles")
         .select("role")
         .eq("user_id", data.userId)
-        .eq("role", "admin")
-        .maybeSingle();
-      isAdminUser = Boolean(rolerow);
+        .in("role", ["admin", "super_admin"])
+        .limit(1);
+      isAdminUser = (rolerows ?? []).length > 0;
     }
 
     if (!isPatient && !isDoctor && !isAdminUser) return null;
 
-    // 3. Only show a receipt for a payment that actually landed.
-    const paymentStatus = (appt.payment_status as string | null) ?? "pending";
-    if (paymentStatus === "pending" || paymentStatus === "failed") {
-      // Still surface metadata so the caller can show "not paid yet" UX
-      // without us pretending it's a receipt.
+    // 3. Only show a receipt for a payment that actually landed. The default
+    //    appointment state is 'unpaid' — never render that as a receipt.
+    const paymentStatus = appt.payment_status ?? "unpaid";
+    if (!["paid", "refunded", "partially_refunded"].includes(paymentStatus)) {
       return null;
     }
 

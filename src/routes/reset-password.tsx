@@ -14,13 +14,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import {
-  Eye,
-  EyeOff,
-  Loader2,
-  Lock,
-  ShieldAlert,
-} from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, ShieldAlert } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -42,10 +36,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 export const Route = createFileRoute("/reset-password")({
   head: () => ({
-    meta: [
-      { title: "Reset Password — Tebana" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
+    meta: [{ title: "Reset Password — Tebana" }, { name: "robots", content: "noindex, nofollow" }],
   }),
   component: ResetPasswordPage,
 });
@@ -56,9 +47,9 @@ function ResetPasswordPage() {
   const [show, setShow] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const [hasRecoverySession, setHasRecoverySession] = useState<
-    "checking" | "yes" | "no"
-  >("checking");
+  const [hasRecoverySession, setHasRecoverySession] = useState<"checking" | "yes" | "no">(
+    "checking",
+  );
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -70,7 +61,36 @@ function ResetPasswordPage() {
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
-      // Wait briefly for detectSessionInUrl to populate the session.
+      const query = new URLSearchParams(window.location.search);
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      // 1) Our own reset link: ?token_hash=…&type=recovery → verify it here.
+      //    (The PKCE browser client rejects the implicit #access_token redirect
+      //    that GoTrue's /verify sends for admin-generated links.)
+      const tokenHash = query.get("token_hash");
+      if (tokenHash) {
+        const { data, error: vErr } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: "recovery",
+        });
+        window.history.replaceState(null, "", window.location.pathname);
+        if (cancelled) return;
+        setHasRecoverySession(!vErr && data.session ? "yes" : "no");
+        return;
+      }
+      // 2) Legacy link that landed with #access_token=…&refresh_token=….
+      const access_token = hash.get("access_token");
+      const refresh_token = hash.get("refresh_token");
+      if (access_token && refresh_token) {
+        const { data, error: sErr } = await supabase.auth.setSession({
+          access_token,
+          refresh_token,
+        });
+        window.history.replaceState(null, "", window.location.pathname);
+        if (cancelled) return;
+        setHasRecoverySession(!sErr && data.session ? "yes" : "no");
+        return;
+      }
+      // 3) Wait briefly for detectSessionInUrl to populate the session.
       let session = (await supabase.auth.getSession()).data.session;
       for (let i = 0; i < 12 && !session; i += 1) {
         await new Promise((r) => setTimeout(r, 250));
@@ -93,7 +113,25 @@ function ResetPasswordPage() {
         password: values.password,
       });
       if (updateErr) {
-        setError(updateErr.message);
+        const m = updateErr.message.toLowerCase();
+        setError(
+          m.includes("different from the old") || m.includes("same password")
+            ? t(
+                "The new password must be different from the old one.",
+                "كلمة المرور الجديدة يجب أن تختلف عن القديمة.",
+              )
+            : m.includes("session") || m.includes("jwt") || m.includes("expired")
+              ? t(
+                  "The reset link has expired — request a new one.",
+                  "انتهت صلاحية رابط إعادة التعيين — اطلب رابطاً جديداً.",
+                )
+              : m.includes("weak") || m.includes("password")
+                ? t(
+                    "This password is too weak — choose a stronger one.",
+                    "كلمة المرور ضعيفة — اختر كلمة أقوى.",
+                  )
+                : t(updateErr.message, "تعذّر تغيير كلمة المرور — حاول مرة أخرى."),
+        );
         return;
       }
       // Sign out so the user re-authenticates with the new password.
@@ -110,7 +148,11 @@ function ResetPasswordPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <img src="/logo-mark.png" alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`} className="h-10 w-10 rounded-xl object-cover" />
+            <img
+              src="/logo-mark.png"
+              alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
+              className="h-10 w-10 rounded-xl object-cover"
+            />
             <span className="text-2xl font-bold tracking-tight text-foreground">
               {siteConfig.brand.en}
             </span>
@@ -129,10 +171,7 @@ function ResetPasswordPage() {
 
           {hasRecoverySession === "no" && (
             <div className="space-y-4 text-center">
-              <ShieldAlert
-                className="mx-auto h-10 w-10 text-amber-500"
-                aria-hidden="true"
-              />
+              <ShieldAlert className="mx-auto h-10 w-10 text-amber-500" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">
                 {t(
                   "This reset link is invalid or has expired. Please request a new one.",
@@ -191,7 +230,10 @@ function ResetPasswordPage() {
                 </div>
                 {errors.password && (
                   <p className="mt-1 text-xs text-destructive">
-                    {errors.password.message}
+                    {t(
+                      "At least 10 characters, with letters and numbers.",
+                      "10 أحرف على الأقل وتحتوي على حروف وأرقام.",
+                    )}
                   </p>
                 )}
               </div>
@@ -211,7 +253,7 @@ function ResetPasswordPage() {
                 </div>
                 {errors.confirmPassword && (
                   <p className="mt-1 text-xs text-destructive">
-                    {errors.confirmPassword.message}
+                    {t("Passwords don't match.", "كلمتا المرور غير متطابقتين.")}
                   </p>
                 )}
               </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getStripeEnvironment } from "@/lib/stripe";
+import { hasValidAccess } from "@/lib/subscriptions.access";
 
 export interface SubscriptionRow {
   id: string;
@@ -11,10 +12,15 @@ export interface SubscriptionRow {
   cancel_at_period_end: boolean | null;
   stripe_customer_id: string;
   is_manual: boolean | null;
+  access_status: string | null;
+  access_granted_at: string | null;
 }
 
 export function isSubscriptionActive(sub: SubscriptionRow | null): boolean {
   if (!sub) return false;
+  // Same trust-but-verify gate as doctor_active_tier(): a manual receipt that
+  // was rejected, or left unverified past the 24h grace, confers nothing.
+  if (!hasValidAccess(sub)) return false;
   const end = sub.current_period_end ? new Date(sub.current_period_end).getTime() : null;
   const inWindow = !end || end > Date.now();
   if (["active", "trialing", "past_due"].includes(sub.status) && inWindow) return true;
@@ -36,16 +42,19 @@ export function useSubscription(userId: string | null | undefined) {
     const env = getStripeEnvironment();
 
     const fetchSub = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("subscriptions")
-        .select("id,status,price_id,plan_code,current_period_end,cancel_at_period_end,stripe_customer_id,is_manual")
+        .select(
+          "id,status,price_id,plan_code,current_period_end,cancel_at_period_end,stripe_customer_id,is_manual,access_status,access_granted_at",
+        )
         .eq("user_id", userId)
         .eq("environment", env)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (error) console.error("[useSubscription]", error.message);
       if (mounted) {
-        setSubscription((data as SubscriptionRow | null) ?? null);
+        setSubscription(data ?? null);
         setIsLoading(false);
       }
     };

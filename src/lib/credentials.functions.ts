@@ -24,20 +24,23 @@ async function getDoctorIdForUser(userId: string): Promise<string> {
     .select("id, profiles!inner(user_id)")
     .eq("profiles.user_id", userId)
     .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Not a doctor");
-  return data.id as string;
+  if (error) throw new Error("تعذّر تحميل بيانات الطبيب: " + error.message);
+  if (!data) throw new Error("هذه الصفحة للأطباء فقط");
+  return data.id;
 }
 
 async function assertAdmin(userId: string) {
+  // limit(1): admin + super_admin rows for one user made maybeSingle() throw
+  // ("multiple rows") and locked those admins out of the documents queue.
   const { data, error } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
     .in("role", ["admin", "super_admin"])
+    .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden: admin role required");
+  if (!data) throw new Error("غير مصرح: هذه العملية للمشرفين فقط");
 }
 
 // ----------------------------------------------------------------------------
@@ -54,7 +57,7 @@ export const listMyDocuments = createServerFn({ method: "GET" })
       )
       .eq("doctor_id", doctorId)
       .order("uploaded_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر تحميل المستندات: " + error.message);
     return { doctorId, documents: data ?? [] };
   });
 
@@ -71,10 +74,10 @@ export const uploadDocument = createServerFn({ method: "POST" })
       contentBase64: string;
     }) => {
       if (!ALLOWED_TYPES.includes(data.documentType)) {
-        throw new Error("Invalid document type");
+        throw new Error("نوع المستند غير صالح");
       }
-      if (!data.fileName) throw new Error("fileName required");
-      if (!data.contentBase64) throw new Error("content required");
+      if (!data.fileName) throw new Error("اسم الملف مطلوب");
+      if (!data.contentBase64) throw new Error("الملف فارغ");
       const allowedMime = [
         "image/jpeg",
         "image/png",
@@ -100,7 +103,7 @@ export const uploadDocument = createServerFn({ method: "POST" })
         mime = extMime[ext] ?? "";
       }
       if (!allowedMime.includes(mime)) {
-        throw new Error("Unsupported file type. Allowed: jpg, png, webp, heic, pdf");
+        throw new Error("صيغة الملف غير مدعومة. المسموح: jpg, png, webp, heic, pdf");
       }
       return { ...data, mimeType: mime };
     },
@@ -110,8 +113,8 @@ export const uploadDocument = createServerFn({ method: "POST" })
 
     // Decode base64
     const buf = Buffer.from(data.contentBase64, "base64");
-    if (buf.byteLength === 0) throw new Error("Empty file");
-    if (buf.byteLength > 10 * 1024 * 1024) throw new Error("File exceeds 10 MB");
+    if (buf.byteLength === 0) throw new Error("الملف فارغ");
+    if (buf.byteLength > 10 * 1024 * 1024) throw new Error("حجم الملف يتجاوز 10 ميجابايت");
 
     const ext = (data.fileName.split(".").pop() || "bin").toLowerCase().slice(0, 5);
     const path = `${doctorId}/${data.documentType}-${crypto.randomUUID()}.${ext}`;
@@ -119,7 +122,7 @@ export const uploadDocument = createServerFn({ method: "POST" })
     const { error: upErr } = await supabaseAdmin.storage
       .from(BUCKET)
       .upload(path, buf, { contentType: data.mimeType, upsert: false });
-    if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
+    if (upErr) throw new Error(`فشل رفع الملف: ${upErr.message}`);
 
     // Mark previous of same type as superseded
     await supabaseAdmin
@@ -144,17 +147,20 @@ export const uploadDocument = createServerFn({ method: "POST" })
       .single();
     if (insErr) {
       await supabaseAdmin.storage.from(BUCKET).remove([path]);
-      throw new Error(insErr.message);
+      throw new Error("تعذّر حفظ المستند: " + insErr.message);
     }
 
-    // Stamp doctor_details verification_level/credentials_completed_at
+    // Stamp doctor_details verification_level/credentials_completed_at — only
+    // raise 0/NULL → 1. Re-uploading an optional document must never demote
+    // an already-verified doctor (level 2) back to level 1.
     await supabaseAdmin
       .from("doctor_details")
       .update({
         verification_level: 1,
         credentials_completed_at: new Date().toISOString(),
       })
-      .eq("id", doctorId);
+      .eq("id", doctorId)
+      .or("verification_level.is.null,verification_level.lt.1");
 
     return { document: row };
   });
@@ -165,7 +171,7 @@ export const uploadDocument = createServerFn({ method: "POST" })
 export const deleteMyDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { documentId: string }) => {
-    if (!data.documentId) throw new Error("documentId required");
+    if (!data.documentId) throw new Error("معرّف المستند مطلوب");
     return data;
   })
   .handler(async ({ data, context }) => {
@@ -176,11 +182,16 @@ export const deleteMyDocument = createServerFn({ method: "POST" })
       .eq("id", data.documentId)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    if (!doc || doc.doctor_id !== doctorId) throw new Error("Not found");
-    if (doc.status !== "pending") throw new Error("Cannot delete reviewed document");
+    if (!doc || doc.doctor_id !== doctorId) throw new Error("المستند غير موجود");
+    if (doc.status !== "pending") throw new Error("لا يمكن حذف مستند تمت مراجعته");
 
+    // Row first: if it fails nothing is lost; an orphaned file is harmless.
+    const { error: delErr } = await supabaseAdmin
+      .from("doctor_documents")
+      .delete()
+      .eq("id", doc.id);
+    if (delErr) throw new Error("تعذّر حذف المستند: " + delErr.message);
     await supabaseAdmin.storage.from(BUCKET).remove([doc.storage_path]);
-    await supabaseAdmin.from("doctor_documents").delete().eq("id", doc.id);
     return { ok: true };
   });
 
@@ -190,7 +201,7 @@ export const deleteMyDocument = createServerFn({ method: "POST" })
 export const getDocumentUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { documentId: string }) => {
-    if (!data.documentId) throw new Error("documentId required");
+    if (!data.documentId) throw new Error("معرّف المستند مطلوب");
     return data;
   })
   .handler(async ({ data, context }) => {
@@ -200,7 +211,7 @@ export const getDocumentUrl = createServerFn({ method: "POST" })
       .eq("id", data.documentId)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    if (!doc) throw new Error("Not found");
+    if (!doc) throw new Error("المستند غير موجود");
 
     // Authorization: owner or admin
     const { data: ownerCheck } = await supabaseAdmin
@@ -208,7 +219,7 @@ export const getDocumentUrl = createServerFn({ method: "POST" })
       .select("profiles:profile_id(user_id)")
       .eq("id", doc.doctor_id)
       .maybeSingle();
-    const ownerUserId = (ownerCheck as any)?.profiles?.user_id;
+    const ownerUserId = ownerCheck?.profiles?.user_id ?? null;
     if (ownerUserId !== context.userId) {
       await assertAdmin(context.userId);
     }
@@ -216,7 +227,7 @@ export const getDocumentUrl = createServerFn({ method: "POST" })
     const { data: signed, error: signErr } = await supabaseAdmin.storage
       .from(BUCKET)
       .createSignedUrl(doc.storage_path, 3600);
-    if (signErr) throw new Error(signErr.message);
+    if (signErr) throw new Error("تعذّر فتح المستند: " + signErr.message);
     return { url: signed?.signedUrl };
   });
 
@@ -251,12 +262,12 @@ export const adminReviewDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
     (data: { documentId: string; action: "approve" | "reject"; rejectionReason?: string }) => {
-      if (!data.documentId) throw new Error("documentId required");
+      if (!data.documentId) throw new Error("معرّف المستند مطلوب");
       if (data.action !== "approve" && data.action !== "reject") {
         throw new Error("Invalid action");
       }
       if (data.action === "reject" && !data.rejectionReason?.trim()) {
-        throw new Error("Rejection reason required");
+        throw new Error("سبب الرفض مطلوب");
       }
       return data;
     },
@@ -294,7 +305,7 @@ export const adminReviewDocument = createServerFn({ method: "POST" })
       const approvedTypes = new Set((docs ?? []).map((d) => d.document_type));
       const allRequiredApproved = REQUIRED.every((t) => approvedTypes.has(t));
       if (allRequiredApproved) {
-        await supabaseAdmin
+        const { error: verErr } = await supabaseAdmin
           .from("doctor_details")
           .update({
             verification_level: 2,
@@ -302,6 +313,7 @@ export const adminReviewDocument = createServerFn({ method: "POST" })
             verification_status: "approved",
           })
           .eq("id", row.doctor_id);
+        if (verErr) throw new Error("تم اعتماد المستند لكن تعذّر توثيق الطبيب: " + verErr.message);
       }
     }
 

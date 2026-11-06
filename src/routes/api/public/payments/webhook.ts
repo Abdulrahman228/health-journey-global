@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json, TablesUpdate } from "@/integrations/supabase/types";
 
 let _supabase: ReturnType<typeof createClient<Database>> | null = null;
 function getSupabase() {
@@ -140,7 +140,7 @@ async function handleSubscriptionUpsert(subscription: any, env: StripeEnv) {
   const source = (subscription.metadata?.source as string | undefined) ?? "unknown";
   console.info(`[webhook] subscription upsert · source=${source} · plan=${planCode ?? "?"} · env=${env}`);
 
-  await getSupabase()
+  const { error: subErr } = await getSupabase()
     .from("subscriptions")
     .upsert(
       {
@@ -159,6 +159,7 @@ async function handleSubscriptionUpsert(subscription: any, env: StripeEnv) {
       },
       { onConflict: "stripe_subscription_id" },
     );
+  if (subErr) throw subErr; // 400 → Stripe retries
 
   await syncDoctorProFlags(userId, env);
 }
@@ -222,7 +223,7 @@ async function handleInvoicePaid(invoice: any, env: StripeEnv) {
     issued_at: issuedAt,
     paid_at: paidAt,
     pdf_url: invoice.invoice_pdf ?? invoice.hosted_invoice_url ?? null,
-    eta_payload: { stripe_invoice_id: invoice.id } as any,
+    eta_payload: { stripe_invoice_id: String(invoice.id) },
     environment: env,
     updated_at: new Date().toISOString(),
   };
@@ -264,6 +265,29 @@ async function upsertPayment(args: {
   raw: unknown;
 }) {
   const sb = getSupabase();
+  // payments.user_id is NOT NULL (auth uid). Stripe metadata may lack it —
+  // derive it from the appointment's patient profile in that case.
+  let userId = args.userId;
+  if (!userId && args.appointmentId) {
+    const { data: appt } = await sb
+      .from("appointments")
+      .select("patient_id")
+      .eq("id", args.appointmentId)
+      .maybeSingle();
+    if (appt?.patient_id) {
+      const { data: prof } = await sb
+        .from("profiles")
+        .select("user_id")
+        .eq("id", appt.patient_id)
+        .maybeSingle();
+      userId = prof?.user_id ?? null;
+    }
+  }
+  if (!userId) {
+    console.warn("[webhook] payment without resolvable user_id — not recorded", args.providerPaymentId);
+    return;
+  }
+
   const { data: existing } = await sb
     .from("payments")
     .select("id")
@@ -275,21 +299,21 @@ async function upsertPayment(args: {
     provider: "stripe",
     provider_payment_id: args.providerPaymentId,
     provider_session_id: args.providerSessionId,
-    user_id: args.userId,
+    user_id: userId,
     appointment_id: args.appointmentId,
     amount_cents: args.amountCents,
     currency: args.currency.toUpperCase(),
     status: args.status,
-    raw_payload: args.raw as never,
+    // Stripe event objects are plain JSON; the cast only narrows `unknown`.
+    raw_payload: args.raw as Json,
     environment: args.env,
     updated_at: new Date().toISOString(),
-  } as never;
+  };
 
-  if (existing?.id) {
-    await sb.from("payments").update(row).eq("id", existing.id as string);
-  } else {
-    await sb.from("payments").insert(row);
-  }
+  const { error } = existing?.id
+    ? await sb.from("payments").update(row).eq("id", existing.id)
+    : await sb.from("payments").insert(row);
+  if (error) console.error("[webhook] payments upsert failed", args.providerPaymentId, error);
 }
 
 async function findAppointmentForPI(pi: {
@@ -305,7 +329,7 @@ async function findAppointmentForPI(pi: {
       .select("id,status,payment_status")
       .eq("id", appointmentId)
       .maybeSingle();
-    if (data) return data as never;
+    if (data) return data;
   }
 
   const { data: byPi } = await sb
@@ -313,7 +337,7 @@ async function findAppointmentForPI(pi: {
     .select("id,status,payment_status")
     .eq("payment_intent_id", pi.id)
     .maybeSingle();
-  return (byPi as never) ?? null;
+  return byPi ?? null;
 }
 
 async function handlePaymentIntentSucceeded(pi: any, env: StripeEnv) {
@@ -341,7 +365,7 @@ async function handlePaymentIntentSucceeded(pi: any, env: StripeEnv) {
   }
 
   const sb = getSupabase();
-  const update: Record<string, unknown> = {
+  const update: TablesUpdate<"appointments"> = {
     payment_status: "paid",
     payment_intent_id: pi.id,
     payment_environment: env,
@@ -352,39 +376,31 @@ async function handlePaymentIntentSucceeded(pi: any, env: StripeEnv) {
   // Auto-confirm pending appointments once payment lands
   if (appt.status === "pending") update.status = "confirmed";
 
-  await sb.from("appointments").update(update as never).eq("id", appt.id);
+  const { error: apptErr } = await sb.from("appointments").update(update).eq("id", appt.id);
+  if (apptErr) throw apptErr; // 400 → Stripe retries
 
   // Record coupon redemption if this appointment had one applied at
   // checkout. The SQL fn is idempotent (UNIQUE on coupon_id+appointment_id),
   // so it is safe to call on every retry of the webhook.
-  try {
-    await sb.rpc("record_coupon_redemption" as never, {
-      p_appointment_id: appt.id,
-    } as never);
-  } catch (e) {
-    console.warn("record_coupon_redemption failed", appt.id, e);
-  }
+  const { error: couponErr } = await sb.rpc("record_coupon_redemption", {
+    p_appointment_id: appt.id,
+  });
+  if (couponErr) console.warn("record_coupon_redemption failed", appt.id, couponErr);
 
   // If this appointment was created from a consultation request, mark it paid.
+  const paidPatch: TablesUpdate<"consultation_requests"> = {
+    status: "paid",
+    paid_at: new Date().toISOString(),
+    payment_intent_id: pi.id,
+  };
   const consultationRequestId = pi.metadata?.consultation_request_id;
   if (consultationRequestId) {
-    await sb
-      .from("consultation_requests")
-      .update({
-        status: "paid",
-        paid_at: new Date().toISOString(),
-        payment_intent_id: pi.id,
-      } as never)
-      .eq("id", consultationRequestId);
+    await sb.from("consultation_requests").update(paidPatch).eq("id", consultationRequestId);
   } else {
     // Fallback: locate by appointment_id link.
     await sb
       .from("consultation_requests")
-      .update({
-        status: "paid",
-        paid_at: new Date().toISOString(),
-        payment_intent_id: pi.id,
-      } as never)
+      .update(paidPatch)
       .eq("appointment_id", appt.id)
       .eq("status", "accepted");
   }
@@ -414,7 +430,7 @@ async function handlePaymentIntentFailed(pi: any, env: StripeEnv) {
         payment_intent_id: pi.id,
         payment_environment: env,
         updated_at: new Date().toISOString(),
-      } as never)
+      })
       .eq("id", appt.id);
   }
 }
@@ -437,7 +453,7 @@ async function handleChargeRefunded(charge: any, env: StripeEnv) {
   await upsertPayment({
     env,
     userId: charge.metadata?.userId || null,
-    appointmentId: (appt as { id?: string } | null)?.id ?? null,
+    appointmentId: appt?.id ?? null,
     providerPaymentId: piId,
     providerSessionId: charge.metadata?.checkout_session_id ?? null,
     amountCents: refundedAmount,
@@ -459,8 +475,8 @@ async function handleChargeRefunded(charge: any, env: StripeEnv) {
         refunded_amount: refundedMajor,
         updated_at: new Date().toISOString(),
         ...(fullyRefunded ? { status: "cancelled" } : {}),
-      } as never)
-      .eq("id", (appt as { id: string }).id);
+      })
+      .eq("id", appt.id);
     // The trg_appt_refund_tx trigger will auto-insert an offsetting
     // doctor_transactions row to keep the doctor balance correct.
   }
@@ -468,7 +484,9 @@ async function handleChargeRefunded(charge: any, env: StripeEnv) {
 
 async function handleWebhook(req: Request, env: StripeEnv) {  const event = await verifyWebhook(req, env);
 
-  switch (event.type) {    case "customer.subscription.updated":
+  switch (event.type) {
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
       await handleSubscriptionUpsert(event.data.object, env);
       break;
     case "customer.subscription.deleted":

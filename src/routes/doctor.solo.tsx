@@ -8,6 +8,22 @@ import { DoctorShell } from "@/components/doctor/DoctorNav";
 import { supabase } from "@/integrations/supabase/client";
 import { getMySoloSettings, updateSoloMode } from "@/lib/solo.functions";
 
+/** Server-fn errors → Arabic text (zod validation errors arrive as a JSON issue list). */
+function errText(e: unknown, fallback: string): string {
+  const msg = e instanceof Error ? e.message : "";
+  if (msg.startsWith("[")) {
+    try {
+      const issues: unknown = JSON.parse(msg);
+      if (Array.isArray(issues) && issues[0] && typeof issues[0].message === "string") {
+        return issues[0].message;
+      }
+    } catch {
+      /* not JSON — fall through */
+    }
+  }
+  return msg || fallback;
+}
+
 export const Route = createFileRoute("/doctor/solo")({
   head: () => ({
     meta: [
@@ -45,7 +61,7 @@ function SoloSettingsPage() {
       setLogoUrl(pub.publicUrl);
       toast.success("تم رفع الشعار — لا تنسَ الحفظ");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "فشل الرفع");
+      toast.error("فشل رفع الشعار" + (e instanceof Error && e.message ? ` — ${e.message}` : ""));
     } finally {
       setUploadingLogo(false);
     }
@@ -69,7 +85,11 @@ function SoloSettingsPage() {
       navigate({ to: "/login" });
       return;
     }
-    if (role !== "doctor") return;
+    if (role !== "doctor") {
+      // Not a doctor → stop the spinner so the "doctors only" notice renders.
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         const r = await fetchSettings();
@@ -79,7 +99,7 @@ function SoloSettingsPage() {
         if (r.logoUrl) setLogoUrl(r.logoUrl);
         if (r.clinicName) setClinicName(r.clinicName);
       } catch (e) {
-        toast.error((e as Error).message);
+        toast.error(errText(e, "تعذّر تحميل الإعدادات"));
       } finally {
         setLoading(false);
       }
@@ -121,8 +141,8 @@ function SoloSettingsPage() {
           <p className="font-semibold text-amber-900 dark:text-amber-300">يجب تعيين slug أولاً</p>
           <p className="mt-1 text-amber-800 dark:text-amber-300/80">
             اذهب إلى{" "}
-            <Link to="/dashboard" className="underline">
-              لوحة التحكم
+            <Link to="/dashboard/profile" className="underline">
+              ملف العيادة
             </Link>{" "}
             وضع slug في إعدادات صفحتك العامة قبل تفعيل Solo Mode.
           </p>
@@ -289,7 +309,7 @@ function SoloSettingsPage() {
               });
               toast.success("تم الحفظ");
             } catch (e) {
-              toast.error((e as Error).message);
+              toast.error(errText(e, "تعذّر حفظ الإعدادات"));
             } finally {
               setSaving(false);
             }

@@ -57,7 +57,8 @@ type Job = {
   id: string;
   kind: string;
   status: string;
-  params: { title?: string; storage_path?: string } | null;
+  /** Display title pulled out of the job's `params` jsonb. */
+  title: string | null;
   total: number | null;
   processed: number;
   chunks: number;
@@ -101,19 +102,28 @@ function AdminAiReferencesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: s }, { data: j }] = await Promise.all([
+    const [{ data: s, error: sErr }, { data: j, error: jErr }] = await Promise.all([
       supabase
-        .from("medical_sources" as never)
-        .select("*")
+        .from("medical_sources")
+        .select(
+          "id, slug, title, publisher, url, license, kind, language, specialties, is_active, chunk_count, updated_at",
+        )
         .order("created_at", { ascending: false }),
       supabase
-        .from("medical_ingest_jobs" as never)
-        .select("*")
+        .from("medical_ingest_jobs")
+        .select("id, kind, status, params, total, processed, chunks, error, created_at")
         .order("created_at", { ascending: false })
         .limit(30),
     ]);
-    setSources((s ?? []) as unknown as Source[]);
-    setJobs((j ?? []) as unknown as Job[]);
+    if (sErr || jErr) toast.error("تعذّر تحميل المكتبة: " + (sErr ?? jErr)?.message);
+    setSources(s ?? []);
+    setJobs(
+      (j ?? []).map(({ params, ...rest }): Job => {
+        const t =
+          params && typeof params === "object" && !Array.isArray(params) ? params.title : null;
+        return { ...rest, title: typeof t === "string" ? t : null };
+      }),
+    );
     setLoading(false);
   }, []);
 
@@ -128,10 +138,10 @@ function AdminAiReferencesPage() {
 
   const toggleActive = async (src: Source) => {
     const { error } = await supabase
-      .from("medical_sources" as never)
-      .update({ is_active: !src.is_active } as never)
+      .from("medical_sources")
+      .update({ is_active: !src.is_active })
       .eq("id", src.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error("تعذّر تحديث المرجع: " + error.message);
     setSources((prev) =>
       prev.map((x) => (x.id === src.id ? { ...x, is_active: !x.is_active } : x)),
     );
@@ -141,21 +151,21 @@ function AdminAiReferencesPage() {
     if (!window.confirm(`حذف «${src.title}» وكل مقاطعه (${src.chunk_count})؟ لا يمكن التراجع.`))
       return;
     const { error } = await supabase
-      .from("medical_sources" as never)
+      .from("medical_sources")
       .delete()
       .eq("id", src.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error("تعذّر الحذف: " + error.message);
     setSources((prev) => prev.filter((x) => x.id !== src.id));
     toast.success("تم الحذف");
   };
 
   const queueMedlinePlus = async () => {
-    const { error } = await supabase.from("medical_ingest_jobs" as never).insert({
+    const { error } = await supabase.from("medical_ingest_jobs").insert({
       kind: "medlineplus",
       params: { title: "MedlinePlus Health Topics", language: "en" },
-      created_by: user?.id,
-    } as never);
-    if (error) return toast.error(error.message);
+      created_by: user?.id ?? null,
+    });
+    if (error) return toast.error("تعذّر جدولة التحديث: " + error.message);
     toast.success("تمت جدولة تحديث MedlinePlus — شغّل أمر الإدخال لمعالجته");
     void load();
   };
@@ -178,7 +188,7 @@ function AdminAiReferencesPage() {
           upsert: false,
         });
       if (upErr) throw upErr;
-      const { error: jobErr } = await supabase.from("medical_ingest_jobs" as never).insert({
+      const { error: jobErr } = await supabase.from("medical_ingest_jobs").insert({
         kind: isPdf ? "pdf" : "text",
         params: {
           title: title.trim(),
@@ -191,11 +201,11 @@ function AdminAiReferencesPage() {
             .map((s) => s.trim().toLowerCase())
             .filter(Boolean),
           storage_path: path,
-          attested_by: user?.id,
+          attested_by: user?.id ?? null,
           attested_at: new Date().toISOString(),
         },
-        created_by: user?.id,
-      } as never);
+        created_by: user?.id ?? null,
+      });
       if (jobErr) throw jobErr;
       toast.success("تم الرفع وجدولة الإدخال — شغّل أمر الإدخال لمعالجته");
       setTitle("");
@@ -204,7 +214,7 @@ function AdminAiReferencesPage() {
       setAttest(false);
       void load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "تعذّر الرفع");
+      toast.error("تعذّر الرفع" + (e instanceof Error ? ": " + e.message : ""));
     } finally {
       setUploading(false);
     }
@@ -382,7 +392,7 @@ function AdminAiReferencesPage() {
                   ) : (
                     <Clock className="h-4 w-4 text-warning" />
                   )}
-                  <span className="font-medium">{j.params?.title ?? j.kind}</span>
+                  <span className="font-medium">{j.title ?? j.kind}</span>
                   <span className="text-xs text-muted-foreground">({j.kind})</span>
                 </span>
                 <span className="text-xs text-muted-foreground">

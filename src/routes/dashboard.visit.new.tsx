@@ -154,16 +154,24 @@ function NewVisitPage() {
     }
     let cancelled = false;
     (async () => {
-      const [{ data: prof }, mp] = await Promise.all([
-        supabase.from("profiles").select("full_name").eq("id", patientId).maybeSingle(),
-        getPatientMedicalProfile({ data: { patientProfileId: patientId } }),
-      ]);
-      if (cancelled) return;
-      setPatient({
-        name: (prof?.full_name as string | null) ?? "—",
-        allergies: (mp as { allergies?: string[] } | null)?.allergies ?? [],
-      });
-      setPatientLoading(false);
+      try {
+        const [{ data: prof }, mp] = await Promise.all([
+          supabase.from("profiles").select("full_name").eq("id", patientId).maybeSingle(),
+          getPatientMedicalProfile({ data: { patientProfileId: patientId } }),
+        ]);
+        if (cancelled) return;
+        setPatient({
+          name: prof?.full_name ?? "—",
+          allergies: mp?.allergies ?? [],
+        });
+      } catch {
+        if (cancelled) return;
+        // Keep the form usable, but never silently hide the allergy banner.
+        setPatient({ name: "—", allergies: [] });
+        toast.error("تعذّر تحميل بيانات المريض (ومنها الحساسيات) — راجع ملف المريض قبل الوصف");
+      } finally {
+        if (!cancelled) setPatientLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -343,6 +351,7 @@ function NewVisitPage() {
         not_your_patient: "هذا المريض غير مرتبط بحسابك (لا يوجد موعد أو ربط)",
         not_a_doctor: "هذه الميزة للأطباء فقط",
         unauth: "غير مصرح",
+        appointment_mismatch: "الموعد المرتبط لا يخص هذا المريض أو ليس من مواعيدك",
       };
       toast.error("فشل حفظ الزيارة: " + (map[err] ?? err));
       return;
@@ -636,17 +645,16 @@ function NewVisitPage() {
                   feedback={aiFeedback}
                   onFeedback={async (rating) => {
                     if (!aiSuggestion.consultation_id) return;
+                    const previous = aiFeedback;
                     setAiFeedback(rating);
-                    const { error } = await supabase.rpc(
-                      "rate_ai_consultation" as never,
-                      {
-                        p_id: aiSuggestion.consultation_id,
-                        p_rating: rating,
-                        p_note: null,
-                      } as never,
-                    );
-                    if (error) toast.error("تعذّر حفظ التقييم");
-                    else toast.success("شكراً — تقييمك يحسّن المساعد لكل الأطباء");
+                    const { error } = await supabase.rpc("rate_ai_consultation", {
+                      p_id: aiSuggestion.consultation_id,
+                      p_rating: rating,
+                    });
+                    if (error) {
+                      setAiFeedback(previous);
+                      toast.error("تعذّر حفظ التقييم");
+                    } else toast.success("شكراً — تقييمك يحسّن المساعد لكل الأطباء");
                   }}
                 />
               </div>
@@ -902,10 +910,13 @@ function PatientPicker({ onPick }: { onPick: (id: string) => void }) {
     const handle = setTimeout(() => {
       setLoading(true);
       (async () => {
-        const res = await searchMyPatients({ data: { userId: user.id, q } });
-        if (!cancelled) {
-          setPatients((res ?? []) as { id: string; fullName: string | null }[]);
-          setLoading(false);
+        try {
+          const res = await searchMyPatients({ data: { userId: user.id, q } });
+          if (!cancelled) setPatients(res ?? []);
+        } catch {
+          if (!cancelled) toast.error("تعذّر تحميل قائمة المرضى — حاول مرة أخرى");
+        } finally {
+          if (!cancelled) setLoading(false);
         }
       })();
     }, 250);

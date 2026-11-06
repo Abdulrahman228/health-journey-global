@@ -72,6 +72,36 @@ function presetRole(): Role | null {
   return r === "doctor" || r === "patient" ? r : null;
 }
 
+/** Server / Supabase sign-up errors → a message the person can act on. */
+function mapSignupError(message: string, t: (en: string, ar: string) => string): string {
+  const m = message.toLowerCase();
+  if (/already (been )?registered|already exists|email_exists/.test(m))
+    return t(
+      "This e-mail is already registered — sign in instead.",
+      "هذا البريد مسجّل بالفعل — سجّل الدخول.",
+    );
+  if (m.includes("too many") || m.includes("rate limit"))
+    return t(
+      "Too many sign-up attempts — try again later.",
+      "محاولات تسجيل كثيرة — حاول مرة أخرى لاحقاً.",
+    );
+  if (m.includes("confirmation_email_failed"))
+    return t(
+      "We couldn't send the confirmation e-mail — please try again in a few minutes.",
+      "تعذّر إرسال رسالة التأكيد — حاول مرة أخرى بعد دقائق.",
+    );
+  if (m.includes("password"))
+    return t(
+      "Password must be at least 10 characters with letters and numbers.",
+      "كلمة المرور يجب أن تكون 10 أحرف على الأقل وتحتوي على حروف وأرقام.",
+    );
+  if (m.includes("email") && m.includes("invalid"))
+    return t("Enter a valid e-mail address.", "أدخل بريداً إلكترونياً صحيحاً.");
+  if (m.includes("failed to fetch") || m.includes("network"))
+    return t("No internet connection — try again.", "لا يوجد اتصال بالإنترنت — حاول مرة أخرى.");
+  return t(message, "تعذّر إنشاء الحساب — حاول مرة أخرى.");
+}
+
 const inputClass =
   "w-full rounded-lg border border-input bg-background py-2.5 pe-4 ps-10 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20";
 
@@ -139,10 +169,7 @@ function SignupPage() {
     setIsLoading(true);
     setError("");
     try {
-      const res = (await signUp({ data })) as {
-        success: boolean;
-        requiresEmailConfirmation?: boolean;
-      };
+      const res = await signUp({ data });
       if (res.requiresEmailConfirmation) {
         setEmailPending(data.email);
         return;
@@ -156,7 +183,7 @@ function SignupPage() {
       if (signInError) throw signInError;
       window.location.href = redirectParam ?? (data.role === "doctor" ? "/dashboard" : "/");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Sign up failed");
+      setError(mapSignupError(e instanceof Error ? e.message : String(e), t));
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +204,7 @@ function SignupPage() {
         throw oauthError;
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Google sign up failed");
+      setError(mapSignupError(e instanceof Error ? e.message : String(e), t));
       setIsLoading(false);
     }
   };
@@ -492,7 +519,12 @@ function SignupPage() {
                     />
                   </div>
                   {errors.fullName && (
-                    <p className="mt-1 text-xs text-destructive">{errors.fullName.message}</p>
+                    <p className="mt-1 text-xs text-destructive">
+                      {t(
+                        "Enter your full name (2+ characters).",
+                        "أدخل اسمك الكامل (حرفان على الأقل).",
+                      )}
+                    </p>
                   )}
                 </div>
 
@@ -511,7 +543,9 @@ function SignupPage() {
                     />
                   </div>
                   {errors.email && (
-                    <p className="mt-1 text-xs text-destructive">{errors.email.message}</p>
+                    <p className="mt-1 text-xs text-destructive">
+                      {t("Enter a valid e-mail address.", "أدخل بريداً إلكترونياً صحيحاً.")}
+                    </p>
                   )}
                 </div>
 
@@ -545,7 +579,12 @@ function SignupPage() {
                     </button>
                   </div>
                   {errors.password && (
-                    <p className="mt-1 text-xs text-destructive">{errors.password.message}</p>
+                    <p className="mt-1 text-xs text-destructive">
+                      {t(
+                        "Password must be at least 10 characters with letters and numbers.",
+                        "كلمة المرور يجب أن تكون 10 أحرف على الأقل وتحتوي على حروف وأرقام.",
+                      )}
+                    </p>
                   )}
                 </div>
 

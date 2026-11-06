@@ -38,6 +38,7 @@ export function TelemedicineToggle() {
       setStatus({ isVerified: s.isVerified, telemedicineEnabled: s.telemedicineEnabled });
     } catch {
       setStatus({ isVerified: false, telemedicineEnabled: false });
+      toast.error("تعذّر تحميل حالة الاستشارات عن بُعد");
     }
   }, [getStatus]);
 
@@ -58,7 +59,9 @@ export function TelemedicineToggle() {
       );
     } catch (e) {
       setStatus((s) => (s ? { ...s, telemedicineEnabled: !next } : s)); // revert
-      toast.error((e as Error).message || t("Something went wrong", "حدث خطأ ما"));
+      // telemedicine.functions throws Arabic messages.
+      const msg = e instanceof Error ? e.message : "";
+      toast.error(msg || t("Something went wrong", "حدث خطأ ما"));
     } finally {
       setSaving(false);
     }

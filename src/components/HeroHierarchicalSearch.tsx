@@ -293,6 +293,8 @@ export function HeroHierarchicalSearch({
   const [loadingLevel, setLoadingLevel] = useState<number | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  // Specialties / regions failing to load used to leave empty dropdowns silently.
+  const [loadError, setLoadError] = useState(false);
 
   const fetchChildren = async (
     parentId: string | null,
@@ -307,17 +309,25 @@ export function HeroHierarchicalSearch({
       .order("name_ar", { ascending: true });
     q = parentId ? q.eq("parent_id", parentId) : q.is("parent_id", null);
     const { data, error } = await q;
-    if (error) return [];
+    if (error) {
+      console.error("regions load failed", error);
+      setLoadError(true);
+      return [];
+    }
     return (data ?? []) as RegionRow[];
   };
 
   // Initial: specialties + countries
   useEffect(() => {
     (async () => {
-      const [{ data: spec }, ctry] = await Promise.all([
+      const [{ data: spec, error: specErr }, ctry] = await Promise.all([
         supabase.from("specialties").select("slug,name_ar,name_en").order("name_ar"),
         fetchChildren(null, "country"),
       ]);
+      if (specErr) {
+        console.error("specialties load failed", specErr);
+        setLoadError(true);
+      }
       setSpecialties((spec as SpecialtyRow[]) ?? []);
       setCountries(ctry);
     })();
@@ -401,15 +411,19 @@ export function HeroHierarchicalSearch({
     //  - the city slug is in our hardcoded CITIES list (the only ones with SEO pages).
     // Otherwise fall through to /doctors?... so the user actually sees results
     // instead of a 404.
-    if (
-      specialty &&
-      cityObj &&
-      !districtObj &&
-      SEO_CITY_SLUGS.has(cityObj.slug)
-    ) {
+    // Big cities (Cairo, Giza, Alexandria, …) are governorates in the region
+    // tree, so a governorate with an SEO page counts as the city too.
+    const seoCity = districtObj
+      ? null
+      : cityObj && SEO_CITY_SLUGS.has(cityObj.slug)
+        ? cityObj
+        : !cityObj && govObj && SEO_CITY_SLUGS.has(govObj.slug)
+          ? govObj
+          : null;
+    if (specialty && seoCity) {
       navigate({
         to: "/specialty/$slug/$city",
-        params: { slug: specialty, city: cityObj.slug },
+        params: { slug: specialty, city: seoCity.slug },
       });
       return;
     }
@@ -576,6 +590,14 @@ export function HeroHierarchicalSearch({
       {geoError && (
         <p className="mt-2 text-xs text-destructive" role="alert">
           {geoError}
+        </p>
+      )}
+      {loadError && (
+        <p className="mt-2 text-xs text-destructive" role="alert">
+          {t(
+            "Some search lists didn't load. Refresh the page and try again.",
+            "تعذّر تحميل بعض قوائم البحث — حدّث الصفحة وحاول مرة أخرى.",
+          )}
         </p>
       )}
     </form>

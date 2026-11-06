@@ -28,6 +28,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<NotifRow[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   // Poll unread count.
@@ -63,20 +64,21 @@ export function NotificationBell() {
     const next = !open;
     setOpen(next);
     if (next && user) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("notifications")
         .select("id, kind, title, body, link, is_read, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(15);
-      setItems((data ?? []) as NotifRow[]);
+      setLoadFailed(Boolean(error));
+      setItems(data ?? []);
     }
   };
 
   const onItemClick = async (n: NotifRow) => {
     if (!n.is_read) {
-      await supabase.rpc("mark_notifications_read", { _ids: [n.id] });
-      setCount((c) => Math.max(0, c - 1));
+      const { error } = await supabase.rpc("mark_notifications_read", { _ids: [n.id] });
+      if (!error) setCount((c) => Math.max(0, c - 1));
     }
     setOpen(false);
     // Hard-navigate so deep links to non-typed paths work safely.
@@ -114,7 +116,9 @@ export function NotificationBell() {
           </div>
           {items.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-              {t("No notifications yet.", "لا توجد إشعارات بعد.")}
+              {loadFailed
+                ? t("Could not load notifications.", "تعذّر تحميل الإشعارات.")
+                : t("No notifications yet.", "لا توجد إشعارات بعد.")}
             </div>
           ) : (
             <ul className="max-h-96 overflow-y-auto">

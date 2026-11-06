@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { QrCode } from "@/components/QrCode";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useAuth } from "@/hooks/useAuth";
 import { siteConfig } from "@/lib/seo";
 import { createShortLink } from "@/lib/profile.functions";
 
@@ -42,9 +43,14 @@ export function ShareProfileButton({
   className,
 }: ShareProfileButtonProps) {
   const { t } = useLanguage();
+  const { profile: viewer } = useAuth();
+  // createShortLink is owner-only (auth + ownership check server-side). Visitors
+  // share the full URL; calling it for them only produced failing requests.
+  const isOwner = Boolean(viewer?.id) && viewer?.id === profileId;
   const [open, setOpen] = useState(false);
   const [shortId, setShortId] = useState<string | null>(null);
   const [creatingShort, setCreatingShort] = useState(false);
+  const [shortFailed, setShortFailed] = useState(false);
   const [copied, setCopied] = useState<"long" | "short" | null>(null);
 
   const longUrl = `${siteConfig.url}${targetPath}`;
@@ -53,18 +59,20 @@ export function ShareProfileButton({
     [shortId],
   );
 
-  // Lazily create a short link the first time the modal opens.
+  // Lazily create (or reuse) the owner's short link the first time the modal opens.
   useEffect(() => {
-    if (!open || shortId || creatingShort) return;
+    if (!open || !isOwner || shortId || creatingShort || shortFailed) return;
     setCreatingShort(true);
     createShortLink({ data: { profileId, targetPath } })
       .then((r) => setShortId(r.shortId))
       .catch((e) => {
-        // Non-fatal — long URL still works.
+        // Non-fatal — the full URL still works.
         console.warn("[ShareProfileButton] short link failed:", e);
+        setShortFailed(true);
+        toast.error(t("Couldn't create the short link", "تعذّر إنشاء الرابط القصير — استخدم الرابط الكامل"));
       })
       .finally(() => setCreatingShort(false));
-  }, [open, shortId, creatingShort, profileId, targetPath]);
+  }, [open, isOwner, shortId, creatingShort, shortFailed, profileId, targetPath, t]);
 
   const shareUrl = shortUrl ?? longUrl;
   const shareText = t(`Check out ${displayName} on ${siteConfig.brand.en}`, `زور صفحة ${displayName} على ${siteConfig.brand.ar}`);
@@ -90,7 +98,8 @@ export function ShareProfileButton({
         /* user cancelled */
       }
     } else {
-      handleCopy("short");
+      // No Web Share API — copy whichever link exists (visitors have no short link).
+      handleCopy(shortUrl ? "short" : "long");
     }
   };
 
@@ -155,28 +164,30 @@ export function ShareProfileButton({
             <QrCode value={shareUrl} size={224} />
           </div>
 
-          {/* Short link */}
-          <div className="w-full">
-            <label className="text-xs font-medium text-muted-foreground">
-              {t("Short link", "رابط قصير")}
-            </label>
-            <div className="mt-1 flex gap-2">
-              <Input
-                readOnly
-                value={shortUrl ?? (creatingShort ? t("Generating…", "جارٍ التوليد…") : longUrl)}
-                className="font-mono text-xs"
-              />
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => handleCopy("short")}
-                disabled={!shortUrl}
-                aria-label={t("Copy short link", "نسخ الرابط القصير")}
-              >
-                {copied === "short" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </Button>
+          {/* Short link (owner only — see isOwner) */}
+          {isOwner && (
+            <div className="w-full">
+              <label className="text-xs font-medium text-muted-foreground">
+                {t("Short link", "رابط قصير")}
+              </label>
+              <div className="mt-1 flex gap-2">
+                <Input
+                  readOnly
+                  value={shortUrl ?? (creatingShort ? t("Generating…", "جارٍ التوليد…") : longUrl)}
+                  className="font-mono text-xs"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => handleCopy("short")}
+                  disabled={!shortUrl}
+                  aria-label={t("Copy short link", "نسخ الرابط القصير")}
+                >
+                  {copied === "short" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Long link */}
           <div className="w-full">

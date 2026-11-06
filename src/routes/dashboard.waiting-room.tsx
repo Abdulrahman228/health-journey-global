@@ -42,8 +42,8 @@ function WaitingRoomPage() {
           .eq("profile_id", profile.id)
           .maybeSingle();
         if (data) {
-          setDoctorId(data.id as string);
-          setSpecialty((data.specialty as string | null) ?? "");
+          setDoctorId(data.id);
+          setSpecialty(data.specialty ?? "");
         }
       }
       setLoading(false);
@@ -55,9 +55,9 @@ function WaitingRoomPage() {
     if (!doctorId) return;
     let active = true;
     const tick = async () => {
-      // RPC is newer than the generated types — cast until `supabase gen types` is re-run.
-      const { data } = await supabase.rpc("doctor_today_queue_stats" as never);
-      if (active && Array.isArray(data) && data[0]) setStats(data[0] as QueueStats);
+      // Best effort: a failed tick keeps the last counters on the clinic screen.
+      const { data } = await supabase.rpc("doctor_today_queue_stats");
+      if (active && data?.[0]) setStats(data[0]);
     };
     void tick();
     const iv = setInterval(tick, 30_000);

@@ -38,13 +38,22 @@ function BillingSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<BillingSettings | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const s = await getMyBillingSettings({ data: { userId: user.id } });
-    setForm(s);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const s = await getMyBillingSettings({ data: { userId: user.id } });
+      setForm(s);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      setLoadError(msg || "تعذّر تحميل إعدادات الدفع");
+      toast.error("تعذّر تحميل إعدادات الدفع");
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {
@@ -60,32 +69,48 @@ function BillingSettingsPage() {
     e.preventDefault();
     if (!user || !form) return;
     setSaving(true);
-    const res = await upsertMyBillingSettings({
-      data: {
-        userId: user.id,
-        payoutMethod: form.payoutMethod,
-        accountHolder: form.accountHolder,
-        bankName: form.bankName,
-        ibanOrAccount: form.ibanOrAccount,
-        swift: form.swift,
-        vodafoneNumber: form.vodafoneNumber,
-        instapayHandle: form.instapayHandle,
-        taxId: form.taxId,
-        vatRegistered: form.vatRegistered,
-      },
-    });
-    setSaving(false);
-    if (!res.ok) {
-      toast.error("فشل الحفظ: " + res.error);
-      return;
+    try {
+      const res = await upsertMyBillingSettings({
+        data: {
+          userId: user.id,
+          payoutMethod: form.payoutMethod,
+          accountHolder: form.accountHolder,
+          bankName: form.bankName,
+          ibanOrAccount: form.ibanOrAccount,
+          swift: form.swift,
+          vodafoneNumber: form.vodafoneNumber,
+          instapayHandle: form.instapayHandle,
+          taxId: form.taxId,
+          vatRegistered: form.vatRegistered,
+        },
+      });
+      if (!res.ok) {
+        toast.error("فشل الحفظ: " + res.error);
+        return;
+      }
+      toast.success("تم حفظ بيانات الدفع");
+    } catch (err) {
+      toast.error("فشل الحفظ" + (err instanceof Error ? `: ${err.message}` : ""));
+    } finally {
+      setSaving(false);
     }
-    toast.success("تم حفظ بيانات الدفع");
   };
 
-  if (authLoading || loading || !form) {
+  if (authLoading || loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!form) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-24 text-center">
+        <h1 className="text-xl font-bold">
+          {loadError ? "تعذّر تحميل إعدادات الدفع" : "هذه الصفحة للأطباء فقط"}
+        </h1>
+        {loadError && <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>}
       </div>
     );
   }
@@ -264,7 +289,7 @@ function BillingSettingsPage() {
 
         <div className="rounded-lg bg-muted/40 p-4 text-xs text-muted-foreground">
           <strong className="text-foreground">عمولة المنصة الحالية:</strong>{" "}
-          {form.platformFeePct}% من قيمة كل كشف.
+          {form.platformFeePct}% من قيمة كل كشف أونلاين (كشوفات العيادة بدون عمولة).
           <br />
           <strong className="text-foreground">الحد الأدنى للسحب:</strong>{" "}
           {form.minimumPayout} EGP.

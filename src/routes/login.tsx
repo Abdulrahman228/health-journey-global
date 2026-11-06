@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { homePathForRoles, useAuth } from "@/hooks/useAuth";
 import { siteConfig } from "@/lib/seo";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -37,22 +37,29 @@ function safeRedirect(): string | null {
   return rp && rp.startsWith("/") && !rp.startsWith("//") ? rp : null;
 }
 
-/** Where a signed-in user lands when no redirect was requested. */
-async function landingFor(userId: string | undefined, knownRole?: string): Promise<string> {
-  let role = knownRole;
-  if (!role && userId) {
+/** Where a signed-in user lands when no redirect was requested (ALL roles). */
+async function landingFor(userId: string | undefined, knownRoles?: string[]): Promise<string> {
+  let roles = knownRoles;
+  if (!roles && userId) {
     const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    const roles = (data ?? []).map((r) => r.role as string);
-    role =
-      roles.includes("super_admin") || roles.includes("admin")
-        ? "admin"
-        : roles.includes("doctor")
-          ? "doctor"
-          : "patient";
+    roles = (data ?? []).map((r) => r.role);
   }
-  if (role === "admin") return "/admin";
-  if (role === "doctor") return "/dashboard";
-  return "/";
+  return homePathForRoles(roles ?? []);
+}
+
+function mapLoginError(message: string, t: (en: string, ar: string) => string): string {
+  if (/email not confirmed/i.test(message))
+    return t(
+      "Please confirm your e-mail first (check your inbox).",
+      "أكّد بريدك الإلكتروني أولاً (راجع صندوق الوارد).",
+    );
+  if (/invalid login credentials|invalid.*(email|password)/i.test(message))
+    return t("Wrong e-mail or password.", "البريد الإلكتروني أو كلمة المرور غير صحيحة.");
+  if (/rate limit|too many|security purposes/i.test(message))
+    return t("Too many attempts — try again in a minute.", "محاولات كثيرة — حاول بعد دقيقة.");
+  if (/failed to fetch|network/i.test(message))
+    return t("No internet connection — try again.", "لا يوجد اتصال بالإنترنت — حاول مرة أخرى.");
+  return t(message, "تعذّر تسجيل الدخول — حاول مرة أخرى.");
 }
 
 function LoginPage() {
@@ -85,14 +92,7 @@ function LoginPage() {
     });
     if (signInError) {
       setIsLoading(false);
-      setError(
-        /email not confirmed/i.test(signInError.message)
-          ? t(
-              "Please confirm your e-mail first (check your inbox).",
-              "أكّد بريدك الإلكتروني أولاً (راجع صندوق الوارد).",
-            )
-          : signInError.message,
-      );
+      setError(mapLoginError(signInError.message, t));
       return;
     }
     window.location.href = redirectParam ?? (await landingFor(signIn.user?.id));
@@ -100,7 +100,7 @@ function LoginPage() {
 
   const onPhoneDone = async (result: PhoneBootstrapResult) => {
     setFinishing(true);
-    window.location.href = redirectParam ?? (await landingFor(undefined, result.role));
+    window.location.href = redirectParam ?? (await landingFor(undefined, result.roles));
   };
 
   const handleGoogleSignIn = async () => {
@@ -112,7 +112,7 @@ function LoginPage() {
       options: { redirectTo, queryParams: { prompt: "select_account" } },
     });
     if (oauthError) {
-      setError(oauthError.message);
+      setError(mapLoginError(oauthError.message, t));
       setIsLoading(false);
     }
   };
@@ -187,6 +187,11 @@ function LoginPage() {
             </button>
           </div>
 
+          {error && (
+            <div className="mb-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
           {method === "phone" ? (
             <PhoneOtpForm
               mode="signin"
@@ -195,11 +200,6 @@ function LoginPage() {
             />
           ) : (
             <>
-              {error && (
-                <div className="mb-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-foreground">
@@ -216,7 +216,9 @@ function LoginPage() {
                     />
                   </div>
                   {errors.email && (
-                    <p className="mt-1 text-xs text-destructive">{errors.email.message}</p>
+                    <p className="mt-1 text-xs text-destructive">
+                      {t("Enter a valid e-mail address.", "أدخل بريداً إلكترونياً صحيحاً.")}
+                    </p>
                   )}
                 </div>
 
@@ -247,7 +249,9 @@ function LoginPage() {
                     </button>
                   </div>
                   {errors.password && (
-                    <p className="mt-1 text-xs text-destructive">{errors.password.message}</p>
+                    <p className="mt-1 text-xs text-destructive">
+                      {t("Enter your password.", "أدخل كلمة المرور.")}
+                    </p>
                   )}
                 </div>
 

@@ -20,6 +20,9 @@ export async function isAdmin(userId: string): Promise<boolean> {
     .select("role")
     .eq("user_id", userId)
     .in("role", ["admin", "super_admin"])
+    // limit(1): admins usually hold BOTH admin and super_admin rows — without
+    // it maybeSingle() errors on 2 rows and the admin would be refused.
+    .limit(1)
     .maybeSingle();
   return Boolean(data);
 }

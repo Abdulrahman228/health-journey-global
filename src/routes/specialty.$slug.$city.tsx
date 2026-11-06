@@ -106,6 +106,9 @@ export const Route = createFileRoute("/specialty/$slug/$city")({
         title,
         description,
         path,
+        // Every pillar page links to all city combos; the empty ones are thin
+        // content (also left out of the sitemap) — keep them out of the index.
+        noindex: !d || d.doctorCount === 0,
         keywords: d
           ? [
               `أفضل طبيب ${d.specialty.nameAr} ${d.city.nameAr}`,

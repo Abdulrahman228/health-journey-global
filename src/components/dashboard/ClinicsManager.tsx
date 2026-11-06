@@ -9,6 +9,13 @@ import { RegionPicker, type RegionSelection } from "@/components/regions/RegionP
 import { Building2, Plus, Trash2, Save, Loader2, Clock, CalendarOff, Navigation, MapPin, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 
+/** Arabic messages pass through; raw database / network errors get a clear Arabic fallback. */
+function arabicError(e: Error): string {
+  return /[\u0600-\u06FF]/.test(e?.message ?? "")
+    ? e.message
+    : "تعذّر حفظ التغيير — حاول مرة أخرى.";
+}
+
 interface Clinic {
   id: string;
   doctor_id: string;
@@ -101,19 +108,21 @@ export function ClinicsManager({ doctorDetailsId }: { doctorDetailsId: string })
       setAddingClinic(false);
       queryClient.invalidateQueries({ queryKey: ["clinics", doctorDetailsId] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(arabicError(e)),
   });
 
   const deleteClinic = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("clinics").delete().eq("id", id);
+      // RLS turns a forbidden delete into "0 rows" (no error) — check it.
+      const { data, error } = await supabase.from("clinics").delete().eq("id", id).select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error("لا تملك صلاحية تعديل هذه العيادة");
     },
     onSuccess: () => {
       toast.success(t("Clinic deleted", "تم حذف العيادة"));
       queryClient.invalidateQueries({ queryKey: ["clinics", doctorDetailsId] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(arabicError(e)),
   });
 
   return (
@@ -620,15 +629,21 @@ function ClinicCard({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedules", clinic.id] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(arabicError(e)),
   });
 
   const delSlot = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("clinic_schedules").delete().eq("id", id);
+      const { data, error } = await supabase
+        .from("clinic_schedules")
+        .delete()
+        .eq("id", id)
+        .select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error("لا تملك صلاحية تعديل هذه العيادة");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules", clinic.id] }),
+    onError: (e: Error) => toast.error(arabicError(e)),
   });
 
   const [day, setDay] = useState(1);
@@ -659,15 +674,20 @@ function ClinicCard({
       if (p.address) patch.address = p.address;
       if (p.city) patch.city = p.city;
       if (p.country) patch.country = p.country;
-      const { error } = await supabase.from("clinics").update(patch).eq("id", clinic.id);
+      const { data, error } = await supabase
+        .from("clinics")
+        .update(patch)
+        .eq("id", clinic.id)
+        .select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error("لا تملك صلاحية تعديل هذه العيادة");
     },
     onSuccess: () => {
       toast.success(t("Location updated", "تم تحديث الموقع"));
       queryClient.invalidateQueries({ queryKey: ["clinics"] });
       setEditingLocation(false);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(arabicError(e)),
   });
 
   async function pickAndSave(lat: number, lng: number) {
@@ -915,15 +935,21 @@ function TimeOffSection({ clinicId }: { clinicId: string }) {
       setReason("");
       queryClient.invalidateQueries({ queryKey: ["clinic_time_off", clinicId] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(arabicError(e)),
   });
 
   const removeOff = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("clinic_time_off").delete().eq("id", id);
+      const { data, error } = await supabase
+        .from("clinic_time_off")
+        .delete()
+        .eq("id", id)
+        .select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error("لا تملك صلاحية تعديل هذه العيادة");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clinic_time_off", clinicId] }),
+    onError: (e: Error) => toast.error(arabicError(e)),
   });
 
   return (

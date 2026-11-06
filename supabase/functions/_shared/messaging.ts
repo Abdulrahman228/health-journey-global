@@ -283,10 +283,19 @@ export async function drainOutbox(admin: AdminClient, limit = 25): Promise<{ pic
   const rows = (data ?? []) as OutboxRow[];
   result.picked = rows.length;
 
+  // supabase-js rpc() reports failures in { error } (it does not throw) — throw
+  // so the catch below records it instead of silently leaving the row 'sending'.
+  const mark = async (args: Record<string, unknown>) => {
+    const { error: markErr } = await admin.rpc("outbox_mark", args);
+    if (markErr) throw new Error(markErr.message);
+  };
+
   for (const row of rows) {
     const rendered = renderTemplate(row.template_key, row.params ?? {});
     if (!rendered.smsBody && !rendered.whatsapp) {
-      await admin.rpc("outbox_mark", { p_id: row.id, p_status: "skipped", p_error: "unknown_template" });
+      await mark({ p_id: row.id, p_status: "skipped", p_error: "unknown_template" }).catch((e) =>
+        result.errors.push(`${row.id}: mark_failed ${e instanceof Error ? e.message : String(e)}`),
+      );
       result.skipped++;
       continue;
     }
@@ -298,16 +307,16 @@ export async function drainOutbox(admin: AdminClient, limit = 25): Promise<{ pic
     }
     try {
       if (out.ok) {
-        await admin.rpc("outbox_mark", {
+        await mark({
           p_id: row.id, p_status: "sent", p_provider: out.provider, p_provider_message_id: out.providerMessageId ?? null,
         });
         result.sent++;
       } else if (out.notConfigured) {
         // The channel this row insists on has no provider yet: park it without burning attempts.
-        await admin.rpc("outbox_mark", { p_id: row.id, p_status: "requeue", p_error: out.error ?? "provider_not_configured" });
+        await mark({ p_id: row.id, p_status: "requeue", p_error: out.error ?? "provider_not_configured" });
         result.skipped++;
       } else {
-        await admin.rpc("outbox_mark", { p_id: row.id, p_status: "failed", p_provider: out.provider, p_error: out.error ?? "send_failed" });
+        await mark({ p_id: row.id, p_status: "failed", p_provider: out.provider, p_error: out.error ?? "send_failed" });
         result.failed++;
         if (out.error) result.errors.push(`${row.id}: ${out.error}`);
       }

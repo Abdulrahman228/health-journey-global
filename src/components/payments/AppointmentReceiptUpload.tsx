@@ -36,7 +36,11 @@ export function AppointmentReceiptUpload({ appointmentId }: { appointmentId: str
   };
 
   const submit = async () => {
-    if (!file || !user) return;
+    if (!file) return;
+    if (!user) {
+      setError(t("Please sign in first", "يجب تسجيل الدخول أولاً"));
+      return;
+    }
     setPhase("uploading");
     setError(null);
     try {
@@ -45,15 +49,23 @@ export function AppointmentReceiptUpload({ appointmentId }: { appointmentId: str
       const { error: upErr } = await supabase.storage
         .from("receipts")
         .upload(path, file, { contentType: file.type, upsert: false });
-      if (upErr) throw upErr;
+      if (upErr) throw new Error(t("Upload failed, please try again", "فشل رفع الصورة، حاول مرة أخرى"));
       const { error: rpcErr } = await supabase.rpc("submit_appointment_receipt", {
         p_appointment_id: appointmentId,
         p_receipt_url: path,
       });
-      if (rpcErr) throw rpcErr;
+      if (rpcErr) {
+        // The RPC raises short English codes — translate them.
+        const codes: Record<string, string> = {
+          not_found: t("Appointment not found", "الموعد غير موجود"),
+          not_your_appointment: t("This appointment is not yours", "هذا الموعد ليس باسمك"),
+          receipt_required: t("Receipt image is required", "صورة الإيصال مطلوبة"),
+        };
+        throw new Error(codes[rpcErr.message] ?? t("Could not submit the receipt", "تعذّر إرسال الإيصال"));
+      }
       setPhase("done");
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("Upload failed", "فشل الرفع"));
+      setError(e instanceof Error && e.message ? e.message : t("Upload failed", "فشل الرفع"));
       setPhase("idle");
     }
   };

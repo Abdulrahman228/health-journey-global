@@ -30,19 +30,32 @@ async function handleEvent(body: any): Promise<void> {
         const text: string = msg?.text?.body ?? "";
         if (from && isStopKeyword(text)) {
           // Patients / any recipient of the outbox queue (welcome, reminders…).
-          await supabaseAdmin.rpc(
-            "outbox_opt_out" as never,
-            {
-              p_phone: from,
-              p_channel: "all",
-              p_reason: "inbound_reply",
-            } as never,
-          );
-          // Seeded-doctor outreach list.
-          const { data: affected } = await supabaseAdmin.rpc("opt_out_scraped_by_phone", {
+          const { error: optErr } = await supabaseAdmin.rpc("outbox_opt_out", {
+            p_phone: from,
+            p_channel: "all",
+            p_reason: "inbound_reply",
+          });
+          if (optErr) console.error("[whatsapp webhook] outbox_opt_out failed", optErr.message);
+
+          // Seeded-doctor outreach list. opt_out_scraped_by_phone RETURNS void
+          // (it matches RIGHT(phone, 10)), so resolve the affected rows first —
+          // previously `affected` was always null and no 'stopped' row was logged.
+          const last10 = from.replace(/\D/g, "").slice(-10);
+          const { data: affected } =
+            last10.length === 10
+              ? await supabaseAdmin
+                  .from("scraped_doctors")
+                  .select("id")
+                  .like("phone", `%${last10}`)
+                  .eq("opted_out", false)
+              : { data: [] as { id: string }[] };
+          const { error: scrapedErr } = await supabaseAdmin.rpc("opt_out_scraped_by_phone", {
             p_phone: from,
           });
-          for (const a of (affected ?? []) as unknown as Array<{ id: string }>) {
+          if (scrapedErr) {
+            console.error("[whatsapp webhook] opt_out_scraped_by_phone failed", scrapedErr.message);
+          }
+          for (const a of affected ?? []) {
             await supabaseAdmin.from("doctor_outreach").insert({
               scraped_doctor_id: a.id,
               channel: "whatsapp",
@@ -62,13 +75,10 @@ async function handleEvent(body: any): Promise<void> {
             .from("doctor_outreach")
             .update({ status })
             .eq("provider_message_id", id);
-          await supabaseAdmin.rpc(
-            "outbox_delivery_update" as never,
-            {
-              p_provider_message_id: id,
-              p_provider_status: status,
-            } as never,
-          );
+          await supabaseAdmin.rpc("outbox_delivery_update", {
+            p_provider_message_id: id,
+            p_provider_status: status,
+          });
         }
       }
     }

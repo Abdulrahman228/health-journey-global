@@ -10,10 +10,16 @@
 $ErrorActionPreference = "Continue"
 $ref = "wqrrwvaxovrjjiilqkmt"
 Set-Location "C:\lovable\health-journey-global"
-# Already applied on 2026-11-05: 20261104120000_booking_timezone..., 20261104130000_identity_fixes...
+# Already applied: 20261104120000_booking_timezone, 20261104130000_identity_fixes,
+# 20261104140000_visit_status_rules. Order matters: 100000 -> 110000 -> 120000.
 $migrations = @(
-  "supabase\migrations\20261104140000_visit_status_rules.sql"
+  "supabase\migrations\20261106100000_wiring_audit_fixes.sql",
+  "supabase\migrations\20261106110000_doctor_search_nearby.sql",
+  "supabase\migrations\20261106120000_app_audit_db_fixes.sql"
 )
+# Edge functions changed on 2026-11-06 (auth-send-sms, send-claim-sms and
+# send-outbox share _shared/messaging.ts). Deployed only if all migrations succeed.
+$functions = @("places-search", "paymob-initiate", "paymob-webhook", "auth-send-sms", "send-claim-sms", "send-outbox")
 
 Write-Host ""
 Write-Host "=== Tebana: apply database updates ===" -ForegroundColor Cyan
@@ -70,6 +76,14 @@ for ($try = 1; $try -le 5; $try++) {
     $a = Run-Query $file
     if (-not $a.ok) { Write-Host $a.out; Write-Host "FAILED: $file" -ForegroundColor Red; $failed = $true; break }
     Write-Host "OK: $file" -ForegroundColor Green
+  }
+  if (-not $failed) {
+    foreach ($fn in $functions) {
+      Write-Host "`n>>> Deploying function: $fn" -ForegroundColor Cyan
+      $out = & cmd /c "npx -y supabase@3.0.0 functions deploy $fn --remote=$ref --yes 2>&1" | Out-String
+      if ($LASTEXITCODE -ne 0) { Write-Host $out; Write-Host "FAILED to deploy: $fn" -ForegroundColor Red; $failed = $true; break }
+      Write-Host "OK: $fn" -ForegroundColor Green
+    }
   }
   Remove-Item Env:SUPABASE_ACCESS_TOKEN -ErrorAction SilentlyContinue
   if ($failed) { Write-Host "`nSend Claude a screenshot of the red line." -ForegroundColor Red }

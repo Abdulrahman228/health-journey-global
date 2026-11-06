@@ -25,17 +25,24 @@ export function SharedCareCard() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData.user?.id;
-    const [{ data: docs }, prof] = await Promise.all([
-      supabase.rpc("list_my_care_doctors"),
-      uid
-        ? supabase.from("profiles").select("shared_care_consent").eq("user_id", uid).maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
-    setDoctors((docs as CareDoctor[]) ?? []);
-    setConsent(Boolean((prof as { data?: { shared_care_consent?: boolean } })?.data?.shared_care_consent));
-    setLoading(false);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      const [docsRes, profRes] = await Promise.all([
+        supabase.rpc("list_my_care_doctors"),
+        uid
+          ? supabase.from("profiles").select("shared_care_consent").eq("user_id", uid).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+      if (docsRes.error || profRes.error) throw docsRes.error ?? profRes.error;
+      setDoctors(docsRes.data ?? []);
+      setConsent(Boolean(profRes.data?.shared_care_consent));
+    } catch {
+      // (plain string: `t` is re-created every render and would loop this effect)
+      toast.error("تعذّر تحميل بيانات الرعاية المشتركة");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -50,7 +57,11 @@ export function SharedCareCard() {
     setSaving(false);
     if (error) {
       setConsent(!next);
-      toast.error(error.message);
+      toast.error(
+        error.message === "no_profile"
+          ? t("Complete your profile first", "أكمل ملفك الشخصي أولاً")
+          : t("Could not save your choice", "تعذّر حفظ اختيارك — حاول مرة أخرى"),
+      );
     } else {
       toast.success(next ? t("Shared care enabled", "تم تفعيل الرعاية المشتركة") : t("Shared care disabled", "تم إيقاف الرعاية المشتركة"));
     }

@@ -43,16 +43,24 @@ function AppointmentPaymentsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.rpc("list_appointment_payment_reviews");
-    const list = (data as ReviewRow[]) ?? [];
+    const { data, error } = await supabase.rpc("list_appointment_payment_reviews");
+    if (error) {
+      toast.error("تعذّر تحميل الإيصالات: " + error.message);
+      setLoading(false);
+      return;
+    }
+    const list: ReviewRow[] = data ?? [];
     // Sign each receipt path so the admin can view it.
     const signed = await Promise.all(
-      list.map(async (r) => {
+      list.map(async (r): Promise<ReviewRow> => {
         if (!r.receipt_url) return r;
         const { data: s } = await supabase.storage.from("receipts").createSignedUrl(r.receipt_url, 3600);
         return { ...r, signedUrl: s?.signedUrl };
       }),
     );
+    if (signed.some((r) => r.receipt_url && !r.signedUrl)) {
+      toast.error("تعذّر فتح بعض الإيصالات من التخزين");
+    }
     setRows(signed);
     setLoading(false);
   }, []);
@@ -77,7 +85,7 @@ function AppointmentPaymentsPage() {
       toast.success(approve ? "تم تأكيد الدفع وإخطار المريض" : "تم رفض الإيصال");
       setRows((prev) => prev.filter((r) => r.id !== id));
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error("تعذّر تنفيذ الإجراء: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBusyId(null);
     }

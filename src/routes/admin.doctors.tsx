@@ -57,7 +57,7 @@ export const Route = createFileRoute("/admin/doctors")({
 
 interface DoctorRow {
   id: string;
-  profile_id: string;
+  profile_id: string | null;
   specialty: string | null;
   clinic_name: string | null;
   clinic_address: string | null;
@@ -102,6 +102,7 @@ function AdminDoctorsPage() {
     doctorName: string;
   } | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [grantTarget, setGrantTarget] = useState<{ profileId: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -117,16 +118,16 @@ function AdminDoctorsPage() {
       setLoading(false);
       return;
     }
-    const profileIds = data.map((d) => d.profile_id);
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url, city")
-      .in("id", profileIds);
-    const byId = new Map((profiles ?? []).map((p) => [p.id, p as DoctorRow["profile"]]));
+    const profileIds = data.map((d) => d.profile_id).filter((id): id is string => Boolean(id));
+    const { data: profiles } = profileIds.length
+      ? await supabase.from("profiles").select("id, full_name, avatar_url, city").in("id", profileIds)
+      : { data: [] };
+    const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
     setRows(
-      (data as DoctorRow[]).map((d) => ({
+      data.map((d) => ({
         ...d,
-        profile: byId.get(d.profile_id) ?? null,
+        is_verified: Boolean(d.is_verified),
+        profile: (d.profile_id ? byId.get(d.profile_id) : undefined) ?? null,
       })),
     );
     setLoading(false);
@@ -432,7 +433,9 @@ function AdminDoctorsPage() {
                         </button>
                         <button
                           type="button"
+                          disabled={!r.profile_id}
                           onClick={() =>
+                            r.profile_id &&
                             setGrantTarget({
                               profileId: r.profile_id,
                               name: r.profile?.full_name ?? r.id,
@@ -459,17 +462,33 @@ function AdminDoctorsPage() {
                               )
                             )
                               return;
+                            setDeletingId(r.id);
                             try {
-                              await adminDeleteDoctor({ data: { doctorId: r.id } });
-                              toast.success("تم حذف الطبيب");
+                              const res = await adminDeleteDoctor({ data: { doctorId: r.id } });
+                              if (res.warnings.length) {
+                                toast.warning(
+                                  "تم حذف ملف الطبيب، لكن تعذّر حذف بعض بيانات الحساب: " +
+                                    res.warnings.join(" · "),
+                                );
+                              } else {
+                                toast.success("تم حذف الطبيب");
+                              }
                               load();
                             } catch (e) {
-                              toast.error("فشل الحذف: " + (e as Error).message);
+                              toast.error("فشل الحذف: " + (e instanceof Error ? e.message : String(e)));
+                            } finally {
+                              setDeletingId(null);
                             }
                           }}
-                          className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
+                          disabled={deletingId === r.id}
+                          aria-label="حذف الطبيب"
+                          className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-60"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          {deletingId === r.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
                         </button>
                       </div>
                     </td>
@@ -675,7 +694,7 @@ function CreateDoctorModal({ onClose, onCreated }: { onClose: () => void; onCrea
       toast.success("تم إنشاء الطبيب");
       onCreated();
     } catch (e) {
-      toast.error("فشل: " + (e as Error).message);
+      toast.error("فشل إنشاء الطبيب: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
@@ -870,9 +889,11 @@ function QueueModal({
     setLoading(true);
     adminGetDoctorQueue({ data: { doctorId, date } })
       .then((res) => {
-        if (!cancelled) setRows(res.rows as unknown as QueueRow[]);
+        if (!cancelled) setRows(res.rows);
       })
-      .catch((e: Error) => toast.error(e.message))
+      .catch((e: unknown) =>
+        toast.error("تعذّر تحميل الطابور: " + (e instanceof Error ? e.message : String(e))),
+      )
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;

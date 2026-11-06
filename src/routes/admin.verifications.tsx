@@ -24,7 +24,7 @@ export const Route = createFileRoute("/admin/verifications")({
 
 interface Row {
   id: string;
-  profile_id: string;
+  profile_id: string | null;
   specialty: string | null;
   syndicate_number: string | null;
   national_id_last4: string | null;
@@ -62,17 +62,33 @@ function AdminVerificationsPage() {
       .select("id,profile_id,specialty,syndicate_number,national_id_last4,is_verified,verification_status,verification_submitted_at,verification_notes")
       .order("verification_submitted_at", { ascending: false, nullsFirst: false });
     if (tab === "pending") query = query.eq("verification_status", "pending");
-    const { data: docs } = await query;
-    const list = (docs ?? []) as Omit<Row, "profile">[];
-    const ids = list.map((d) => d.profile_id);
+    const { data: docs, error } = await query;
+    if (error) {
+      toast.error("تعذّر تحميل طلبات التوثيق: " + error.message);
+      setLoading(false);
+      return;
+    }
+    const list = docs ?? [];
+    // doctor_details.profile_id is nullable (and = profiles.id, not the auth uid).
+    const ids = list.flatMap((d) => (d.profile_id ? [d.profile_id] : []));
     const profileMap: Record<string, { full_name: string | null; city: string | null }> = {};
     if (ids.length) {
-      const { data: profs } = await supabase.from("profiles").select("id,full_name,city").in("id", ids);
+      const { data: profs, error: profErr } = await supabase
+        .from("profiles")
+        .select("id,full_name,city")
+        .in("id", ids);
+      if (profErr) toast.error("تعذّر تحميل أسماء الأطباء: " + profErr.message);
       (profs ?? []).forEach((p) => {
-        profileMap[p.id as string] = { full_name: p.full_name as string | null, city: p.city as string | null };
+        profileMap[p.id] = { full_name: p.full_name, city: p.city };
       });
     }
-    setRows(list.map((d) => ({ ...d, profile: profileMap[d.profile_id] ?? null })));
+    setRows(
+      list.map((d): Row => ({
+        ...d,
+        is_verified: Boolean(d.is_verified),
+        profile: (d.profile_id ? profileMap[d.profile_id] : undefined) ?? null,
+      })),
+    );
     setLoading(false);
   }, [tab]);
 
@@ -263,7 +279,7 @@ function VerifyDoctorModal({
       }
       onDone(approve);
     } catch (e) {
-      toast.error("حصل خطأ: " + (e as Error).message);
+      toast.error("حصل خطأ: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }

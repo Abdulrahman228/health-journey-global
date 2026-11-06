@@ -93,9 +93,14 @@ function ReceiptPage() {
     }
     let cancelled = false;
     (async () => {
-      const view = await getAppointmentReceipt({
-        data: { userId: user.id, appointmentId },
-      });
+      let view: AppointmentReceipt | null = null;
+      try {
+        view = await getAppointmentReceipt({
+          data: { userId: user.id, appointmentId },
+        });
+      } catch (e) {
+        console.error("[receipt] load failed", e);
+      }
       if (cancelled) return;
       if (!view) {
         setNotFound(true);

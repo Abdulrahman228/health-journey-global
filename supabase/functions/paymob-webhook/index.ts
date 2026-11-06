@@ -90,7 +90,11 @@ Deno.serve(async (req) => {
 
       // The HMAC proves the callback is ours; the AMOUNT must still match what
       // the appointment costs — never trust the callback's number blindly.
-      const expectedCents = appt.consultation_fee_cents ?? (appt.fee != null ? Math.round(Number(appt.fee) * 100) : 0);
+      // appointments.fee is authoritative (applyCoupon rewrites it; the legacy
+      // Stripe-only consultation_fee_cents is not) — mirror paymob-initiate.
+      const expectedCents = appt.fee != null
+        ? Math.round(Number(appt.fee) * 100)
+        : (appt.consultation_fee_cents ?? 0);
       if (currency !== "EGP" || !Number.isInteger(amountCents) || amountCents < expectedCents) {
         console.error("[paymob-webhook] amount mismatch", { appointmentId, amountCents, expectedCents, currency });
         return new Response("amount mismatch", { status: 200 });
@@ -118,10 +122,20 @@ Deno.serve(async (req) => {
         return new Response("no payer user", { status: 200 });
       }
 
-      // Idempotent payment row: unique (provider, provider_payment_id).
-      const { error: payErr } = await admin.from("payments").upsert(
-        {
+      // Idempotent payment row. The unique index on (provider, provider_payment_id)
+      // is PARTIAL (WHERE provider_payment_id IS NOT NULL), so PostgREST
+      // `upsert(onConflict)` cannot target it (42P10) — check, then insert, and
+      // treat a concurrent duplicate (23505) as already recorded.
+      const { data: existingPay } = await admin
+        .from("payments")
+        .select("id")
+        .eq("provider", "paymob")
+        .eq("provider_payment_id", txnId)
+        .maybeSingle();
+      if (!existingPay) {
+        const { error: payErr } = await admin.from("payments").insert({
           user_id: payerUserId,
+          appointment_id: appointmentId,
           invoice_id: appt.invoice_id ?? null,
           provider: "paymob",
           provider_payment_id: txnId,
@@ -135,10 +149,11 @@ Deno.serve(async (req) => {
             order: obj.order?.id, source: obj.source_data?.type, sub_type: obj.source_data?.sub_type,
             integration_id: obj.integration_id, payer: payerKind,
           },
-        },
-        { onConflict: "provider,provider_payment_id", ignoreDuplicates: true },
-      );
-      if (payErr) return new Response(`db error: ${payErr.message}`, { status: 500 });
+        });
+        if (payErr && payErr.code !== "23505") {
+          return new Response(`db error: ${payErr.message}`, { status: 500 });
+        }
+      }
 
       if (appt.payment_status !== "paid") {
         const update: Record<string, unknown> = {
@@ -151,6 +166,12 @@ Deno.serve(async (req) => {
         const { error: upErr } = await admin.from("appointments").update(update).eq("id", appointmentId);
         if (upErr) return new Response(`db error: ${upErr.message}`, { status: 500 });
       }
+      // Same as the Stripe webhook: consume the coupon only once paid
+      // (idempotent; service_role-only RPC).
+      const { error: couponErr } = await admin.rpc("record_coupon_redemption", {
+        p_appointment_id: appointmentId,
+      });
+      if (couponErr) console.warn("[paymob-webhook] record_coupon_redemption failed", couponErr.message);
       return new Response("ok", { status: 200 });
     }
 

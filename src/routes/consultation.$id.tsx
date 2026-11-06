@@ -30,7 +30,7 @@ interface LiveKitCreds {
 function ConsultationPage() {
   const { id } = Route.useParams();
   const { t } = useLanguage();
-  const { user, profile, role: userRole, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
 
@@ -47,7 +47,7 @@ function ConsultationPage() {
         .from("appointments")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -55,9 +55,12 @@ function ConsultationPage() {
 
   // Doctors: appointments store doctor_details.id, NOT profile.id — so resolve
   // the doctor's doctor_details.id before matching them to appt.doctor_id.
-  const { data: doctorDetailsId } = useQuery({
+  // Resolved for EVERY signed-in profile (null for non-doctors): useAuth
+  // reports a doctor+admin account as role "admin", which used to lock the
+  // doctor out of their own consultation.
+  const { data: doctorDetailsId, isLoading: resolvingDoctor } = useQuery({
     queryKey: ["my-doctor-details-id", profile?.id],
-    enabled: !!profile?.id && userRole === "doctor",
+    enabled: !!profile?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("doctor_details")
@@ -99,7 +102,6 @@ function ConsultationPage() {
 
   // Wait for the doctor_details.id to resolve before deciding authorization,
   // otherwise a doctor briefly sees the "not authorized" screen.
-  const resolvingDoctor = userRole === "doctor" && doctorDetailsId === undefined;
   if (authLoading || isLoading || resolvingDoctor) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">

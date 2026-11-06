@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Menu, X, Globe, Check, ChevronDown, User, LogOut, Calendar, LayoutDashboard, ShieldCheck, BadgeCheck, Receipt, FlaskConical } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLanguage, LANGUAGES, type Language } from "@/hooks/useLanguage";
-import { useAuth } from "@/hooks/useAuth";
+import { hasAdminRole, useAuth, type UserRole } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
 import { siteConfig } from "@/lib/seo";
 
@@ -31,7 +31,9 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const { language, setLanguage, t } = useLanguage();
-  const { user, role, isAuthenticated, signOut } = useAuth();
+  const { user, roles, profile, isAuthenticated, signOut } = useAuth();
+  // Phone-first accounts have no e-mail — show the name (or the number).
+  const displayName = profile?.full_name || user?.email || user?.phone || t("My account", "حسابي");
 
   const links = (navLinks as Record<string, typeof navLinks.en>)[language] ?? navLinks.en;
   const currentLang = LANGUAGES.find((l) => l.code === language) ?? LANGUAGES[1];
@@ -83,7 +85,7 @@ export function Header() {
           {isAuthenticated ? (
             <>
               <NotificationBell />
-              <UserMenu user={user} role={role} signOut={signOut} t={t} />
+              <UserMenu displayName={displayName} roles={roles} signOut={signOut} t={t} />
             </>
           ) : (
             <>
@@ -157,10 +159,11 @@ export function Header() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                     <User className="h-4 w-4 text-primary" />
                   </div>
-                  <span className="text-sm font-medium text-foreground">
-                    {user?.email}
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {displayName}
                   </span>
                 </div>
+                <AccountLinks roles={roles} t={t} onNavigate={() => setMobileOpen(false)} />
                 <button
                   onClick={() => {
                     signOut();
@@ -259,13 +262,13 @@ function LanguageDropdown({
 }
 
 function UserMenu({
-  user,
-  role,
+  displayName,
+  roles,
   signOut,
   t,
 }: {
-  user: { email?: string } | null;
-  role: "super_admin" | "admin" | "doctor" | "patient" | "pharmacy" | "lab" | null;
+  displayName: string;
+  roles: UserRole[];
   signOut: () => Promise<void>;
   t: (en: string, ar: string) => string;
 }) {
@@ -289,103 +292,12 @@ function UserMenu({
         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
           <User className="h-3.5 w-3.5 text-primary" />
         </div>
-        <span className="max-w-[120px] truncate">{user?.email}</span>
+        <span className="max-w-[120px] truncate">{displayName}</span>
         <ChevronDown className="h-3.5 w-3.5 opacity-60" />
       </button>
       {open && (
         <div className="absolute end-0 mt-2 w-48 rounded-xl border border-border bg-popover p-1 shadow-lg z-50">
-          {role === "doctor" && (
-            <>
-              <Link
-                to="/dashboard"
-                onClick={() => setOpen(false)}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                {t("Dashboard", "لوحة التحكم")}
-              </Link>
-              <Link
-                to="/doctor/verification"
-                onClick={() => setOpen(false)}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-              >
-                <BadgeCheck className="h-4 w-4" />
-                {t("Verification", "التوثيق")}
-              </Link>
-              <Link
-                to="/doctor/lab-results"
-                onClick={() => setOpen(false)}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-              >
-                <FlaskConical className="h-4 w-4" />
-                {t("Shared results", "النتائج المُشاركة")}
-              </Link>
-            </>
-          )}
-          {role === "lab" && (
-            <Link
-              to="/lab/dashboard"
-              onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-            >
-              <FlaskConical className="h-4 w-4" />
-              {t("Lab Dashboard", "لوحة المعمل")}
-            </Link>
-          )}
-          {(role === "admin" || role === "super_admin") && (
-            <Link
-              to="/admin"
-              onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              {t("Admin", "لوحة الأدمن")}
-            </Link>
-          )}
-          {role === "pharmacy" && (
-            <Link
-              to="/pharmacy/dashboard"
-              onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              {t("Pharmacy Dashboard", "لوحة الصيدلية")}
-            </Link>
-          )}
-          <Link
-            to="/profile"
-            onClick={() => setOpen(false)}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-          >
-            <User className="h-4 w-4" />
-            {t("Profile", "الملف الشخصي")}
-          </Link>
-          <Link
-            to="/appointments"
-            onClick={() => setOpen(false)}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-          >
-            <Calendar className="h-4 w-4" />
-            {t("My Appointments", "مواعيدي")}
-          </Link>
-          {(role === "patient" || role === null) && (
-            <Link
-              to="/lab-orders"
-              onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-            >
-              <FlaskConical className="h-4 w-4" />
-              {t("My tests & imaging", "تحاليلي وأشعتي")}
-            </Link>
-          )}
-          <Link
-            to="/billing"
-            onClick={() => setOpen(false)}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
-          >
-            <Receipt className="h-4 w-4" />
-            {t("Billing", "الفواتير")}
-          </Link>
+          <AccountLinks roles={roles} t={t} onNavigate={() => setOpen(false)} />
           <button
             onClick={() => {
               signOut();
@@ -399,5 +311,82 @@ function UserMenu({
         </div>
       )}
     </div>
+  );
+}
+
+const menuLinkClass =
+  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent";
+
+/**
+ * Account links for EVERY role the user holds (a doctor who is also an admin
+ * sees both the dashboard and the admin panel). Shared by the desktop
+ * dropdown and the mobile menu (which used to have no account links at all).
+ */
+function AccountLinks({
+  roles,
+  t,
+  onNavigate,
+}: {
+  roles: UserRole[];
+  t: (en: string, ar: string) => string;
+  onNavigate: () => void;
+}) {
+  const isDoctor = roles.includes("doctor");
+  const isPatientSide = roles.length === 0 || roles.includes("patient");
+  return (
+    <>
+      {isDoctor && (
+        <>
+          <Link to="/dashboard" onClick={onNavigate} className={menuLinkClass}>
+            <LayoutDashboard className="h-4 w-4" />
+            {t("Dashboard", "لوحة التحكم")}
+          </Link>
+          <Link to="/doctor/verification" onClick={onNavigate} className={menuLinkClass}>
+            <BadgeCheck className="h-4 w-4" />
+            {t("Verification", "التوثيق")}
+          </Link>
+          <Link to="/doctor/lab-results" onClick={onNavigate} className={menuLinkClass}>
+            <FlaskConical className="h-4 w-4" />
+            {t("Shared results", "النتائج المُشاركة")}
+          </Link>
+        </>
+      )}
+      {roles.includes("lab") && (
+        <Link to="/lab/dashboard" onClick={onNavigate} className={menuLinkClass}>
+          <FlaskConical className="h-4 w-4" />
+          {t("Lab Dashboard", "لوحة المعمل")}
+        </Link>
+      )}
+      {hasAdminRole(roles) && (
+        <Link to="/admin" onClick={onNavigate} className={menuLinkClass}>
+          <ShieldCheck className="h-4 w-4" />
+          {t("Admin", "لوحة الأدمن")}
+        </Link>
+      )}
+      {roles.includes("pharmacy") && (
+        <Link to="/pharmacy/dashboard" onClick={onNavigate} className={menuLinkClass}>
+          <LayoutDashboard className="h-4 w-4" />
+          {t("Pharmacy Dashboard", "لوحة الصيدلية")}
+        </Link>
+      )}
+      <Link to="/profile" onClick={onNavigate} className={menuLinkClass}>
+        <User className="h-4 w-4" />
+        {t("Profile", "الملف الشخصي")}
+      </Link>
+      <Link to="/appointments" onClick={onNavigate} className={menuLinkClass}>
+        <Calendar className="h-4 w-4" />
+        {t("My Appointments", "مواعيدي")}
+      </Link>
+      {isPatientSide && (
+        <Link to="/lab-orders" onClick={onNavigate} className={menuLinkClass}>
+          <FlaskConical className="h-4 w-4" />
+          {t("My tests & imaging", "تحاليلي وأشعتي")}
+        </Link>
+      )}
+      <Link to="/billing" onClick={onNavigate} className={menuLinkClass}>
+        <Receipt className="h-4 w-4" />
+        {t("Billing", "الفواتير")}
+      </Link>
+    </>
   );
 }

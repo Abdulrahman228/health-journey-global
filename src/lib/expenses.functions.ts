@@ -27,6 +27,13 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
+/** doctor_expenses.category is free text (mobile writes its own labels) → bucket unknown ones as "other". */
+function toCategory(raw: string | null | undefined): ExpenseCategory {
+  return EXPENSE_CATEGORIES.find((c) => c === raw) ?? "other";
+}
+
+const NOT_A_DOCTOR = "لم يتم العثور على ملف الطبيب لهذا الحساب";
+
 export interface DoctorExpense {
   id: string;
   expenseDate: string; // YYYY-MM-DD
@@ -112,21 +119,13 @@ export const listMyExpenses = createServerFn({ method: "GET" })
       q = q.gte("expense_date", from).lt("expense_date", to);
     }
 
-    const { data: rows } = await q;
-    return ((rows ?? []) as Array<{
-      id: string;
-      expense_date: string;
-      category: string;
-      amount: number;
-      currency: string;
-      vendor: string | null;
-      description: string | null;
-      receipt_url: string | null;
-      created_at: string;
-    }>).map((r) => ({
+    const { data: rows, error } = await q;
+    if (error) throw new Error("تعذّر تحميل المصاريف: " + error.message);
+    return (rows ?? []).map((r) => ({
       id: r.id,
-      expenseDate: r.expense_date,
-      category: r.category as ExpenseCategory,
+      // expense_date is mirrored from spent_at by trg_sync_doctor_expense_cols.
+      expenseDate: r.expense_date ?? "",
+      category: toCategory(r.category),
       amount: Number(r.amount),
       currency: r.currency,
       vendor: r.vendor,
@@ -158,14 +157,18 @@ export const addMyExpense = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
-    if (!ddId) throw new Error("Doctor profile not found");
+    if (!ddId) throw new Error(NOT_A_DOCTOR);
     const ok = await requireTier(ddId, "premium");
     if (!ok) throw new Error("PREMIUM_REQUIRED");
 
     const { data: row, error } = await supabaseAdmin
       .from("doctor_expenses")
       .insert({
+        // doctor_id / spent_at are the NOT NULL columns (mobile names);
+        // trg_sync_doctor_expense_cols mirrors them into the web names.
+        doctor_id: ddId,
         doctor_details_id: ddId,
+        spent_at: data.expenseDate,
         expense_date: data.expenseDate,
         category: data.category,
         amount: data.amount,
@@ -178,8 +181,8 @@ export const addMyExpense = createServerFn({ method: "POST" })
       .select("id")
       .single();
 
-    if (error) throw new Error(error.message);
-    return { id: (row as { id: string }).id };
+    if (error) throw new Error("تعذّر حفظ المصروف: " + error.message);
+    return { id: row.id };
   });
 
 // ---------------------------------------------------------------------------
@@ -193,7 +196,7 @@ export const deleteMyExpense = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertSelf(context.userId, data.userId);
     const ddId = await getDoctorDetailsIdForUser(data.userId);
-    if (!ddId) throw new Error("Doctor profile not found");
+    if (!ddId) throw new Error(NOT_A_DOCTOR);
 
     const { error } = await supabaseAdmin
       .from("doctor_expenses")
@@ -201,7 +204,7 @@ export const deleteMyExpense = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .eq("doctor_details_id", ddId);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر حذف المصروف: " + error.message);
     return { ok: true };
   });
 
@@ -226,21 +229,14 @@ export const getMyMonthlyPnL = createServerFn({ method: "GET" })
     const ok = await requireTier(ddId, "premium");
     if (!ok) return null;
 
-    const { data: pnlRow } = await supabaseAdmin.rpc("doctor_monthly_pnl", {
+    const { data: pnlRow, error: pnlErr } = await supabaseAdmin.rpc("doctor_monthly_pnl", {
       _doctor_details_id: ddId,
       _year: data.year,
       _month: data.month,
     });
+    if (pnlErr) throw new Error("تعذّر حساب تقرير الأرباح والخسائر: " + pnlErr.message);
 
-    const r = ((pnlRow as Array<{
-      gross_revenue: number;
-      platform_fees: number;
-      net_revenue: number;
-      total_expenses: number;
-      bookings_count: number;
-      net_profit: number;
-      currency: string;
-    }> | null) ?? [])[0];
+    const r = (pnlRow ?? [])[0];
 
     const grossRevenue = Number(r?.gross_revenue ?? 0);
     const platformFees = Number(r?.platform_fees ?? 0);
@@ -254,19 +250,22 @@ export const getMyMonthlyPnL = createServerFn({ method: "GET" })
     const from = `${data.year}-${String(data.month).padStart(2, "0")}-01`;
     const next = new Date(data.year, data.month, 1);
     const to = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
-    const { data: expRows } = await supabaseAdmin
+    const { data: expRows, error: expErr } = await supabaseAdmin
       .from("doctor_expenses")
       .select("category, amount, expense_date, vendor, description")
       .eq("doctor_details_id", ddId)
       .gte("expense_date", from)
       .lt("expense_date", to)
       .order("expense_date", { ascending: true });
+    if (expErr) throw new Error("تعذّر تحميل المصاريف: " + expErr.message);
 
     const byCat = {} as Record<ExpenseCategory, number>;
     for (const c of EXPENSE_CATEGORIES) byCat[c] = 0;
-    for (const e of (expRows ?? []) as Array<{ category: string; amount: number }>) {
-      const cat = e.category as ExpenseCategory;
-      byCat[cat] = (byCat[cat] ?? 0) + Number(e.amount);
+    for (const e of expRows ?? []) {
+      // Unknown (mobile free-text) categories go to "other" so the CSV
+      // breakdown always adds up to the total.
+      const cat = toCategory(e.category);
+      byCat[cat] += Number(e.amount);
     }
 
     // Build CSV (UTF-8 with BOM so Excel opens Arabic correctly).

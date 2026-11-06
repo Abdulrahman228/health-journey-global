@@ -38,22 +38,8 @@ export const Route = createFileRoute("/doctor/sponsorship")({
   component: SponsorshipPage,
 });
 
-interface SlotRow {
-  id: string;
-  status: string;
-  monthly_budget_cents: number;
-  daily_cap_cents: number | null;
-  cpc_bid_cents: number;
-  spent_total_cents: number;
-  spent_today_cents: number;
-  starts_at: string;
-  ends_at: string | null;
-  governorate_id: string | null;
-  city_id: string | null;
-  specialty: string | null;
-  governorate: { name_ar: string; name_en: string } | null;
-  city: { name_ar: string; name_en: string } | null;
-}
+// Row shape straight from the server fn (sponsored_slots + regions embeds).
+type SlotRow = Awaited<ReturnType<typeof listMySlots>>["slots"][number];
 
 interface Stats {
   impressions: number;
@@ -96,18 +82,31 @@ function SponsorshipPage() {
   });
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [busySlotId, setBusySlotId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const r = await list();
       setTier(r.tier);
-      setSlots(r.slots as unknown as SlotRow[]);
+      setSlots(r.slots);
       setStats(r.stats);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(e instanceof Error && e.message ? e.message : "تعذّر تحميل الحملات");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const changeStatus = async (slotId: string, status: "active" | "paused" | "cancelled") => {
+    setBusySlotId(slotId);
+    try {
+      await updateStatus({ data: { slotId, status } });
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "تعذّر تحديث حالة الحملة");
+    } finally {
+      setBusySlotId(null);
     }
   };
 
@@ -117,11 +116,15 @@ function SponsorshipPage() {
       navigate({ to: "/login" });
       return;
     }
-    if (role !== "doctor") return;
+    if (role !== "doctor") {
+      // Not a doctor → stop the spinner so the "doctors only" notice renders.
+      setLoading(false);
+      return;
+    }
     load();
   }, [authLoading, user, role, navigate]);
 
-  if (authLoading || (loading && tier === null)) {
+  if (authLoading || (loading && tier === null && role === "doctor")) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" aria-label="جاري التحميل" />
@@ -233,11 +236,9 @@ function SponsorshipPage() {
                   {s.status === "active" && (
                     <button
                       type="button"
-                      onClick={async () => {
-                        await updateStatus({ data: { slotId: s.id, status: "paused" } });
-                        await load();
-                      }}
-                      className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      disabled={busySlotId === s.id}
+                      onClick={() => changeStatus(s.id, "paused")}
+                      className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Pause className="h-3.5 w-3.5" aria-hidden="true" /> إيقاف
                     </button>
@@ -245,11 +246,9 @@ function SponsorshipPage() {
                   {s.status === "paused" && (
                     <button
                       type="button"
-                      onClick={async () => {
-                        await updateStatus({ data: { slotId: s.id, status: "active" } });
-                        await load();
-                      }}
-                      className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      disabled={busySlotId === s.id}
+                      onClick={() => changeStatus(s.id, "active")}
+                      className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Play className="h-3.5 w-3.5" aria-hidden="true" /> تشغيل
                     </button>
@@ -257,12 +256,12 @@ function SponsorshipPage() {
                   {s.status !== "cancelled" && (
                     <button
                       type="button"
-                      onClick={async () => {
+                      disabled={busySlotId === s.id}
+                      onClick={() => {
                         if (!confirm("إلغاء الحملة؟")) return;
-                        await updateStatus({ data: { slotId: s.id, status: "cancelled" } });
-                        await load();
+                        void changeStatus(s.id, "cancelled");
                       }}
-                      className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-background px-2.5 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+                      className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-background px-2.5 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
                     >
                       <X className="h-3.5 w-3.5" aria-hidden="true" /> إلغاء
                     </button>
@@ -407,7 +406,7 @@ function SlotForm({
                 });
                 onSaved();
               } catch (e) {
-                toast.error((e as Error).message);
+                toast.error(e instanceof Error && e.message ? e.message : "تعذّر حفظ الحملة");
               } finally {
                 setSaving(false);
               }

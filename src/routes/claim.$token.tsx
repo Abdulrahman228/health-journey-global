@@ -101,7 +101,7 @@ function ClaimPage() {
     const { error: rpcErr } = await supabase.rpc("claim_managed_profile", { p_token: token });
     setClaiming(false);
     if (rpcErr) {
-      setError(ERROR_AR[rpcErr.message] ?? rpcErr.message);
+      setError(ERROR_AR[rpcErr.message] ?? "تعذّر استلام الملف، حاول مرة أخرى.");
       return;
     }
     setDone(true);

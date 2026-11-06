@@ -75,7 +75,7 @@ function MyQueuePage() {
   // The patient's own appointment
   const { data: appt, refetch: refetchAppt, isLoading } = useQuery({
     queryKey: ["my-appt", appointmentId],
-    queryFn: async (): Promise<(Appointment & { clinic?: { name: string; address: string | null; city: string | null; phone: string | null } | null; doctor_details?: { specialty: string | null; profiles?: { full_name: string | null } | null } | null }) | null> => {
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("appointments")
         .select(`
@@ -91,7 +91,7 @@ function MyQueuePage() {
         .eq("id", appointmentId)
         .maybeSingle();
       if (error) throw error;
-      return data as any;
+      return data;
     },
   });
 
@@ -99,6 +99,9 @@ function MyQueuePage() {
   const { data: queue = [], refetch: refetchQueue } = useQuery({
     queryKey: ["queue", appt?.clinic_id, appt?.appointment_date],
     enabled: Boolean(appt?.clinic_id && appt?.appointment_date),
+    // Realtime only delivers rows this patient may SELECT (their own), so other
+    // patients' check-ins/calls would never refresh the queue — poll as well.
+    refetchInterval: 20_000,
     queryFn: async (): Promise<QueueRow[]> => {
       // Guard instead of forced unwraps (`appt!.clinic_id!`). The clinic queue is
       // keyed by clinic + day, so appointment_date is the correct key here.
@@ -141,12 +144,15 @@ function MyQueuePage() {
   }, [appt?.clinic_id, appt?.appointment_date, refetchAppt, refetchQueue]);
 
   // === Cancel my booking ===
+  const [cancelling, setCancelling] = useState(false);
   const handleCancel = async () => {
     if (!confirm("هل أنت متأكد من إلغاء الحجز؟")) return;
+    setCancelling(true);
     const { error } = await supabase.rpc("cancel_appointment", {
       p_appointment_id: appointmentId,
     });
-    if (error) toast.error(error.message);
+    setCancelling(false);
+    if (error) toast.error(error.message || "تعذّر إلغاء الحجز");
     else {
       toast.success("تم إلغاء الحجز");
       refetchAppt();
@@ -177,11 +183,15 @@ function MyQueuePage() {
     // (RLS will already filter; this is just UX)
   }
 
-  // Derive live position
+  // Derive live position. Slot bookings start as 'confirmed' with no
+  // queue_number, so v_clinic_queue doesn't list them until the clinic checks
+  // the patient in — until then everyone already in the active queue is ahead
+  // (previously this showed 0 = "your turn now").
+  const isActiveQ = (q: QueueRow) =>
+    q.status === "waiting" || q.status === "called" || q.status === "in_progress";
   const myIdx = queue.findIndex((q) => q.appointment_id === appt.id);
-  const ahead = queue
-    .slice(0, myIdx >= 0 ? myIdx : 0)
-    .filter((q) => q.status === "waiting" || q.status === "called" || q.status === "in_progress").length;
+  const notCheckedIn = myIdx < 0;
+  const ahead = (notCheckedIn ? queue : queue.slice(0, myIdx)).filter(isActiveQ).length;
   const currentlyServing = queue.find((q) => q.status === "in_progress" || q.status === "called");
 
   // Wait estimate: use estimated_start_at if it's in the future, else 0
@@ -264,6 +274,11 @@ function MyQueuePage() {
                 رقمك في الطابور:{" "}
                 <span className="font-bold text-foreground tabular-nums">#{appt.queue_number ?? "—"}</span>
               </div>
+              {notCheckedIn && (
+                <p className="mt-1 text-center text-xs text-muted-foreground">
+                  سيظهر ترتيبك الفعلي بعد تسجيل وصولك في العيادة
+                </p>
+              )}
             </div>
           )}
 
@@ -352,9 +367,10 @@ function MyQueuePage() {
         {!isTerminal && (
           <button
             onClick={handleCancel}
-            className="w-full py-3 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium"
+            disabled={cancelling}
+            className="w-full py-3 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium disabled:opacity-50"
           >
-            إلغاء الحجز
+            {cancelling ? "جارٍ الإلغاء…" : "إلغاء الحجز"}
           </button>
         )}
       </div>

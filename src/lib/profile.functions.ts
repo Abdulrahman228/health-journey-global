@@ -10,7 +10,21 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { generateShortId } from "./slug";
-import type { MedicalCard } from "./medical-card";
+import { MEDICAL_FIELDS, type MedicalCard } from "./medical-card";
+
+/**
+ * Keep only the medical-card fields the owner marked public. The loader result
+ * is serialized into the page HTML, so private fields must never leave the server.
+ */
+function publicMedicalCard(card: MedicalCard | null): MedicalCard {
+  const out: MedicalCard = {};
+  if (!card) return out;
+  for (const key of MEDICAL_FIELDS) {
+    const field = card[key];
+    if (field?.public) out[key] = field;
+  }
+  return out;
+}
 
 export type ProfileVisibility = "public" | "unlisted" | "private";
 
@@ -34,6 +48,8 @@ export interface PublicProfileBase {
     id: string;
     specialty: string | null;
     consultationFee: number | null;
+    /** Separate online-consultation fee (null → BookingCard falls back to consultationFee). */
+    onlineConsultationFee: number | null;
     currency: string | null;
     rating: number | null;
     reviewCount: number;
@@ -61,13 +77,22 @@ export const loadProfileBySlug = createServerFn({ method: "GET" })
     if (error || !p) return null;
     if (p.profile_visibility === "private") return null;
 
-    // Determine role.
-    const { data: r } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", p.user_id)
-      .maybeSingle();
-    const role = (r?.role ?? null) as PublicProfileBase["role"];
+    // Determine role. A user can hold several roles (UNIQUE(user_id, role)), so
+    // .maybeSingle() would error for e.g. doctor+admin; pick by priority instead.
+    // Managed (shell) profiles have no user_id → no role.
+    const { data: roleRows } = p.user_id
+      ? await supabaseAdmin.from("user_roles").select("role").eq("user_id", p.user_id)
+      : { data: [] };
+    const roleSet = new Set((roleRows ?? []).map((x) => x.role));
+    const role: PublicProfileBase["role"] = roleSet.has("doctor")
+      ? "doctor"
+      : roleSet.has("pharmacy")
+        ? "pharmacy"
+        : roleSet.has("patient")
+          ? "patient"
+          : roleSet.has("admin") || roleSet.has("super_admin")
+            ? "admin"
+            : null;
 
     // If doctor, load doctor extras (used by /d/{slug}).
     let doctor: PublicProfileBase["doctor"] = null;
@@ -75,7 +100,7 @@ export const loadProfileBySlug = createServerFn({ method: "GET" })
       const { data: d } = await supabaseAdmin
         .from("doctor_details")
         .select(
-          "id, specialty, consultation_fee, currency, rating, years_experience, is_verified, telemedicine_enabled",
+          "id, specialty, consultation_fee, online_consultation_fee, currency, rating, years_experience, is_verified, telemedicine_enabled",
         )
         .eq("profile_id", p.id)
         .maybeSingle();
@@ -96,6 +121,7 @@ export const loadProfileBySlug = createServerFn({ method: "GET" })
           id: d.id,
           specialty: d.specialty,
           consultationFee: d.consultation_fee,
+          onlineConsultationFee: d.online_consultation_fee,
           currency: d.currency,
           rating: typeof d.rating === "number" ? d.rating : null,
           reviewCount: reviewCount ?? 0,
@@ -120,7 +146,8 @@ export const loadProfileBySlug = createServerFn({ method: "GET" })
       role,
       socialLinks: (p.social_links as Record<string, string>) ?? {},
       viewsCount: p.profile_views_count ?? 0,
-      medicalCard: (p as any).medical_card ?? {},
+      // Json → domain type; private fields are stripped server-side.
+      medicalCard: publicMedicalCard(p.medical_card as MedicalCard | null),
       doctor,
     };
   });
@@ -159,15 +186,21 @@ export const bumpProfileView = createServerFn({ method: "POST" })
 export const createShortLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown): { profileId: string; targetPath: string; label?: string } => {
+    const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    // Same shape as the DB check target_path_format_chk: /d/{slug} or /u/{slug}.
     if (
-      !input ||
-      typeof input !== "object" ||
-      typeof (input as any).profileId !== "string" ||
-      typeof (input as any).targetPath !== "string"
+      typeof o.profileId !== "string" ||
+      typeof o.targetPath !== "string" ||
+      !/^\/[a-z]\/[a-z0-9-]+$/.test(o.targetPath) ||
+      (o.label !== undefined && typeof o.label !== "string")
     ) {
-      throw new Error("invalid input");
+      throw new Error("رابط غير صالح");
     }
-    return input as { profileId: string; targetPath: string; label?: string };
+    return {
+      profileId: o.profileId,
+      targetPath: o.targetPath,
+      label: typeof o.label === "string" ? o.label.slice(0, 80) : undefined,
+    };
   })
   .handler(async ({ data, context }): Promise<{ shortId: string }> => {
     // Authorize: caller must own this profile (or be admin).
@@ -176,15 +209,29 @@ export const createShortLink = createServerFn({ method: "POST" })
       .select("user_id")
       .eq("id", data.profileId)
       .maybeSingle();
-    if (!prof) throw new Error("profile not found");
+    if (!prof) throw new Error("الملف غير موجود");
     if (prof.user_id !== context.userId) {
-      const { data: adminRow } = await supabaseAdmin
+      // A user can hold both admin and super_admin → read rows, not .maybeSingle().
+      const { data: adminRows } = await supabaseAdmin
         .from("user_roles")
         .select("role")
         .eq("user_id", context.userId)
-        .eq("role", "admin")
-        .maybeSingle();
-      if (!adminRow) throw new Error("forbidden");
+        .in("role", ["admin", "super_admin"])
+        .limit(1);
+      if (!adminRows || adminRows.length === 0) throw new Error("غير مسموح");
+    }
+    // The share dialog asks for an (unlabeled) link every time it opens — reuse
+    // the existing one instead of inserting a new row per open.
+    if (!data.label) {
+      const { data: existing } = await supabaseAdmin
+        .from("profile_short_links")
+        .select("short_id")
+        .eq("profile_id", data.profileId)
+        .eq("target_path", data.targetPath)
+        .is("label", null)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (existing && existing.length > 0) return { shortId: existing[0].short_id };
     }
     // Try up to 5 times in case of collision.
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -194,9 +241,10 @@ export const createShortLink = createServerFn({ method: "POST" })
         profile_id: data.profileId,
         target_path: data.targetPath,
         label: data.label ?? null,
+        created_by: context.userId,
       });
       if (!error) return { shortId };
       if (error.code !== "23505") throw new Error(error.message);
     }
-    throw new Error("could not allocate short id");
+    throw new Error("تعذّر إنشاء رابط قصير، حاول مرة أخرى");
   });

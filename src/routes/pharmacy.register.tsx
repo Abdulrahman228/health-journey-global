@@ -78,7 +78,14 @@ function PharmacyRegisterPage() {
           { user_id: user.id, role: "pharmacy" },
           { onConflict: "user_id,role", ignoreDuplicates: true },
         );
-      if (roleErr) throw new Error(roleErr.message);
+      if (roleErr) {
+        throw new Error(
+          t(
+            "Pharmacy created, but the pharmacy role could not be activated.",
+            "تم إنشاء السلسلة لكن تعذّر تفعيل صلاحية الصيدلية.",
+          ),
+        );
+      }
 
       toast.success(
         t("Submitted! We'll review your chain shortly.", "تم الإرسال! سنراجع سلسلتك قريباً."),
@@ -86,7 +93,17 @@ function PharmacyRegisterPage() {
       navigate({ to: "/pharmacy/dashboard" });
       void chainId;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("Failed", "فشل"));
+      // pharmacy_chains.slug is UNIQUE → Postgres 23505; other DB errors are English.
+      const code = err && typeof err === "object" && "code" in err ? String(err.code) : "";
+      toast.error(
+        code === "23505"
+          ? t("This slug is already taken", "هذا المعرّف مستخدم بالفعل، اختر معرّفًا آخر")
+          : code
+            ? t("Could not register the pharmacy", "تعذّر تسجيل الصيدلية، حاول مرة أخرى")
+            : err instanceof Error && err.message
+              ? err.message
+              : t("Failed", "فشل"),
+      );
     } finally {
       setSubmitting(false);
     }

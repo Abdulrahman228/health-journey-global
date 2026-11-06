@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { CreditCard, Loader2, Search, ShieldAlert, TrendingUp } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/subscriptions")({
   head: () => ({
@@ -26,8 +27,10 @@ type SubscriptionRow = {
   current_period_end: string | null;
   created_at: string;
   environment: string;
+  stripe_customer_id: string;
+  access_status: string | null;
   profile?: { full_name: string | null; city: string | null } | null;
-  plan?: { name_ar: string; price_cents: number; currency: string } | null;
+  plan?: { name_ar: string; price_cents: number; currency: string; interval: string } | null;
 };
 
 function AdminSubscriptionsPage() {
@@ -40,36 +43,48 @@ function AdminSubscriptionsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: subscriptions } = await supabase
+    const { data: subscriptions, error: subsErr } = await supabase
       .from("subscriptions")
       .select(
-        "id, user_id, plan_code, status, current_period_start, current_period_end, created_at, environment",
+        "id, user_id, plan_code, status, current_period_start, current_period_end, created_at, environment, stripe_customer_id, access_status",
       )
       .order("created_at", { ascending: false })
       .limit(200);
+    if (subsErr) {
+      toast.error("تعذّر تحميل الاشتراكات: " + subsErr.message);
+      setLoading(false);
+      return;
+    }
 
+    // subscriptions.user_id is the auth uid → match profiles.user_id.
     const userIds = Array.from(new Set((subscriptions ?? []).map((row) => row.user_id)));
     const planCodes = Array.from(
-      new Set((subscriptions ?? []).map((row) => row.plan_code).filter(Boolean)),
-    ) as string[];
+      new Set(
+        (subscriptions ?? []).flatMap((row) => (row.plan_code ? [row.plan_code] : [])),
+      ),
+    );
 
-    const [{ data: profiles }, { data: plans }] = await Promise.all([
-      userIds.length
-        ? supabase.from("profiles").select("user_id, full_name, city").in("user_id", userIds)
-        : Promise.resolve({ data: [] }),
-      planCodes.length
-        ? supabase
-            .from("subscription_plans")
-            .select("code, name_ar, price_cents, currency")
-            .in("code", planCodes)
-        : Promise.resolve({ data: [] }),
-    ]);
+    const [{ data: profiles, error: profErr }, { data: plans, error: plansErr }] =
+      await Promise.all([
+        userIds.length
+          ? supabase.from("profiles").select("user_id, full_name, city").in("user_id", userIds)
+          : Promise.resolve({ data: [], error: null }),
+        planCodes.length
+          ? supabase
+              .from("subscription_plans")
+              .select("code, name_ar, price_cents, currency, interval")
+              .in("code", planCodes)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+    if (profErr || plansErr) {
+      toast.error("تعذّر تحميل بعض التفاصيل: " + (profErr ?? plansErr)?.message);
+    }
 
     const profileByUserId = new Map((profiles ?? []).map((profile) => [profile.user_id, profile]));
     const planByCode = new Map((plans ?? []).map((plan) => [plan.code, plan]));
 
     setRows(
-      ((subscriptions ?? []) as SubscriptionRow[]).map((row) => ({
+      (subscriptions ?? []).map((row): SubscriptionRow => ({
         ...row,
         profile: profileByUserId.get(row.user_id) ?? null,
         plan: row.plan_code ? (planByCode.get(row.plan_code) ?? null) : null,
@@ -106,10 +121,21 @@ function AdminSubscriptionsPage() {
     );
   }, [rows, search]);
 
-  const activeRows = rows.filter((row) => row.status === "active" || row.status === "trialing");
+  const nowMs = Date.now();
+  const activeRows = rows.filter(
+    (row) =>
+      (row.status === "active" || row.status === "trialing") &&
+      (!row.current_period_end || new Date(row.current_period_end).getTime() > nowMs),
+  );
+  // Revenue = paid subscriptions only: not the auto 30-day trial ('trial'),
+  // not admin comps ('comp'), not unverified/rejected manual receipts.
+  // Yearly plans are normalized to a monthly figure.
   const monthlyRevenue = activeRows.reduce((sum, row) => {
+    if (row.status !== "active") return sum;
+    if (row.stripe_customer_id === "trial" || row.stripe_customer_id === "comp") return sum;
+    if (row.access_status === "pending" || row.access_status === "rejected") return sum;
     if (!row.plan || row.plan.currency !== "EGP") return sum;
-    return sum + row.plan.price_cents / 100;
+    return sum + row.plan.price_cents / 100 / (row.plan.interval === "year" ? 12 : 1);
   }, 0);
 
   if (authLoading || roleLoading || (isAdmin && loading)) {

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export interface PharmacyChain {
   id: string;
@@ -26,7 +27,7 @@ export interface PharmacyBranch {
   lat: number | null;
   lng: number | null;
   phone: string | null;
-  working_hours: Record<string, unknown> | null;
+  working_hours: Json | null;
   is_active: boolean;
 }
 
@@ -38,7 +39,7 @@ export interface DrugListing {
   dosage: string | null;
   alternative_name: string | null;
   price: number | null;
-  currency: string;
+  currency: string | null;
   stock_status: string;
   notes: string | null;
   linked_post_id: string | null;
@@ -58,7 +59,7 @@ export async function listVerifiedChains(): Promise<PharmacyChain[]> {
     .eq("is_verified", true)
     .order("name");
   if (error) throw error;
-  return (data ?? []) as PharmacyChain[];
+  return data ?? [];
 }
 
 export async function getMyChain(userId: string): Promise<PharmacyChain | null> {
@@ -66,9 +67,11 @@ export async function getMyChain(userId: string): Promise<PharmacyChain | null> 
     .from("pharmacy_chains")
     .select("*")
     .eq("owner_user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return (data as PharmacyChain) ?? null;
+  return data ?? null;
 }
 
 export async function createChain(input: {
@@ -108,7 +111,7 @@ export async function listBranches(chainId: string): Promise<PharmacyBranch[]> {
     .eq("chain_id", chainId)
     .order("name");
   if (error) throw error;
-  return (data ?? []) as unknown as PharmacyBranch[];
+  return data ?? [];
 }
 
 export async function createBranch(input: {
@@ -166,7 +169,7 @@ export async function listDrugListings(filters: ListListingsFilters = {}): Promi
 
   const { data, error } = await q;
   if (error) throw error;
-  let listings = (data ?? []) as unknown as DrugListing[];
+  let listings: DrugListing[] = data ?? [];
 
   // Filter out expired
   const now = new Date();
@@ -193,6 +196,15 @@ export async function listDrugListings(filters: ListListingsFilters = {}): Promi
   // Only show listings for verified chains
   listings = listings.filter((l) => chainMap.get(l.chain_id)?.is_verified);
 
+  // City filter (was accepted but ignored): match the listing's branch city.
+  const cityQ = filters.city?.trim().toLowerCase();
+  if (cityQ) {
+    listings = listings.filter((l) => {
+      const b = l.branch_id ? branchMap.get(l.branch_id) : undefined;
+      return (b?.city ?? "").toLowerCase().includes(cityQ);
+    });
+  }
+
   return listings.map((l) => ({
     ...l,
     chain: chainMap.get(l.chain_id),
@@ -207,7 +219,7 @@ export async function listMyListings(chainId: string): Promise<DrugListing[]> {
     .eq("chain_id", chainId)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  const listings = (data ?? []) as unknown as DrugListing[];
+  const listings: DrugListing[] = data ?? [];
 
   type BranchLite = Pick<PharmacyBranch, "id" | "name" | "city" | "address" | "phone" | "lat" | "lng">;
   const branchIds = Array.from(new Set(listings.map((l) => l.branch_id).filter((x): x is string => !!x)));
@@ -268,7 +280,7 @@ export async function uploadPharmacyLogo(file: File, userId: string): Promise<st
   const ext = file.name.split(".").pop() ?? "png";
   const path = `${userId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from("pharmacy-logos").upload(path, file, { upsert: true });
-  if (error) throw error;
+  if (error) throw new Error("تعذّر رفع الشعار، حاول مرة أخرى");
   const { data } = supabase.storage.from("pharmacy-logos").getPublicUrl(path);
   return data.publicUrl;
 }

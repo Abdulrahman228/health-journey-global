@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Clock, ArrowLeft, ArrowRight } from "lucide-react";
-import { listPublishedArticles, type ArticleListItem } from "@/lib/articles.functions";
+import { listPublishedArticles } from "@/lib/articles.functions";
 import { useLanguage } from "@/hooks/useLanguage";
 import { buildMeta, buildSeoLinks, canonicalUrl } from "@/lib/seo";
 import { breadcrumbSchema, itemListSchema, jsonLdString } from "@/lib/schema";
@@ -51,7 +51,7 @@ export const Route = createFileRoute("/articles/")({
 });
 
 function ArticlesIndexPage() {
-  const { articles } = Route.useLoaderData() as { articles: ArticleListItem[] };
+  const { articles } = Route.useLoaderData();
   const { isRTL } = useLanguage();
   const Arrow = isRTL ? ArrowLeft : ArrowRight;
 

@@ -30,7 +30,7 @@ export const handleEmergencyBooking = createServerFn({ method: "POST" })
       .eq("id", appointmentId)
       .maybeSingle();
     if (apptErr) throw new Error(apptErr.message);
-    if (!appt) throw new Error("Appointment not found");
+    if (!appt) throw new Error("الموعد غير موجود");
 
     // 2) Ownership: the caller must be the patient on this appointment.
     const { data: caller } = await supabaseAdmin
@@ -39,7 +39,7 @@ export const handleEmergencyBooking = createServerFn({ method: "POST" })
       .eq("user_id", context.userId)
       .maybeSingle();
     if (!caller || caller.id !== appt.patient_id) {
-      throw new Error("Forbidden: not your appointment");
+      throw new Error("غير مصرح: هذا ليس موعدك");
     }
 
     // 3) Flag the appointment.
@@ -61,23 +61,23 @@ export const handleEmergencyBooking = createServerFn({ method: "POST" })
         .select("user_id")
         .eq("id", dd.profile_id)
         .maybeSingle();
-      const doctorUserId = docProfile?.user_id ?? dd.profile_id;
+      // notifications.user_id is an auth uid (FK auth.users) — an unclaimed
+      // doctor profile has none, so there is nobody to alert.
+      const doctorUserId = docProfile?.user_id ?? null;
 
       // Guard: skip if an emergency_alert for THIS appointment already exists.
-      const { data: existing } = await supabaseAdmin
-        .from("notifications")
-        .select("id, metadata")
-        .eq("user_id", doctorUserId)
-        .eq("kind", "emergency_alert")
-        .order("created_at", { ascending: false })
-        .limit(100);
-      const alreadyAlerted = (existing ?? []).some(
-        (n) =>
-          (n.metadata as unknown as { appointment_id?: string } | null)?.appointment_id ===
-          appointmentId,
-      );
+      const { data: existing } = doctorUserId
+        ? await supabaseAdmin
+            .from("notifications")
+            .select("id")
+            .eq("user_id", doctorUserId)
+            .eq("kind", "emergency_alert")
+            .contains("metadata", { appointment_id: appointmentId })
+            .limit(1)
+        : { data: null };
+      const alreadyAlerted = (existing ?? []).length > 0;
 
-      if (!alreadyAlerted) {
+      if (doctorUserId && !alreadyAlerted) {
         await supabaseAdmin.from("notifications").insert({
           user_id: doctorUserId,
           kind: "emergency_alert",

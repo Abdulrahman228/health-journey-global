@@ -36,24 +36,14 @@ import { createShortLink } from "@/lib/profile.functions";
 
 type Visibility = "public" | "unlisted" | "private";
 
-interface PublicProfileFields {
-  id: string;
-  slug: string | null;
-  public_bio: string | null;
-  public_banner_url: string | null;
-  profile_visibility: Visibility;
-  profile_views_count: number;
-  full_name: string | null;
-  city: string | null;
+/** profiles.profile_visibility is CHECK-constrained text → narrow it for the Select. */
+function toVisibility(v: string | null | undefined): Visibility {
+  return v === "public" || v === "private" ? v : "unlisted";
 }
 
-interface ShortLinkRow {
-  short_id: string;
-  target_path: string;
-  label: string | null;
-  click_count: number;
-  last_clicked_at: string | null;
-  created_at: string;
+/** Supabase errors are plain objects (not Error instances) → readable text. */
+function errMessage(e: unknown): string {
+  return e && typeof e === "object" && "message" in e ? String(e.message) : "";
 }
 
 interface PublicPageManagerProps {
@@ -75,7 +65,7 @@ export function PublicPageManager({ profileId, role }: PublicPageManagerProps) {
   const { data: profile, isLoading } = useQuery({
     queryKey: ["public-profile", profileId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("profiles")
         .select(
           "id, slug, public_bio, public_banner_url, profile_visibility, profile_views_count, full_name, city",
@@ -83,7 +73,7 @@ export function PublicPageManager({ profileId, role }: PublicPageManagerProps) {
         .eq("id", profileId)
         .maybeSingle();
       if (error) throw error;
-      return data as PublicProfileFields | null;
+      return data;
     },
   });
 
@@ -91,13 +81,13 @@ export function PublicPageManager({ profileId, role }: PublicPageManagerProps) {
   const { data: links = [] } = useQuery({
     queryKey: ["short-links", profileId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("profile_short_links")
         .select("short_id, target_path, label, click_count, last_clicked_at, created_at")
         .eq("profile_id", profileId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as ShortLinkRow[];
+      return data ?? [];
     },
   });
 
@@ -114,7 +104,7 @@ export function PublicPageManager({ profileId, role }: PublicPageManagerProps) {
     setSlugInput(profile.slug ?? "");
     setBio(profile.public_bio ?? "");
     setBanner(profile.public_banner_url ?? "");
-    setVisibility(profile.profile_visibility ?? "unlisted");
+    setVisibility(toVisibility(profile.profile_visibility));
   }, [profile]);
 
   // ---- Save profile mutation -----------------------------------------------
@@ -129,7 +119,7 @@ export function PublicPageManager({ profileId, role }: PublicPageManagerProps) {
           ),
         );
       }
-      const { error } = await (supabase as any)
+      const { data: saved, error } = await supabase
         .from("profiles")
         .update({
           slug: candidate || null,
@@ -137,12 +127,17 @@ export function PublicPageManager({ profileId, role }: PublicPageManagerProps) {
           public_banner_url: banner.trim() || null,
           profile_visibility: visibility,
         })
-        .eq("id", profileId);
+        .eq("id", profileId)
+        .select("id");
       if (error) {
         if (error.code === "23505") {
           throw new Error(t("This slug is taken.", "هذا الرابط مستخدم بالفعل."));
         }
-        throw error;
+        throw new Error(t("Save failed: ", "تعذّر الحفظ: ") + error.message);
+      }
+      // RLS filters a non-owned row out silently (0 rows, no error).
+      if (!saved || saved.length === 0) {
+        throw new Error(t("Save failed.", "تعذّر الحفظ — لا تملك صلاحية تعديل هذه الصفحة."));
       }
     },
     onSuccess: () => {
@@ -163,15 +158,19 @@ export function PublicPageManager({ profileId, role }: PublicPageManagerProps) {
       return;
     }
     try {
-      const { data, error } = await (supabase as any).rpc("suggest_unique_slug", {
+      const { data, error } = await supabase.rpc("suggest_unique_slug", {
         p_base: base,
       });
       if (error) throw error;
-      setSlugInput(typeof data === "string" ? data : base);
+      setSlugInput(data || base);
       toast.success(t("Slug suggested", "تم اقتراح الرابط"));
-    } catch (e: any) {
+    } catch (e) {
       setSlugInput(base);
-      toast.warning(e?.message ?? t("Used local fallback", "تم استخدام رابط مؤقت"));
+      const msg = errMessage(e);
+      toast.warning(
+        t("Used local fallback", "تعذّر التحقق من توفّر الرابط — تم استخدام اقتراح مبدئي") +
+          (msg ? ` (${msg})` : ""),
+      );
     }
   };
 
@@ -196,11 +195,15 @@ export function PublicPageManager({ profileId, role }: PublicPageManagerProps) {
 
   const deleteLink = useMutation({
     mutationFn: async (shortId: string) => {
-      const { error } = await (supabase as any)
+      const { data: deleted, error } = await supabase
         .from("profile_short_links")
         .delete()
-        .eq("short_id", shortId);
-      if (error) throw error;
+        .eq("short_id", shortId)
+        .select("short_id");
+      if (error) throw new Error(t("Delete failed: ", "تعذّر الحذف: ") + error.message);
+      if (!deleted || deleted.length === 0) {
+        throw new Error(t("Delete failed.", "تعذّر حذف الرابط."));
+      }
     },
     onSuccess: () => {
       toast.success(t("Short link deleted", "تم حذف الرابط القصير"));

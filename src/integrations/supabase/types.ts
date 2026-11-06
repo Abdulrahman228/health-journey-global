@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_consultations: {
+        Row: {
+          created_at: string
+          doctor_profile_id: string | null
+          evidence: string | null
+          feedback: number | null
+          feedback_note: string | null
+          id: string
+          latency_ms: number | null
+          model: string | null
+          query_en: string | null
+          reference_ids: number[]
+          response: Json
+          specialty: string | null
+          symptoms: string[]
+        }
+        Insert: {
+          created_at?: string
+          doctor_profile_id?: string | null
+          evidence?: string | null
+          feedback?: number | null
+          feedback_note?: string | null
+          id?: string
+          latency_ms?: number | null
+          model?: string | null
+          query_en?: string | null
+          reference_ids?: number[]
+          response?: Json
+          specialty?: string | null
+          symptoms?: string[]
+        }
+        Update: {
+          created_at?: string
+          doctor_profile_id?: string | null
+          evidence?: string | null
+          feedback?: number | null
+          feedback_note?: string | null
+          id?: string
+          latency_ms?: number | null
+          model?: string | null
+          query_en?: string | null
+          reference_ids?: number[]
+          response?: Json
+          specialty?: string | null
+          symptoms?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_consultations_doctor_profile_id_fkey"
+            columns: ["doctor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointments: {
         Row: {
           appointment_date: string | null
@@ -2170,6 +2226,118 @@ export type Database = {
           },
         ]
       }
+      medical_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          content_chars: number | null
+          created_at: string
+          embedding: string | null
+          external_id: string
+          fts: unknown
+          id: number
+          language: string
+          section: string | null
+          source_id: string
+          specialties: string[]
+          title: string | null
+        }
+        Insert: {
+          chunk_index?: number
+          content: string
+          content_chars?: number | null
+          created_at?: string
+          embedding?: string | null
+          external_id?: string
+          fts?: unknown
+          id?: number
+          language?: string
+          section?: string | null
+          source_id: string
+          specialties?: string[]
+          title?: string | null
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          content_chars?: number | null
+          created_at?: string
+          embedding?: string | null
+          external_id?: string
+          fts?: unknown
+          id?: number
+          language?: string
+          section?: string | null
+          source_id?: string
+          specialties?: string[]
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_chunks_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "medical_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medical_ingest_jobs: {
+        Row: {
+          chunks: number
+          created_at: string
+          created_by: string | null
+          cursor: number
+          error: string | null
+          id: string
+          kind: string
+          params: Json
+          processed: number
+          source_id: string | null
+          status: string
+          total: number | null
+          updated_at: string
+        }
+        Insert: {
+          chunks?: number
+          created_at?: string
+          created_by?: string | null
+          cursor?: number
+          error?: string | null
+          id?: string
+          kind: string
+          params?: Json
+          processed?: number
+          source_id?: string | null
+          status?: string
+          total?: number | null
+          updated_at?: string
+        }
+        Update: {
+          chunks?: number
+          created_at?: string
+          created_by?: string | null
+          cursor?: number
+          error?: string | null
+          id?: string
+          kind?: string
+          params?: Json
+          processed?: number
+          source_id?: string | null
+          status?: string
+          total?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_ingest_jobs_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "medical_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medical_records: {
         Row: {
           appointment_id: string | null
@@ -2311,6 +2479,87 @@ export type Database = {
           },
         ]
       }
+      medical_sources: {
+        Row: {
+          chunk_count: number
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          kind: string
+          language: string
+          license: string
+          license_note: string | null
+          publisher: string | null
+          slug: string
+          specialties: string[]
+          storage_path: string | null
+          title: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          chunk_count?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          kind?: string
+          language?: string
+          license: string
+          license_note?: string | null
+          publisher?: string | null
+          slug: string
+          specialties?: string[]
+          storage_path?: string | null
+          title: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          chunk_count?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          kind?: string
+          language?: string
+          license?: string
+          license_note?: string | null
+          publisher?: string | null
+          slug?: string
+          specialties?: string[]
+          storage_path?: string | null
+          title?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
+      messaging_opt_outs: {
+        Row: {
+          channel: string
+          created_at: string
+          phone_e164: string
+          reason: string | null
+          source: string | null
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          phone_e164: string
+          reason?: string | null
+          source?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          phone_e164?: string
+          reason?: string | null
+          source?: string | null
+        }
+        Relationships: []
+      }
       missing_drugs: {
         Row: {
           city: string | null
@@ -2387,6 +2636,96 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      outbox_messages: {
+        Row: {
+          attempts: number
+          channel: string
+          claimed_at: string | null
+          consent_basis: string | null
+          created_at: string
+          dedupe_key: string | null
+          delivered_at: string | null
+          doctor_profile_id: string | null
+          error: string | null
+          id: string
+          locale: string
+          max_attempts: number
+          next_attempt_at: string
+          params: Json
+          patient_profile_id: string | null
+          provider: string | null
+          provider_message_id: string | null
+          provider_status: string | null
+          sent_at: string | null
+          status: string
+          template_key: string
+          to_phone: string
+        }
+        Insert: {
+          attempts?: number
+          channel?: string
+          claimed_at?: string | null
+          consent_basis?: string | null
+          created_at?: string
+          dedupe_key?: string | null
+          delivered_at?: string | null
+          doctor_profile_id?: string | null
+          error?: string | null
+          id?: string
+          locale?: string
+          max_attempts?: number
+          next_attempt_at?: string
+          params?: Json
+          patient_profile_id?: string | null
+          provider?: string | null
+          provider_message_id?: string | null
+          provider_status?: string | null
+          sent_at?: string | null
+          status?: string
+          template_key: string
+          to_phone: string
+        }
+        Update: {
+          attempts?: number
+          channel?: string
+          claimed_at?: string | null
+          consent_basis?: string | null
+          created_at?: string
+          dedupe_key?: string | null
+          delivered_at?: string | null
+          doctor_profile_id?: string | null
+          error?: string | null
+          id?: string
+          locale?: string
+          max_attempts?: number
+          next_attempt_at?: string
+          params?: Json
+          patient_profile_id?: string | null
+          provider?: string | null
+          provider_message_id?: string | null
+          provider_status?: string | null
+          sent_at?: string | null
+          status?: string
+          template_key?: string
+          to_phone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbox_messages_doctor_profile_id_fkey"
+            columns: ["doctor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outbox_messages_patient_profile_id_fkey"
+            columns: ["patient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       patient_addresses: {
         Row: {
@@ -3299,6 +3638,7 @@ export type Database = {
           managed_by_doctor: string | null
           medical_card: Json
           phone: string | null
+          phone_e164: string | null
           profile_views_count: number
           profile_visibility: string
           public_banner_url: string | null
@@ -3322,6 +3662,7 @@ export type Database = {
           managed_by_doctor?: string | null
           medical_card?: Json
           phone?: string | null
+          phone_e164?: string | null
           profile_views_count?: number
           profile_visibility?: string
           public_banner_url?: string | null
@@ -3345,6 +3686,7 @@ export type Database = {
           managed_by_doctor?: string | null
           medical_card?: Json
           phone?: string | null
+          phone_e164?: string | null
           profile_views_count?: number
           profile_visibility?: string
           public_banner_url?: string | null
@@ -3507,6 +3849,7 @@ export type Database = {
           lng: number | null
           opted_out: boolean
           opted_out_at: string | null
+          opted_out_reason: string | null
           phone: string | null
           source: string
           source_ref: string | null
@@ -3530,6 +3873,7 @@ export type Database = {
           lng?: number | null
           opted_out?: boolean
           opted_out_at?: string | null
+          opted_out_reason?: string | null
           phone?: string | null
           source?: string
           source_ref?: string | null
@@ -3553,6 +3897,7 @@ export type Database = {
           lng?: number | null
           opted_out?: boolean
           opted_out_at?: string | null
+          opted_out_reason?: string | null
           phone?: string | null
           source?: string
           source_ref?: string | null
@@ -3901,6 +4246,7 @@ export type Database = {
           created_at: string
           id: string
           phone: string | null
+          phone_e164: string | null
           updated_at: string
           user_id: string
         }
@@ -3908,6 +4254,7 @@ export type Database = {
           created_at?: string
           id?: string
           phone?: string | null
+          phone_e164?: string | null
           updated_at?: string
           user_id: string
         }
@@ -3915,6 +4262,7 @@ export type Database = {
           created_at?: string
           id?: string
           phone?: string | null
+          phone_e164?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -4165,11 +4513,32 @@ export type Database = {
     }
     Functions: {
       _caller_doctor_id: { Args: never; Returns: string }
+      _claim_token_for: {
+        Args: { p_doctor_profile_id: string; p_patient_profile_id: string }
+        Returns: string
+      }
+      _clinic_tz: { Args: { p_clinic_id: string }; Returns: string }
       _col_default_json: {
         Args: { p_col: string; p_table: unknown }
         Returns: Json
       }
+      _enqueue_patient_welcome: {
+        Args: {
+          p_dedupe_key?: string
+          p_doctor_profile_id: string
+          p_patient_profile_id: string
+        }
+        Returns: string
+      }
       _feedback_key: { Args: { p_doctor_id: string }; Returns: string }
+      _fold_managed_shell: {
+        Args: { p_shell: string; p_target: string }
+        Returns: undefined
+      }
+      _is_appointment_doctor: {
+        Args: { p_clinic_id: string; p_doctor_id: string }
+        Returns: boolean
+      }
       _is_privileged_writer: { Args: never; Returns: boolean }
       _notify: {
         Args: {
@@ -4183,6 +4552,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      _profile_has_data: { Args: { p_profile: string }; Returns: boolean }
       _user_id_from_doctor_details: {
         Args: { p_doctor_id: string }
         Returns: string
@@ -4197,6 +4567,7 @@ export type Database = {
         }
         Returns: string
       }
+      adopt_managed_profile_by_phone: { Args: never; Returns: Json }
       advance_queue: {
         Args: { p_clinic_id: string; p_date?: string }
         Returns: {
@@ -4632,6 +5003,20 @@ export type Database = {
         Args: { p_delay_minutes: number; p_doctor_id: string }
         Returns: number
       }
+      enqueue_outbox: {
+        Args: {
+          p_channel?: string
+          p_consent_basis?: string
+          p_daily_cap?: number
+          p_dedupe_key?: string
+          p_doctor?: string
+          p_params?: Json
+          p_patient?: string
+          p_template_key: string
+          p_to_phone: string
+        }
+        Returns: string
+      }
       ensure_doctor_trial: { Args: never; Returns: string }
       ensure_referral_code: { Args: never; Returns: string }
       flag_emergency_appointment: {
@@ -4805,6 +5190,30 @@ export type Database = {
         }[]
       }
       mark_notifications_read: { Args: { _ids: string[] }; Returns: undefined }
+      match_medical_chunks: {
+        Args: {
+          p_embedding: string
+          p_language?: string
+          p_limit?: number
+          p_query?: string
+          p_specialties?: string[]
+        }
+        Returns: {
+          content: string
+          external_id: string
+          id: number
+          kind: string
+          license: string
+          publisher: string
+          score: number
+          section: string
+          similarity: number
+          source_id: string
+          source_title: string
+          title: string
+          url: string
+        }[]
+      }
       my_referral_stats: {
         Args: never
         Returns: {
@@ -4813,8 +5222,60 @@ export type Database = {
         }[]
       }
       next_prescription_number: { Args: never; Returns: string }
+      normalize_phone: { Args: { p_raw: string }; Returns: string }
       opt_out_scraped_by_phone: {
         Args: { p_phone: string }
+        Returns: undefined
+      }
+      outbox_claim_batch: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempts: number
+          channel: string
+          claimed_at: string | null
+          consent_basis: string | null
+          created_at: string
+          dedupe_key: string | null
+          delivered_at: string | null
+          doctor_profile_id: string | null
+          error: string | null
+          id: string
+          locale: string
+          max_attempts: number
+          next_attempt_at: string
+          params: Json
+          patient_profile_id: string | null
+          provider: string | null
+          provider_message_id: string | null
+          provider_status: string | null
+          sent_at: string | null
+          status: string
+          template_key: string
+          to_phone: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "outbox_messages"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      outbox_delivery_update: {
+        Args: { p_provider_message_id: string; p_provider_status: string }
+        Returns: undefined
+      }
+      outbox_mark: {
+        Args: {
+          p_error?: string
+          p_id: string
+          p_provider?: string
+          p_provider_message_id?: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      outbox_opt_out: {
+        Args: { p_channel?: string; p_phone: string; p_reason?: string }
         Returns: undefined
       }
       preview_claim: {
@@ -4844,6 +5305,10 @@ export type Database = {
           full_name: string
           id: string
         }[]
+      }
+      rate_ai_consultation: {
+        Args: { p_id: string; p_note?: string; p_rating: number }
+        Returns: undefined
       }
       read_my_private_feedback: {
         Args: { p_limit?: number }
@@ -4887,6 +5352,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      request_patient_invite: {
+        Args: { p_patient_profile_id: string }
+        Returns: Json
+      }
       request_withdrawal: {
         Args: { p_amount: number; p_method?: string; p_note?: string }
         Returns: string
@@ -4922,6 +5391,10 @@ export type Database = {
           p_authorized_doctor_profile_id: string
           p_order_id: string
         }
+        Returns: undefined
+      }
+      set_my_messaging_opt_out: {
+        Args: { p_opt_out: boolean }
         Returns: undefined
       }
       set_shared_care_consent: {

@@ -59,7 +59,8 @@ export function DoctorTopbar() {
     enabled: Boolean(user?.id),
     refetchInterval: 60_000,
     queryFn: async () => {
-      const { data } = await supabase.rpc("unread_notifications_count" as never);
+      // Badge only — an error just shows no count.
+      const { data } = await supabase.rpc("unread_notifications_count");
       const n = Number(data ?? 0);
       return Number.isFinite(n) ? n : 0;
     },
@@ -67,7 +68,7 @@ export function DoctorTopbar() {
 
   const go = (to: string) => {
     setOpen(false);
-    void navigate({ to } as never);
+    void navigate({ to });
   };
 
   const name = profile?.full_name ?? user?.email ?? "الطبيب";

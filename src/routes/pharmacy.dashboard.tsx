@@ -60,6 +60,20 @@ function PharmacyDashboard() {
     enabled: !!chain?.id,
   });
 
+  // DB / RLS errors are English PostgrestErrors — show one Arabic toast, then
+  // rethrow so the form keeps its input (callers catch).
+  function withErrorToast<A>(fn: (arg: A) => Promise<void>) {
+    return async (arg: A) => {
+      try {
+        await fn(arg);
+      } catch (err) {
+        console.error("[pharmacy] action failed", err);
+        toast.error(t("Something went wrong, please try again", "تعذّر تنفيذ العملية، حاول مرة أخرى"));
+        throw err;
+      }
+    };
+  }
+
   if (chainLoading || isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -149,30 +163,30 @@ function PharmacyDashboard() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 grid gap-6 lg:grid-cols-2">
         <BranchesSection
           branches={branches ?? []}
-          onAdd={async (input) => {
+          onAdd={withErrorToast(async (input) => {
             await createBranch({ ...input, chainId: chain.id });
             qc.invalidateQueries({ queryKey: ["my-branches", chain.id] });
             toast.success(t("Branch added", "تمت إضافة الفرع"));
-          }}
-          onDelete={async (id) => {
+          })}
+          onDelete={withErrorToast(async (id) => {
             await deleteBranch(id);
             qc.invalidateQueries({ queryKey: ["my-branches", chain.id] });
             toast.success(t("Branch removed", "تم حذف الفرع"));
-          }}
+          })}
         />
         <ListingsSection
           listings={listings ?? []}
           branches={branches ?? []}
-          onAdd={async (input) => {
+          onAdd={withErrorToast(async (input) => {
             await createListing({ ...input, chainId: chain.id });
             qc.invalidateQueries({ queryKey: ["my-listings", chain.id] });
             toast.success(t("Listing added", "تمت إضافة الإعلان"));
-          }}
-          onDeactivate={async (id) => {
+          })}
+          onDeactivate={withErrorToast(async (id) => {
             await deactivateListing(id);
             qc.invalidateQueries({ queryKey: ["my-listings", chain.id] });
             toast.success(t("Listing deactivated", "تم إيقاف الإعلان"));
-          }}
+          })}
         />
       </div>
     </div>
@@ -223,6 +237,8 @@ function BranchesSection({
       setAddress("");
       setPhone("");
       setShowForm(false);
+    } catch {
+      /* error toast shown by the parent */
     } finally {
       setBusy(false);
     }
@@ -305,7 +321,7 @@ function BranchesSection({
                 </p>
               </div>
               <button
-                onClick={() => onDelete(b.id)}
+                onClick={() => onDelete(b.id).catch(() => undefined)}
                 className="text-destructive hover:bg-destructive/10 rounded-md p-1.5"
               >
                 <Trash2 className="h-4 w-4" />
@@ -329,7 +345,7 @@ function ListingsSection({
     drug_name: string;
     dosage: string | null;
     price: number | null;
-    currency: string;
+    currency: string | null;
     is_active: boolean;
     branch_id: string | null;
     expires_at: string | null;
@@ -375,6 +391,8 @@ function ListingsSection({
       setNotes("");
       setBranchId("");
       setShowForm(false);
+    } catch {
+      /* error toast shown by the parent */
     } finally {
       setBusy(false);
     }
@@ -479,13 +497,13 @@ function ListingsSection({
                 </p>
                 {l.price != null && (
                   <p className="text-xs text-muted-foreground">
-                    {l.price} {l.currency}
+                    {l.price} {l.currency ?? "EGP"}
                   </p>
                 )}
               </div>
               {l.is_active && (
                 <button
-                  onClick={() => onDeactivate(l.id)}
+                  onClick={() => onDeactivate(l.id).catch(() => undefined)}
                   className="text-muted-foreground hover:text-destructive rounded-md p-1.5 text-xs"
                 >
                   {t("Deactivate", "إيقاف")}

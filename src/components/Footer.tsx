@@ -103,8 +103,8 @@ export function Footer() {
           <div>
             <h2 className="text-sm font-semibold text-foreground">{content.patients}</h2>
             <ul className="mt-4 space-y-2">
-              {content.patientsLinks.map((link) => (
-                <li key={link.to}>
+              {content.patientsLinks.map((link, i) => (
+                <li key={`${link.to}-${i}`}>
                   <Link
                     to={link.to}
                     className="text-sm text-muted-foreground transition-colors hover:text-primary"
@@ -119,8 +119,8 @@ export function Footer() {
           <div>
             <h2 className="text-sm font-semibold text-foreground">{content.company}</h2>
             <ul className="mt-4 space-y-2">
-              {content.companyLinks.map((link) => (
-                <li key={link.to}>
+              {content.companyLinks.map((link, i) => (
+                <li key={`${link.to}-${i}`}>
                   <Link
                     to={link.to}
                     className="text-sm text-muted-foreground transition-colors hover:text-primary"
@@ -129,8 +129,8 @@ export function Footer() {
                   </Link>
                 </li>
               ))}
-              {content.legalLinks.map((link) => (
-                <li key={link.to}>
+              {content.legalLinks.map((link, i) => (
+                <li key={`${link.to}-${i}`}>
                   <Link
                     to={link.to}
                     className="text-sm text-muted-foreground transition-colors hover:text-primary"
@@ -145,8 +145,8 @@ export function Footer() {
           <div>
             <h2 className="text-sm font-semibold text-foreground">{content.doctors}</h2>
             <ul className="mt-4 space-y-2">
-              {content.doctorsLinks.map((link) => (
-                <li key={link.to}>
+              {content.doctorsLinks.map((link, i) => (
+                <li key={`${link.to}-${i}`}>
                   <Link
                     to={link.to}
                     className="text-sm text-muted-foreground transition-colors hover:text-primary"

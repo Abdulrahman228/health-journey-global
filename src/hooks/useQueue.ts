@@ -10,10 +10,11 @@ const DEFAULT_AVG_VISIT_MINUTES = 15;
 
 const ACTIVE_STATUSES = new Set(["waiting", "called", "in_progress"]);
 
+// v_clinic_queue is a view → every column is nullable in the generated types.
 type QueueRow = {
-  appointment_id: string;
-  queue_number: number;
-  status: string;
+  appointment_id: string | null;
+  queue_number: number | null;
+  status: string | null;
   estimated_start_at: string | null;
 };
 
@@ -81,7 +82,7 @@ export function useQueue(appointmentId: string | null | undefined): QueueState {
         .eq("appointment_date", apptDate)
         .order("queue_number");
       if (error) throw error;
-      return (data ?? []) as QueueRow[];
+      return data ?? [];
     },
   });
 
@@ -125,7 +126,7 @@ export function useQueue(appointmentId: string | null | undefined): QueueState {
   const myIdx = queue.findIndex((q) => q.appointment_id === appt.id);
   const aheadCount = queue
     .slice(0, myIdx >= 0 ? myIdx : 0)
-    .filter((q) => ACTIVE_STATUSES.has(q.status)).length;
+    .filter((q) => ACTIVE_STATUSES.has(q.status ?? "")).length;
   const serving = queue.find((q) => q.status === "in_progress" || q.status === "called");
 
   // Prefer the server-computed ETA; fall back to `ahead × avg` when absent.

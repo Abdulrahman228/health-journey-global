@@ -6,7 +6,7 @@
  *    aggregates rating, and links out to each doctor profile (Spokes).
  *  - Internal linking stays inside the specialty silo.
  */
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Star, MapPin, BadgeCheck, Stethoscope, ArrowRight, Video } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useCurrency } from "@/hooks/useCurrency";
@@ -62,6 +62,8 @@ function specialtyFaq(s: SpecialtySeoData) {
 export const Route = createFileRoute("/specialty/$slug")({
   loader: async ({ params }) => {
     const specialty = await loadSpecialtyForSeo({ data: params.slug });
+    // Unknown slug → real 404 (was a 200 "not found" page = soft-404 for crawlers).
+    if (!specialty) throw notFound();
     return { specialty };
   },
   head: ({ params, loaderData }) => {

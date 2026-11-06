@@ -46,7 +46,13 @@ function ContactPage() {
       setSent(true);
       toast.success(t("Message sent. We'll reply soon.", "تم الإرسال. سنرد عليك قريباً."));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("Failed to send", "تعذّر الإرسال"));
+      console.error("[contact] fileSupportTicket failed:", err);
+      toast.error(
+        t(
+          "Failed to send — try again or e-mail us.",
+          "تعذّر إرسال الرسالة — حاول مرة أخرى أو راسلنا بالبريد.",
+        ),
+      );
     } finally {
       setSending(false);
     }

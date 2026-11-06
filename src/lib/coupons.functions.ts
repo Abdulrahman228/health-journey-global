@@ -55,6 +55,28 @@ interface ValidateInput {
   userId?: string | null; // auth.users.id (for per-user limit)
 }
 
+/**
+ * Map the booking UI's appointment-type vocabulary onto the coupon one.
+ * BookingCard sends "clinic" | "online"; coupons.applies_to is
+ * 'all' | 'video' | 'in_person'. Without this, an in-person coupon was
+ * rejected for every clinic booking (and a video coupon for every online one).
+ */
+function normalizeAppointmentType(raw: unknown): ValidateInput["appointmentType"] {
+  switch (raw) {
+    case "in_person":
+    case "clinic":
+      return "in_person";
+    case "video":
+    case "online":
+    case "video_consultation":
+      return "video";
+    case "telehealth":
+      return "telehealth";
+    default:
+      return undefined;
+  }
+}
+
 function normalizeCode(raw: string): string {
   return String(raw ?? "")
     .trim()
@@ -209,7 +231,7 @@ export const validateCoupon = createServerFn({ method: "POST" })
       code: obj.code,
       amount: obj.amount,
       currency: obj.currency,
-      appointmentType: obj.appointmentType,
+      appointmentType: normalizeAppointmentType(obj.appointmentType),
       doctorId: obj.doctorId ?? null,
       userId: obj.userId ?? null,
     };
@@ -258,7 +280,7 @@ export async function applyCouponToAppointment(args: {
       coupon_discount: result.discountAmount,
       fee: result.finalAmount,
       updated_at: new Date().toISOString(),
-    } as never)
+    })
     .eq("id", args.appointmentId);
   if (error) {
     return {
@@ -307,7 +329,7 @@ export const applyCoupon = createServerFn({ method: "POST" })
       code: data.code,
       amount: Number(appt.fee ?? 0),
       currency: (appt.currency as string | null) ?? "EGP",
-      appointmentType: type === "online" || type === "video" ? "video" : "in_person",
+      appointmentType: normalizeAppointmentType(type) ?? "in_person",
       doctorId: appt.doctor_id as string,
       userId: context.userId,
     });

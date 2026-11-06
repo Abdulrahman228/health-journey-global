@@ -36,6 +36,9 @@ type NearbyRow = {
   specialty: string | null;
   consultation_fee: number | null;
   rating: number | null;
+  // Returned since the 2026-11-06 migration; absent on the older function.
+  reviews_count?: number | null;
+  is_verified?: boolean | null;
   clinic_id: string;
   clinic_name: string | null;
   clinic_lat: number;
@@ -148,11 +151,8 @@ function NearbyDoctorsPage() {
         p_specialty: specialty || null,
       });
       if (error) {
-        const msg =
-          error && typeof error === "object" && "message" in error
-            ? String((error as { message: unknown }).message)
-            : "RPC error";
-        throw new Error(msg);
+        console.error("search_doctors_nearby failed", error);
+        throw new Error("nearby_failed");
       }
       return data ?? [];
     },
@@ -305,7 +305,10 @@ function NearbyDoctorsPage() {
 
             {rpcError && (
               <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-                {(rpcError as Error).message}
+                {t(
+                  "Couldn't search nearby doctors right now. Please try again.",
+                  "تعذّر البحث عن الأطباء القريبين الآن — حاول مرة أخرى.",
+                )}
               </div>
             )}
 
@@ -329,9 +332,15 @@ function NearbyDoctorsPage() {
                       <div className="min-w-0">
                         <h3 className="text-sm font-semibold text-foreground truncate">
                           {r.full_name ?? t("Doctor", "طبيب")}
-                          <BadgeCheck className="inline-block h-4 w-4 text-primary ms-1" />
+                          {r.is_verified && (
+                            <BadgeCheck className="inline-block h-4 w-4 text-primary ms-1" />
+                          )}
                         </h3>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{r.specialty ?? "—"}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {/^general$/i.test((r.specialty ?? "").trim())
+                            ? t("General Practice", "طب عام")
+                            : (r.specialty ?? "—")}
+                        </p>
                         <p className="mt-1 text-xs text-muted-foreground inline-flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
                           {r.clinic_name ?? "—"}
@@ -343,7 +352,7 @@ function NearbyDoctorsPage() {
                           <Navigation className="h-3 w-3" />
                           {r.distance_km.toFixed(1)} {t("km", "كم")}
                         </span>
-                        {r.rating != null && (
+                        {r.rating != null && Number(r.reviews_count ?? 0) > 0 && (
                           <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
                             <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                             {Number(r.rating).toFixed(1)}

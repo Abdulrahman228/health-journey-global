@@ -19,17 +19,20 @@ async function buildVCard(slug: string): Promise<string | null> {
     .select(
       "id, slug, full_name, avatar_url, city, country, public_bio, profile_visibility, user_id",
     )
-    .eq("slug", slug)
+    // Slugs are stored lower-case (profiles_slug_format_chk) — same as /d/{slug}.
+    .eq("slug", slug.toLowerCase())
     .maybeSingle();
   if (!p || p.profile_visibility === "private") return null;
 
-  // Confirm role = doctor
+  // Confirm role = doctor (filter on the role: a user may hold several roles).
+  if (!p.user_id) return null;
   const { data: r } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", p.user_id)
+    .eq("role", "doctor")
     .maybeSingle();
-  if (r?.role !== "doctor") return null;
+  if (!r) return null;
 
   const { data: d } = await supabaseAdmin
     .from("doctor_details")
@@ -68,7 +71,8 @@ async function buildVCard(slug: string): Promise<string | null> {
     const country = p.country ?? "";
     lines.push(`ADR;TYPE=WORK:;;${vEscape(street)};${vEscape(city)};;;${vEscape(country)}`);
   }
-  if (p.public_bio) lines.push(`NOTE:${vEscape(p.public_bio).slice(0, 500)}`);
+  // Truncate before escaping so a cut never splits an escape sequence.
+  if (p.public_bio) lines.push(`NOTE:${vEscape(p.public_bio.slice(0, 500))}`);
   if (p.avatar_url) lines.push(`PHOTO;VALUE=URI:${vEscape(p.avatar_url)}`);
   lines.push(`REV:${new Date().toISOString()}`);
   lines.push("END:VCARD");
@@ -83,7 +87,8 @@ export const Route = createFileRoute("/d/$slug/contact.vcf")({
       GET: async ({ params }) => {
         const body = await buildVCard(params.slug);
         if (!body) throw notFound();
-        const filename = `tabibi-${params.slug}.vcf`;
+        // Safe in the header: the slug matched a stored [a-z0-9-] slug above.
+        const filename = `tebana-${params.slug.toLowerCase()}.vcf`;
         return new Response(body, {
           status: 200,
           headers: {

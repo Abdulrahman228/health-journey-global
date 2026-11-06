@@ -53,7 +53,6 @@ interface Doc {
     profiles: {
       id: string;
       full_name: string | null;
-      email?: string | null;
       phone: string | null;
     } | null;
   } | null;
@@ -77,9 +76,9 @@ function AdminDocumentsPage() {
     setLoading(true);
     try {
       const res = await list();
-      setDocs(res.documents as unknown as Doc[]);
+      setDocs(res.documents);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error("تعذّر تحميل المستندات: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoading(false);
     }
@@ -113,7 +112,7 @@ function AdminDocumentsPage() {
       toast.success(action === "approve" ? "تم الاعتماد" : "تم الرفض");
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error("تعذّر حفظ المراجعة: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setActingId(null);
     }
@@ -123,8 +122,9 @@ function AdminDocumentsPage() {
     try {
       const { url } = await sign({ data: { documentId: id } });
       if (url) window.open(url, "_blank", "noopener,noreferrer");
+      else toast.error("تعذّر إنشاء رابط المعاينة");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error("تعذّر فتح المستند: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -212,8 +212,10 @@ function AdminDocumentsPage() {
                       {dr?.syndicate_number ? ` · نقابة: ${dr.syndicate_number}` : ""}
                       {dr?.national_id_last4 ? ` · قومي: ****${dr.national_id_last4}` : ""}
                     </p>
-                    {profile?.email && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">{profile.email}</p>
+                    {profile?.phone && (
+                      <p className="mt-0.5 text-xs text-muted-foreground" dir="ltr">
+                        {profile.phone}
+                      </p>
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-2">

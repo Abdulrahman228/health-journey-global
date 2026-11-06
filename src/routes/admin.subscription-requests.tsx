@@ -74,17 +74,24 @@ function SubscriptionRequestsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: subs } = await supabase
+    const { data: subs, error: subsErr } = await supabase
       .from("subscriptions")
       .select("id, user_id, plan_code, access_status, access_granted_at, receipt_url, created_at")
       .eq("is_manual", true)
       .eq("access_status", "pending")
       .order("created_at", { ascending: true });
+    if (subsErr) {
+      toast.error("تعذّر تحميل الطلبات: " + subsErr.message);
+      setLoading(false);
+      return;
+    }
 
+    // subscriptions.user_id is the auth uid → match profiles.user_id.
     const userIds = Array.from(new Set((subs ?? []).map((s) => s.user_id)));
-    const { data: profiles } = userIds.length
+    const { data: profiles, error: profErr } = userIds.length
       ? await supabase.from("profiles").select("user_id, full_name, city").in("user_id", userIds)
-      : { data: [] as { user_id: string; full_name: string | null; city: string | null }[] };
+      : { data: [], error: null };
+    if (profErr) toast.error("تعذّر تحميل أسماء الأطباء: " + profErr.message);
     const profByUser = new Map((profiles ?? []).map((p) => [p.user_id, p]));
 
     const withLinks = await Promise.all(
@@ -117,7 +124,7 @@ function SubscriptionRequestsPage() {
       );
       setRows((prev) => prev.filter((r) => r.id !== id));
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error("تعذّر حفظ القرار: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBusyId(null);
     }

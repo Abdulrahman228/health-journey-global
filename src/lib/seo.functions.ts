@@ -7,11 +7,14 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { specialtyTerms } from "@/lib/seo";
 
 export interface DoctorSeoData {
   id: string;
   name: string | null;
   avatarUrl: string | null;
+  /** `/d/{slug}` when the doctor's profile is public — used as the canonical URL. */
+  publicPath: string | null;
   city: string | null;
   specialty: string | null;
   bio: string | null;
@@ -68,11 +71,13 @@ export const loadDoctorForSeo = createServerFn({ method: "GET" })
     if (error || !d) return null;
 
     const [{ data: p }, { data: clinics }, { count: reviewCount }, { data: latestReviews }] = await Promise.all([
-      supabaseAdmin
-        .from("profiles")
-        .select("full_name, city, avatar_url")
-        .eq("id", d.profile_id)
-        .maybeSingle(),
+      d.profile_id
+        ? supabaseAdmin
+            .from("profiles")
+            .select("full_name, city, avatar_url, slug, profile_visibility")
+            .eq("id", d.profile_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       supabaseAdmin
         .from("clinics")
         .select("id, name, address, city, phone, lat, lng, is_primary")
@@ -114,6 +119,8 @@ export const loadDoctorForSeo = createServerFn({ method: "GET" })
       id: d.id,
       name: p?.full_name ?? null,
       avatarUrl: p?.avatar_url ?? null,
+      // /d/{slug} is the indexable copy of this page only when the profile is public.
+      publicPath: p?.slug && p.profile_visibility === "public" ? `/d/${p.slug}` : null,
       city: p?.city ?? primary?.city ?? null,
       specialty: d.specialty,
       bio: d.bio,
@@ -192,12 +199,12 @@ export const loadSpecialtyForSeo = createServerFn({ method: "GET" })
         "id, profile_id, rating, years_experience, consultation_fee, currency, is_verified",
         { count: "exact" },
       )
-      .or(`specialty.eq.${spec.name_ar},specialty.eq.${spec.name_en}`)
+      .in("specialty", specialtyTerms(spec))
       .eq("is_verified", true)
       .order("rating", { ascending: false })
       .limit(12);
 
-    const ids = (doctors ?? []).map((d) => d.profile_id);
+    const ids = (doctors ?? []).map((d) => d.profile_id).filter((x): x is string => Boolean(x));
     const profilesById = new Map<string, { full_name: string | null; city: string | null; avatar_url: string | null }>();
     if (ids.length > 0) {
       const { data: profs } = await supabaseAdmin
@@ -215,7 +222,7 @@ export const loadSpecialtyForSeo = createServerFn({ method: "GET" })
       icon: spec.icon,
       doctorCount: count ?? 0,
       topDoctors: (doctors ?? []).map((d) => {
-        const p = profilesById.get(d.profile_id);
+        const p = d.profile_id ? profilesById.get(d.profile_id) : undefined;
         return {
           id: d.id,
           name: p?.full_name ?? null,
@@ -271,14 +278,14 @@ export const listFeaturedDoctors = createServerFn({ method: "GET" }).handler(
       .order("rating", { ascending: false })
       .limit(8);
     if (!doctors || doctors.length === 0) return [];
-    const ids = doctors.map((d) => d.profile_id);
+    const ids = doctors.map((d) => d.profile_id).filter((x): x is string => Boolean(x));
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
       .select("id, full_name, city, avatar_url")
       .in("id", ids);
     const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
     return doctors.map((d) => {
-      const p = byId.get(d.profile_id);
+      const p = d.profile_id ? byId.get(d.profile_id) : undefined;
       return {
         id: d.id,
         name: p?.full_name ?? null,
@@ -342,11 +349,11 @@ export const loadSpecialtyCityForSeo = createServerFn({ method: "GET" })
 
     const cityTerms = cityMatchTerms(city);
     // Find profile IDs whose `city` matches any term (Ar/En/aliases)
-    const cityFilter = cityTerms.map((t) => `city.eq.${t.replace(/,/g, " ")}`).join(",");
+    // .in() quotes values itself; a hand-built .or() string breaks on "(", ",", ".".
     const { data: cityProfiles } = await supabaseAdmin
       .from("profiles")
       .select("id, full_name, city, avatar_url")
-      .or(cityFilter)
+      .in("city", cityTerms)
       .limit(500);
     const profileIds = (cityProfiles ?? []).map((p) => p.id);
     if (profileIds.length === 0) {
@@ -365,7 +372,7 @@ export const loadSpecialtyCityForSeo = createServerFn({ method: "GET" })
         { count: "exact" },
       )
       .in("profile_id", profileIds)
-      .or(`specialty.eq.${spec.name_ar},specialty.eq.${spec.name_en}`)
+      .in("specialty", specialtyTerms(spec))
       .eq("is_verified", true)
       .order("rating", { ascending: false })
       .limit(12);
@@ -377,7 +384,7 @@ export const loadSpecialtyCityForSeo = createServerFn({ method: "GET" })
       city: { slug: city.slug, nameAr: city.nameAr, nameEn: city.nameEn, countryCode: city.countryCode },
       doctorCount: count ?? 0,
       topDoctors: (doctors ?? []).map((d) => {
-        const p = profileById.get(d.profile_id);
+        const p = d.profile_id ? profileById.get(d.profile_id) : undefined;
         return {
           id: d.id,
           name: p?.full_name ?? null,
@@ -415,10 +422,10 @@ export const listSpecialtyCityCombos = createServerFn({ method: "GET" }).handler
 
     const seen = new Set<string>();
     for (const d of doctors) {
-      const docCity = cityByProfile.get(d.profile_id);
+      const docCity = d.profile_id ? cityByProfile.get(d.profile_id) : undefined;
       if (!docCity) continue;
       for (const spec of specs) {
-        if (d.specialty !== spec.name_ar && d.specialty !== spec.name_en) continue;
+        if (!d.specialty || !specialtyTerms(spec).includes(d.specialty)) continue;
         for (const city of CITIES) {
           if (cityMatchTerms(city).includes(docCity)) {
             seen.add(`${spec.slug}|${city.slug}`);

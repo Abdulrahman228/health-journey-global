@@ -4,7 +4,7 @@
  */
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { hasAdminRole, homePathForRoles, useAuth } from "@/hooks/useAuth";
 import { adminOnboardingFunnel, type OnboardingFunnel } from "@/lib/admin/onboarding";
 import {
   Loader2,
@@ -29,9 +29,10 @@ export const Route = createFileRoute("/admin/onboarding")({
 });
 
 function OnboardingFunnelPage() {
-  const { user, role, isLoading: authLoading } = useAuth();
+  const { user, roles, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState<OnboardingFunnel | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -41,16 +42,21 @@ function OnboardingFunnelPage() {
       navigate({ to: "/login" });
       return;
     }
-    if (role && role !== "admin" && role !== "super_admin") {
-      navigate({ to: "/" });
+    // Decide from ALL roles: a doctor+admin's primary role is "doctor".
+    if (roles.length > 0 && !hasAdminRole(roles)) {
+      navigate({ to: homePathForRoles(roles) });
       return;
     }
     setLoading(true);
-    adminOnboardingFunnel({ data: { userId: user.id } })
+    setLoadError(null);
+    adminOnboardingFunnel()
       .then((d) => setData(d))
-      .catch(() => setData(null))
+      .catch((e: unknown) => {
+        setData(null);
+        setLoadError(e instanceof Error ? e.message : String(e));
+      })
       .finally(() => setLoading(false));
-  }, [authLoading, user, role, navigate, refreshKey]);
+  }, [authLoading, user, roles, navigate, refreshKey]);
 
   const claimRate =
     data && data.seededTotal > 0
@@ -86,6 +92,7 @@ function OnboardingFunnelPage() {
       ) : !data ? (
         <p className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
           تعذّر تحميل البيانات.
+          {loadError && <span className="mt-1 block text-xs">{loadError}</span>}
         </p>
       ) : (
         <div className="space-y-8">

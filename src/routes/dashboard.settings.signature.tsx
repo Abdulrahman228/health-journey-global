@@ -41,16 +41,18 @@ function SignaturePage() {
     }
     let alive = true;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("doctor_details")
         .select("id, signature_url, stamp_url")
         .eq("profile_id", profile.id)
         .maybeSingle();
       if (!alive) return;
-      if (data) {
-        setDoctorId((data as { id: string }).id);
-        setSignatureUrl((data as { signature_url: string | null }).signature_url ?? null);
-        setStampUrl((data as { stamp_url: string | null }).stamp_url ?? null);
+      if (error) {
+        toast.error("تعذّر تحميل التوقيع والختم: " + error.message);
+      } else if (data) {
+        setDoctorId(data.id);
+        setSignatureUrl(data.signature_url ?? null);
+        setStampUrl(data.stamp_url ?? null);
       }
       setLoading(false);
     })();
@@ -60,7 +62,10 @@ function SignaturePage() {
   }, [authLoading, user, profile?.id, navigate]);
 
   const upload = async (file: File, kind: "signature" | "stamp") => {
-    if (!doctorId || !profile?.id) return;
+    if (!doctorId || !profile?.id) {
+      toast.error("هذه الصفحة للأطباء فقط");
+      return;
+    }
     if (!file.type.startsWith("image/")) {
       toast.error(t("Please upload an image (PNG/JPG)", "ارفع صورة بصيغة PNG أو JPG"));
       return;
@@ -88,7 +93,10 @@ function SignaturePage() {
       else setStampUrl(url);
       toast.success(t("Saved", "تم الحفظ"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "error");
+      // Storage/PostgREST errors are plain objects with .message, not Error instances.
+      const msg =
+        err && typeof err === "object" && "message" in err ? String(err.message) : "";
+      toast.error("فشل رفع الصورة" + (msg ? ` — ${msg}` : ""));
     } finally {
       setUploading(null);
     }
@@ -102,7 +110,7 @@ function SignaturePage() {
       .update(kind === "signature" ? { signature_url: null } : { stamp_url: null })
       .eq("id", doctorId);
     if (error) {
-      toast.error(error.message);
+      toast.error("تعذّر حذف الصورة: " + error.message);
       return;
     }
     if (kind === "signature") setSignatureUrl(null);

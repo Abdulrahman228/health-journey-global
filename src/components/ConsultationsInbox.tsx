@@ -51,6 +51,8 @@ interface PatientItem {
   expires_at: string | null;
   created_at: string;
   doctor_details_id: string;
+  appointment_id: string | null;
+  doctor: { specialty: string | null; profile: { full_name: string | null } | null } | null;
 }
 
 interface DoctorItem {
@@ -95,6 +97,24 @@ const typeIcon = {
   chat: MessageSquare,
 };
 
+const typeLabel: Record<ConsultationType, [string, string]> = {
+  video: ["Video", "فيديو"],
+  voice: ["Voice", "صوت فقط"],
+  chat: ["Chat", "دردشة"],
+};
+
+/** Server messages are Arabic; validation / network errors get the fallback. */
+const errText = (e: unknown, fallback: string) => {
+  const msg = e instanceof Error ? e.message : "";
+  return /[؀-ۿ]/.test(msg) ? msg : fallback;
+};
+
+/** `datetime-local` wants LOCAL wall-clock "YYYY-MM-DDTHH:mm" (not UTC ISO). */
+function toLocalInput(d: Date) {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function fmtSlot(iso: string | null, locale: string) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -112,7 +132,7 @@ function fmtMoney(cents: number | null, currency: string) {
 export function ConsultationsInbox() {
   const { t, language } = useLanguage();
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["consultation-requests"],
     queryFn: () => listMyConsultationRequests(),
     refetchInterval: 30000,
@@ -141,7 +161,7 @@ export function ConsultationsInbox() {
         toast.error(t("Could not create payment", "تعذّر إنشاء جلسة الدفع"));
       }
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(errText(e, t("Could not accept the proposal", "تعذّر قبول الموعد"))),
   });
 
   const rejectMut = useMutation({
@@ -150,7 +170,7 @@ export function ConsultationsInbox() {
       toast.success(t("Proposal rejected", "تم رفض الميعاد"));
       refresh();
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(errText(e, t("Could not reject the proposal", "تعذّر رفض الموعد"))),
   });
 
   const cancelMut = useMutation({
@@ -159,7 +179,7 @@ export function ConsultationsInbox() {
       toast.success(t("Request cancelled", "تم إلغاء الطلب"));
       refresh();
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(errText(e, t("Could not cancel the request", "تعذّر إلغاء الطلب"))),
   });
 
   const doctorRejectMut = useMutation({
@@ -168,23 +188,34 @@ export function ConsultationsInbox() {
       toast.success(t("Request declined", "تم رفض الطلب"));
       refresh();
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(errText(e, t("Could not decline the request", "تعذّر رفض الطلب"))),
   });
 
   if (isLoading) {
     return <div className="text-sm text-muted-foreground">{t("Loading…", "جارٍ التحميل…")}</div>;
   }
 
+  if (isError) {
+    return (
+      <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+        {t(
+          "Could not load consultation requests.",
+          "تعذّر تحميل طلبات الكشف أونلاين — حاول تحديث الصفحة.",
+        )}
+      </div>
+    );
+  }
+
   const patientItems = (() => {
     try {
-      return JSON.parse((data as { asPatient?: string })?.asPatient ?? "[]") as PatientItem[];
+      return JSON.parse(data?.asPatient ?? "[]") as PatientItem[];
     } catch {
       return [] as PatientItem[];
     }
   })();
   const doctorItems = (() => {
     try {
-      return JSON.parse((data as { asDoctor?: string })?.asDoctor ?? "[]") as DoctorItem[];
+      return JSON.parse(data?.asDoctor ?? "[]") as DoctorItem[];
     } catch {
       return [] as DoctorItem[];
     }
@@ -223,7 +254,9 @@ export function ConsultationsInbox() {
                     const Icon = typeIcon[r.consultation_type];
                     return <Icon className="h-3.5 w-3.5" />;
                   })()}
-                  <span>{r.consultation_type}</span>
+                  <span>
+                    {t(typeLabel[r.consultation_type][0], typeLabel[r.consultation_type][1])}
+                  </span>
                 </div>
                 {r.status === "pending_doctor" && (
                   <div className="flex flex-wrap gap-2">
@@ -273,14 +306,37 @@ export function ConsultationsInbox() {
             <Card key={r.id}>
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="text-xs text-muted-foreground">
-                    {fmtSlot(r.created_at, language)}
+                  <div>
+                    <div className="font-medium">
+                      {r.doctor?.profile?.full_name
+                        ? `${t("Dr.", "د.")} ${r.doctor.profile.full_name}`
+                        : t("Doctor", "الطبيب")}
+                      {r.doctor?.specialty && (
+                        <span className="ms-1 text-xs font-normal text-muted-foreground">
+                          · {r.doctor.specialty}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {fmtSlot(r.created_at, language)}
+                    </div>
                   </div>
                   <Badge variant={statusVariant[r.status]}>
                     {t(statusLabel[r.status][0], statusLabel[r.status][1])}
                   </Badge>
                 </div>
                 <div className="rounded-md bg-muted/50 p-2 text-sm">{r.reason}</div>
+
+                {/* Accepted but not paid yet (e.g. the patient left /pay):
+                    keep a way back to the payment page. */}
+                {r.status === "accepted" && r.appointment_id && (
+                  <a
+                    href={`/pay?amount=${Math.round((r.fee_cents ?? 0) / 100)}&ref=${r.appointment_id}`}
+                    className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                  >
+                    {t("Complete payment", "إكمال الدفع")}
+                  </a>
+                )}
 
                 {r.status === "proposed" && r.proposed_slot && (
                   <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
@@ -376,11 +432,11 @@ function ProposeSlotDialog({
   onDone: () => void;
 }) {
   const { t } = useLanguage();
-  // default: tomorrow 6pm in local TZ
+  // default: tomorrow 6pm in local TZ (toISOString() would be UTC → 2–3 h early)
   const def = new Date();
   def.setDate(def.getDate() + 1);
   def.setHours(18, 0, 0, 0);
-  const defaultLocal = def.toISOString().slice(0, 16);
+  const defaultLocal = toLocalInput(def);
 
   const [slot, setSlot] = useState(defaultLocal);
   const [duration, setDuration] = useState(30);
@@ -403,7 +459,7 @@ function ProposeSlotDialog({
       toast.success(t("Slot proposed — patient will be notified", "تم اقتراح الميعاد للمريض"));
       onDone();
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(errText(e, t("Could not send the proposal", "تعذّر إرسال الاقتراح"))),
   });
 
   return (

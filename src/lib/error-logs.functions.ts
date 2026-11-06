@@ -1,28 +1,15 @@
 /**
  * Admin server functions for the error_logs telemetry table.
- * Only callers with role='admin' in user_roles may read.
+ * Only callers with role admin/super_admin in user_roles may read.
  */
 
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
-
-// `error_logs` is created by an out-of-band migration and is not part of the
-// generated `Database` type. Use an untyped accessor for this table only.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const sbAny = supabaseAdmin as any;
-
-async function assertAdmin(userId: string): Promise<void> {
-  const { data, error } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["admin", "super_admin"])
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden: admin role required");
-}
+// Shared gate: reads ALL admin rows (a user may hold admin + super_admin) and
+// is keyed on the JWT-derived context.userId — never a client-supplied id.
+import { assertAdmin } from "./admin/_kit";
 
 export type ErrorLogRow = {
   id: string;
@@ -49,6 +36,17 @@ export type ErrorLogGroup = {
   sampleId: string;
 };
 
+// DB columns are `text` guarded by CHECK constraints (error_logs_level_check /
+// error_logs_source_check); narrow them to the domain unions without casts.
+const LEVELS: readonly ErrorLogRow["level"][] = ["debug", "info", "warn", "error", "fatal"];
+const SOURCES: readonly ErrorLogRow["source"][] = ["client", "server", "sw"];
+function toLevel(v: string): ErrorLogRow["level"] {
+  return LEVELS.find((l) => l === v) ?? "error";
+}
+function toSource(v: string): ErrorLogRow["source"] {
+  return SOURCES.find((s) => s === v) ?? "client";
+}
+
 /**
  * List recent error logs grouped by fingerprint (top 100 unique groups).
  */
@@ -57,17 +55,16 @@ export const adminListErrorGroups = createServerFn({ method: "GET" })
   .inputValidator((x: unknown) =>
     z
       .object({
-        userId: z.string().uuid(),
         sinceHours: z.number().int().min(1).max(720).default(24),
         level: z.enum(["debug", "info", "warn", "error", "fatal", "all"]).default("all"),
       })
       .parse(x),
   )
-  .handler(async ({ data }): Promise<ErrorLogGroup[]> => {
-    await assertAdmin(data.userId);
+  .handler(async ({ data, context }): Promise<ErrorLogGroup[]> => {
+    await assertAdmin(context.userId);
     const since = new Date(Date.now() - data.sinceHours * 3600_000).toISOString();
 
-    let query = sbAny
+    let query = supabaseAdmin
       .from("error_logs")
       .select("id, created_at, source, level, message, fingerprint")
       .gte("created_at", since)
@@ -75,17 +72,7 @@ export const adminListErrorGroups = createServerFn({ method: "GET" })
       .limit(2000);
     if (data.level !== "all") query = query.eq("level", data.level);
 
-    const { data: rows, error } = (await query) as {
-      data: Array<{
-        id: string;
-        created_at: string;
-        source: ErrorLogRow["source"];
-        level: ErrorLogRow["level"];
-        message: string;
-        fingerprint: string | null;
-      }> | null;
-      error: { message: string } | null;
-    };
+    const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
 
     const map = new Map<string, ErrorLogGroup>();
@@ -97,8 +84,8 @@ export const adminListErrorGroups = createServerFn({ method: "GET" })
           fingerprint: fp,
           count: 1,
           lastSeen: r.created_at,
-          level: r.level,
-          source: r.source,
+          level: toLevel(r.level),
+          source: toSource(r.source),
           message: r.message,
           sampleId: r.id,
         });
@@ -116,31 +103,14 @@ export const adminListErrorGroups = createServerFn({ method: "GET" })
  */
 export const adminGetErrorLog = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((x: unknown) =>
-    z.object({ userId: z.string().uuid(), id: z.string().uuid() }).parse(x),
-  )
-  .handler(async ({ data }): Promise<ErrorLogRow | null> => {
-    await assertAdmin(data.userId);
-    const { data: row, error } = (await sbAny
+  .inputValidator((x: unknown) => z.object({ id: z.string().uuid() }).parse(x))
+  .handler(async ({ data, context }): Promise<ErrorLogRow | null> => {
+    await assertAdmin(context.userId);
+    const { data: row, error } = await supabaseAdmin
       .from("error_logs")
-      .select("*")
+      .select("id, created_at, source, level, message, stack, url, user_agent, user_id, context, fingerprint")
       .eq("id", data.id)
-      .maybeSingle()) as {
-      data: {
-        id: string;
-        created_at: string;
-        source: ErrorLogRow["source"];
-        level: ErrorLogRow["level"];
-        message: string;
-        stack: string | null;
-        url: string | null;
-        user_agent: string | null;
-        user_id: string | null;
-        context: Record<string, unknown> | null;
-        fingerprint: string | null;
-      } | null;
-      error: { message: string } | null;
-    };
+      .maybeSingle();
     if (error) throw new Error(error.message);
     if (!row) return null;
     // Stringify context to keep the return type strictly serializable.
@@ -148,8 +118,8 @@ export const adminGetErrorLog = createServerFn({ method: "GET" })
     return {
       id: row.id,
       createdAt: row.created_at,
-      source: row.source,
-      level: row.level,
+      source: toSource(row.source),
+      level: toLevel(row.level),
       message: row.message,
       stack: row.stack ?? null,
       url: row.url ?? null,

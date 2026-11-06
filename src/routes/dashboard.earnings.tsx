@@ -53,18 +53,28 @@ function EarningsPage() {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const [b, t, w] = await Promise.all([
-      getDoctorBalance({ data: { userId: user.id } }),
-      getDoctorTransactions({ data: { userId: user.id, limit: 50 } }),
-      getDoctorWithdrawals({ data: { userId: user.id } }),
-    ]);
-    setBalance(b);
-    setTxs(t);
-    setWds(w);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [b, t, w] = await Promise.all([
+        getDoctorBalance({ data: { userId: user.id } }),
+        getDoctorTransactions({ data: { userId: user.id, limit: 50 } }),
+        getDoctorWithdrawals({ data: { userId: user.id } }),
+      ]);
+      setBalance(b);
+      setTxs(t);
+      setWds(w);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      setLoadError(msg || "تعذّر تحميل بيانات الإيرادات");
+      toast.error("تعذّر تحميل بيانات الإيرادات" + (msg ? ` — ${msg}` : ""));
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {
@@ -85,38 +95,68 @@ function EarningsPage() {
       return;
     }
     setSubmitting(true);
-    const res = await requestWithdrawal({
-      data: { userId: user.id, amount: amt, doctorNote: note || undefined },
-    });
-    setSubmitting(false);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
+    try {
+      const res = await requestWithdrawal({
+        data: { userId: user.id, amount: amt, doctorNote: note || undefined },
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("تم تقديم طلب السحب — سيُراجَع خلال 48 ساعة");
+      setAmount("");
+      setNote("");
+      await load();
+    } catch (err) {
+      toast.error("تعذّر تقديم طلب السحب" + (err instanceof Error ? ` — ${err.message}` : ""));
+    } finally {
+      setSubmitting(false);
     }
-    toast.success("تم تقديم طلب السحب — سيُراجَع خلال 48 ساعة");
-    setAmount("");
-    setNote("");
-    await load();
   };
+
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const handleCancel = async (id: string) => {
     if (!user) return;
     if (!confirm("هل أنت متأكد من إلغاء طلب السحب؟")) return;
-    const res = await cancelMyWithdrawal({
-      data: { userId: user.id, withdrawalId: id },
-    });
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
+    setCancellingId(id);
+    try {
+      const res = await cancelMyWithdrawal({
+        data: { userId: user.id, withdrawalId: id },
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("تم إلغاء الطلب");
+      await load();
+    } catch (err) {
+      toast.error("تعذّر إلغاء الطلب" + (err instanceof Error ? ` — ${err.message}` : ""));
+    } finally {
+      setCancellingId(null);
     }
-    toast.success("تم إلغاء الطلب");
-    await load();
   };
 
   if (authLoading || loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-24 text-center">
+        <h1 className="text-xl font-bold">تعذّر تحميل بيانات الإيرادات</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          إعادة المحاولة
+        </button>
       </div>
     );
   }
@@ -279,7 +319,8 @@ function EarningsPage() {
                         <button
                           type="button"
                           onClick={() => handleCancel(w.id)}
-                          className="text-xs font-medium text-destructive hover:underline"
+                          disabled={cancellingId === w.id}
+                          className="text-xs font-medium text-destructive hover:underline disabled:opacity-50"
                         >
                           إلغاء
                         </button>

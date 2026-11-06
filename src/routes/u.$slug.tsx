@@ -45,18 +45,16 @@ export const Route = createFileRoute("/u/$slug")({
 
     return {
       // Patient pages default to noindex unless the user explicitly opts in.
-      meta: [
-        ...(p?.visibility === "public"
-          ? []
-          : [{ name: "robots", content: "noindex, nofollow" }]),
-        ...buildMeta({
-          title,
-          description,
-          path,
-          image: p?.avatarUrl ?? undefined,
-          type: "profile",
-        }),
-      ],
+      // Must go through buildMeta: a separate robots tag placed before its own
+      // "index, follow" tag is dropped by TanStack's head de-duplication.
+      meta: buildMeta({
+        title,
+        description,
+        path,
+        image: p?.avatarUrl ?? undefined,
+        type: "profile",
+        noindex: p?.visibility !== "public",
+      }),
       links: buildSeoLinks(path),
       scripts: p
         ? [
@@ -200,7 +198,10 @@ function PatientPublicPage() {
                         {t("Emergency contact", "اتصال طوارئ")}
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
-                        {t("Visible to emergency responders only.", "يظهر للمسعفين فقط.")}
+                        {t(
+                          "Shown only if the owner chose to make it public.",
+                          "يظهر فقط إذا اختار صاحب الملف إظهاره للعامة.",
+                        )}
                       </div>
                     </div>
                   </div>

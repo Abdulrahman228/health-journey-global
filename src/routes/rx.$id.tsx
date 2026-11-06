@@ -43,9 +43,15 @@ function PrescriptionPrintPage() {
     }
     let cancelled = false;
     (async () => {
-      const view = await getPrescriptionView({
-        data: { userId: user.id, prescriptionId: id },
-      });
+      let view: PrescriptionView | null;
+      try {
+        view = await getPrescriptionView({
+          data: { userId: user.id, prescriptionId: id },
+        });
+      } catch {
+        // Bad id / network / server error → same "unavailable" screen, no endless spinner.
+        view = null;
+      }
       if (cancelled) return;
       if (!view) {
         setNotFound(true);

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { HeartPulse, Save, Eye, EyeOff, Info } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useLanguage } from "@/hooks/useLanguage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,38 +37,45 @@ export function MedicalCardEditor({ profileId }: MedicalCardEditorProps) {
   const { t, language } = useLanguage();
   const qc = useQueryClient();
 
-  const { data: card = {}, isLoading } = useQuery({
+  const { data: card, isLoading, isError } = useQuery({
     queryKey: ["medical-card", profileId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("profiles")
         .select("medical_card")
         .eq("id", profileId)
         .maybeSingle();
       if (error) throw error;
-      return ((data?.medical_card as MedicalCard) ?? {}) as MedicalCard;
+      // jsonb column → app shape (written only by this editor).
+      return (data?.medical_card ?? {}) as MedicalCard;
     },
   });
 
   const [local, setLocal] = useState<MedicalCard>({});
 
   useEffect(() => {
-    if (!isLoading) setLocal(card);
-  }, [isLoading, card]);
+    // Depend on the query data itself (a `= {}` default would be a new object
+    // every render and loop this effect).
+    if (card) setLocal(card);
+  }, [card]);
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("profiles")
-        .update({ medical_card: local })
-        .eq("id", profileId);
+        .update({ medical_card: local as Json })
+        .eq("id", profileId)
+        .select("id");
       if (error) throw error;
+      // RLS (auth.uid() = user_id) filters silently → 0 rows means not saved.
+      if (!data?.length) throw new Error(t("Could not save the medical card", "تعذّر حفظ البطاقة الطبية"));
     },
     onSuccess: () => {
       toast.success(t("Medical card saved", "تم حفظ البطاقة الطبية"));
       qc.invalidateQueries({ queryKey: ["medical-card", profileId] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) =>
+      toast.error(e.message || t("Could not save the medical card", "تعذّر حفظ البطاقة الطبية")),
   });
 
   const setValue = (key: MedicalFieldKey, value: string) =>
@@ -77,6 +85,15 @@ export function MedicalCardEditor({ profileId }: MedicalCardEditorProps) {
     setLocal((c) => withField(c, key, { public: isPublic }));
 
   if (isLoading) return null;
+  // Never render an empty editor over a card we failed to load — saving it
+  // would wipe the stored values.
+  if (isError) {
+    return (
+      <section className="mt-6 rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
+        {t("Could not load your medical card.", "تعذّر تحميل بطاقتك الطبية.")}
+      </section>
+    );
+  }
 
   return (
     <section className="mt-6 rounded-2xl border border-border bg-card p-6">

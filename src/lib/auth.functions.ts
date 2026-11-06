@@ -6,9 +6,57 @@ import { signupRateLimit, passwordResetRateLimit } from "./_rate-limit";
 import { assertSelf } from "./_authz";
 import { normalizePhone } from "./phone";
 import { emailSignUpSchema } from "./auth.signup.schema";
-import { ensureRoleSpecificDetails, performEmailSignUp } from "./auth.signup.server";
+import {
+  buildTokenHashLink,
+  ensureRoleSpecificDetails,
+  performEmailSignUp,
+  trustedOrigin,
+} from "./auth.signup.server";
+import type { Database } from "@/integrations/supabase/types";
 
 type BootstrapRole = "doctor" | "patient";
+type AppRole = Database["public"]["Enums"]["app_role"];
+
+/**
+ * ALL of a user's roles (user_roles holds one row per role — doctor+admin and
+ * admin+super_admin+patient users exist, so never `.limit(1)` / `.maybeSingle()`).
+ */
+async function getRoles(userId: string): Promise<AppRole[]> {
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => r.role);
+}
+
+/**
+ * Give a brand-new account its first role, then make sure the details row for
+ * the doctor / patient side exists. Existing accounts keep their roles; a
+ * lab / pharmacy / admin-only account never gets a patient shell.
+ */
+async function ensureRolesAndDetails(
+  userId: string,
+  requested: BootstrapRole | undefined,
+): Promise<{ roles: AppRole[]; role: BootstrapRole | null }> {
+  let roles = await getRoles(userId);
+  if (roles.length === 0) {
+    const first: BootstrapRole = requested ?? "patient";
+    const { error } = await supabaseAdmin
+      .from("user_roles")
+      .insert({ user_id: userId, role: first });
+    // 23505: a parallel call already inserted it — fine.
+    if (error && error.code !== "23505") throw new Error(error.message);
+    roles = [first];
+  }
+  const role: BootstrapRole | null = roles.includes("doctor")
+    ? "doctor"
+    : roles.includes("patient")
+      ? "patient"
+      : null;
+  if (role) await ensureRoleSpecificDetails(userId, role);
+  return { roles, role };
+}
 
 export const signUpUser = createServerFn({ method: "POST" })
   // 5 sign-ups per hour per IP keeps account-creation abuse / spam in check.
@@ -81,38 +129,28 @@ export const bootstrapPhoneUser = createServerFn({ method: "POST" })
       .from("user_contacts")
       .upsert({ user_id: userId, phone }, { onConflict: "user_id" });
 
-    // Role (first one wins; later calls never change it).
-    const { data: existingRole } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
-    const role: BootstrapRole =
-      existingRole?.role === "doctor" || existingRole?.role === "patient"
-        ? existingRole.role
-        : (data.role ?? "patient");
-    if (!existingRole) {
-      const { error: roleErr } = await supabaseAdmin
-        .from("user_roles")
-        .insert({ user_id: userId, role });
-      if (roleErr) throw new Error(roleErr.message);
-    }
-    await ensureRoleSpecificDetails(userId, role);
+    // Role (first one wins; later calls never change it). Reads ALL roles.
+    const { roles, role: detailsRole } = await ensureRolesAndDetails(userId, data.role);
+    const role: BootstrapRole = detailsRole ?? "patient";
 
-    // Patients: inherit the profile a doctor registered under this number.
+    // Patients only (never doctors / labs / pharmacies / admins): inherit the
+    // profile a doctor registered under this number. Best effort — a failure
+    // here must not block the sign-in itself.
     let adopted = false;
     let doctors: string[] = [];
-    if (role === "patient") {
-      const { data: adoptRes } = await context.supabase.rpc(
-        "adopt_managed_profile_by_phone" as never,
+    if (roles.length > 0 && roles.every((r) => r === "patient")) {
+      const { data: adoptRes, error: adoptErr } = await context.supabase.rpc(
+        "adopt_managed_profile_by_phone",
       );
-      const r = (adoptRes ?? null) as { adopted?: boolean; doctors?: string[] } | null;
-      adopted = Boolean(r?.adopted);
-      doctors = Array.isArray(r?.doctors) ? r!.doctors!.map(String) : [];
+      if (adoptErr) {
+        console.error("[bootstrapPhoneUser] adopt_managed_profile_by_phone:", adoptErr.message);
+      } else if (adoptRes && typeof adoptRes === "object" && !Array.isArray(adoptRes)) {
+        adopted = adoptRes.adopted === true;
+        doctors = Array.isArray(adoptRes.doctors) ? adoptRes.doctors.map(String) : [];
+      }
     }
 
-    return { success: true, isNew, role, adopted, doctors };
+    return { success: true, isNew, role, roles, adopted, doctors };
   });
 
 export const bootstrapOAuthUser = createServerFn({ method: "POST" })
@@ -161,29 +199,11 @@ export const bootstrapOAuthUser = createServerFn({ method: "POST" })
       if (profileInsertError) throw new Error(profileInsertError.message);
     }
 
-    const { data: existingRole } = await supabaseAdmin
-      .from("user_roles")
-      .select("id, role")
-      .eq("user_id", data.userId)
-      .limit(1)
-      .maybeSingle();
+    // First role for a new account; existing (possibly multi-role) accounts
+    // keep theirs. Details rows only for the doctor / patient side.
+    const { roles } = await ensureRolesAndDetails(data.userId, finalRole);
 
-    if (!existingRole) {
-      const { error: roleInsertError } = await supabaseAdmin.from("user_roles").insert({
-        user_id: data.userId,
-        role: finalRole,
-      });
-      if (roleInsertError) throw new Error(roleInsertError.message);
-    }
-
-    const detailsRole: BootstrapRole =
-      existingRole?.role === "doctor" || existingRole?.role === "patient"
-        ? existingRole.role
-        : finalRole;
-
-    await ensureRoleSpecificDetails(data.userId, detailsRole);
-
-    return { success: true };
+    return { success: true, roles };
   });
 
 export const getUserProfile = createServerFn({ method: "POST" })
@@ -221,7 +241,9 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const email = data.email.trim().toLowerCase();
-    const redirectTo = data.redirectTo ?? "https://mytabibi.com/reset-password";
+    // Only one of OUR origins may receive the reset token (never a raw client URL).
+    const origin = trustedOrigin(data.redirectTo);
+    const redirectTo = `${origin}/reset-password`;
 
     // Constant-time success path — never disclose whether the email exists.
     const okResponse = { ok: true as const };
@@ -241,7 +263,16 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
         return okResponse;
       }
 
-      const actionLink = linkData.properties.action_link;
+      // token_hash link → /reset-password calls verifyOtp (the PKCE browser
+      // client cannot consume the implicit-grant redirect of action_link).
+      const actionLink = linkData.properties.hashed_token
+        ? buildTokenHashLink(
+            origin,
+            "/reset-password",
+            linkData.properties.hashed_token,
+            "recovery",
+          )
+        : linkData.properties.action_link;
 
       // 2. Look up display name (best-effort).
       let recipientName: string | null = null;
@@ -252,7 +283,7 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
           .select("full_name")
           .eq("user_id", userId)
           .maybeSingle();
-        recipientName = (profile?.full_name as string | null) ?? null;
+        recipientName = profile?.full_name ?? null;
       }
 
       // 3. Render + send email.

@@ -5,7 +5,7 @@ import { sanitizeHtml } from "@/lib/sanitize";
 import { autoLinkSpecialties } from "@/lib/auto-link";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { Calendar, Clock, ArrowLeft, ArrowRight } from "lucide-react";
-import { loadArticleForSeo, type ArticleSeoData } from "@/lib/articles.functions";
+import { loadArticleForSeo } from "@/lib/articles.functions";
 import { useLanguage } from "@/hooks/useLanguage";
 import { buildMeta, buildSeoLinks, canonicalUrl, truncate } from "@/lib/seo";
 import { articleSchema, breadcrumbSchema, jsonLdString } from "@/lib/schema";
@@ -82,7 +82,7 @@ export const Route = createFileRoute("/articles/$slug")({
 });
 
 function ArticlePage() {
-  const { article } = Route.useLoaderData() as { article: ArticleSeoData };
+  const { article } = Route.useLoaderData();
   const { isRTL } = useLanguage();
   const Arrow = isRTL ? ArrowLeft : ArrowRight;
 

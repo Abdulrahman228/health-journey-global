@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
+import { toast } from "sonner";
 import { PatientShell } from "@/components/patient/PatientNav";
 import {
   Bell,
@@ -89,15 +90,22 @@ function NotificationsPage() {
   const markRead = useMutation({
     mutationFn: async (ids: string[]) => {
       if (ids.length === 0) return;
-      await supabase.rpc("mark_notifications_read", { _ids: ids });
+      const { error } = await supabase.rpc("mark_notifications_read", { _ids: ids });
+      if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["notif-unread"] });
+    },
+    onError: () =>
+      toast.error(t("Could not update notifications", "تعذّر تحديث حالة الإشعارات")),
   });
 
   const unreadIds = items.filter((n) => !n.is_read).map((n) => n.id);
 
   const openItem = async (n: NotifRow) => {
-    if (!n.is_read) await markRead.mutateAsync([n.id]);
+    // Marking read must never block following the link.
+    if (!n.is_read) await markRead.mutateAsync([n.id]).catch(() => undefined);
     if (n.link && n.link !== "/notifications") window.location.href = n.link;
   };
 

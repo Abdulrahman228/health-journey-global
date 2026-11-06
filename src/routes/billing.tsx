@@ -72,7 +72,11 @@ function BillingPage() {
     if (!authLoading && !isAuthenticated) navigate({ to: "/login" });
   }, [authLoading, isAuthenticated, navigate]);
 
-  const { data: invoices, isLoading: invoicesLoading } = useQuery({
+  const {
+    data: invoices,
+    isLoading: invoicesLoading,
+    isError: invoicesError,
+  } = useQuery({
     queryKey: ["invoices", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -211,6 +215,10 @@ function BillingPage() {
           {invoicesLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : invoicesError ? (
+            <div role="alert" className="px-6 py-10 text-center text-sm text-destructive">
+              {t("Couldn't load invoices. Please try again.", "تعذّر تحميل الفواتير. أعد المحاولة.")}
             </div>
           ) : !invoices || invoices.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-6 py-16 text-center">

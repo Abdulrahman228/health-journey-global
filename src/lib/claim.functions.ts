@@ -109,7 +109,8 @@ export const claimDoctorProfile = createServerFn({ method: "POST" })
       if (/already|exists|registered/i.test(msg)) {
         throw new Error("هذا البريد مسجّل بالفعل. سجّل الدخول ثم طالب بالملف.");
       }
-      throw new Error(msg || "تعذّر إنشاء الحساب.");
+      console.error("[claim] createUser failed", msg);
+      throw new Error("تعذّر إنشاء الحساب. حاول مرة أخرى.");
     }
     const userId = authData.user.id;
 
@@ -122,16 +123,23 @@ export const claimDoctorProfile = createServerFn({ method: "POST" })
     if (profileError || !profile) {
       // Roll back the orphaned auth user so the doctor can retry cleanly.
       await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
-      throw new Error(profileError?.message ?? "تعذّر إنشاء الملف الشخصي.");
+      console.error("[claim] profile insert failed", profileError?.message);
+      throw new Error("تعذّر إنشاء الملف الشخصي. حاول مرة أخرى.");
     }
 
-    await supabaseAdmin.from("user_roles").insert({ user_id: userId, role: "doctor" });
+    const { error: roleError } = await supabaseAdmin
+      .from("user_roles")
+      .insert({ user_id: userId, role: "doctor" });
+    if (roleError) console.error("[claim] doctor role insert failed", roleError.message);
 
     const { data: doctor, error: ddError } = await supabaseAdmin
       .from("doctor_details")
       .insert({
         profile_id: profile.id,
-        specialty: row.specialty ?? "General",
+        // Same as normal sign-up: policies like appointments_doctor_read and
+        // doctor_details_select_own compare doctor_details.user_id to auth.uid().
+        user_id: userId,
+        specialty: row.specialty ?? "طب عام", // specialties.name_ar for slug "general"
         clinic_address: row.address,
         source: "claimed_scrape",
         is_claimed: true,
@@ -141,7 +149,13 @@ export const claimDoctorProfile = createServerFn({ method: "POST" })
       })
       .select("id")
       .single();
-    if (ddError || !doctor) throw new Error(ddError?.message ?? "تعذّر إنشاء ملف الطبيب.");
+    if (ddError || !doctor) {
+      // Roll back (profiles.user_id → auth.users cascades) so the doctor can retry.
+      await supabaseAdmin.from("profiles").delete().eq("id", profile.id);
+      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
+      console.error("[claim] doctor_details insert failed", ddError?.message);
+      throw new Error("تعذّر إنشاء ملف الطبيب. حاول مرة أخرى.");
+    }
 
     // Store the phone privately (same place normal sign-up puts it).
     await supabaseAdmin.from("user_contacts").insert({ user_id: userId, phone: data.phone });
@@ -209,9 +223,12 @@ export const optOutListing = createServerFn({ method: "POST" })
         opted_out_at: new Date().toISOString(),
         opted_out_reason: reasonText,
         listing_status: "suppressed",
-      } as never) // opted_out_reason: added by migration 20261104100000 §7; regenerate types after apply
+      })
       .eq("id", row.id);
-    if (optErr) throw new Error(optErr.message);
+    if (optErr) {
+      console.error("[claim] opt-out failed", optErr.message);
+      throw new Error("تعذّر تسجيل طلبك، حاول مرة أخرى.");
+    }
 
     await notifyAdmins({
       kind: "listing_opt_out",

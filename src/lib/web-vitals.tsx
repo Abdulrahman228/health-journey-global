@@ -105,9 +105,9 @@ async function start() {
 export function WebVitalsReporter() {
   useEffect(() => {
     // Defer until idle so we don't compete with hydration / LCP itself
-    const win = window as unknown as { requestIdleCallback?: (cb: () => void) => number };
-    if (typeof win.requestIdleCallback === "function") {
-      win.requestIdleCallback(() => void start());
+    // requestIdleCallback is in lib.dom but missing in Safari < 16.4 at runtime.
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(() => void start());
     } else {
       setTimeout(() => void start(), 1500);
     }

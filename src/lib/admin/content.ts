@@ -7,9 +7,8 @@ import { AdminDeleteContentSchema } from "./_schemas";
 /**
  * Delete community content — moderation (level: admin).
  *
- *  - post   → removes children (reactions, reports, drug info, replies) first,
- *             then the post.
- *  - reply  → removes direct child replies, then the reply.
+ *  - post   → deletes the post (reactions, reports, drug info, replies cascade).
+ *  - reply  → deletes the reply (nested replies + reports cascade).
  *  - review → deletes the review row.
  *
  * Server logic stays inside the inline handler so it is stripped from the client.
@@ -26,21 +25,17 @@ export const adminDeleteContent = createServerFn({ method: "POST" })
       mutate: async () => {
         const { contentType, contentId } = data;
 
-        if (contentType === "post") {
-          await supabaseAdmin.from("post_reactions").delete().eq("post_id", contentId);
-          await supabaseAdmin.from("post_reports").delete().eq("post_id", contentId);
-          await supabaseAdmin.from("post_drug_info").delete().eq("post_id", contentId);
-          await supabaseAdmin.from("post_replies").delete().eq("post_id", contentId);
-          const { error } = await supabaseAdmin.from("posts").delete().eq("id", contentId);
-          if (error) throw new Error(error.message);
-        } else if (contentType === "reply") {
-          await supabaseAdmin.from("post_replies").delete().eq("parent_reply_id", contentId);
-          const { error } = await supabaseAdmin.from("post_replies").delete().eq("id", contentId);
-          if (error) throw new Error(error.message);
-        } else {
-          const { error } = await supabaseAdmin.from("reviews").delete().eq("id", contentId);
-          if (error) throw new Error(error.message);
-        }
+        // Children (reactions, reports, drug info, nested replies) are removed
+        // by ON DELETE CASCADE FKs on posts / post_replies. `.select("id")`
+        // turns "nothing matched" into a real error instead of a fake success.
+        const { data: deleted, error } =
+          contentType === "post"
+            ? await supabaseAdmin.from("posts").delete().eq("id", contentId).select("id")
+            : contentType === "reply"
+              ? await supabaseAdmin.from("post_replies").delete().eq("id", contentId).select("id")
+              : await supabaseAdmin.from("reviews").delete().eq("id", contentId).select("id");
+        if (error) throw new Error(error.message);
+        if (!deleted || deleted.length === 0) throw new Error("Content not found.");
 
         return {
           resourceId: contentId,

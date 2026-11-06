@@ -58,10 +58,16 @@ function LabDashboardPage() {
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const myLab = await getMyLab(user.id);
-    setLab(myLab);
-    if (myLab) setOrders(await listLabInboxOrders());
-    setLoading(false);
+    try {
+      const myLab = await getMyLab(user.id);
+      setLab(myLab);
+      if (myLab) setOrders(await listLabInboxOrders());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("Failed to load", "تعذّر التحميل"));
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {

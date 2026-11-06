@@ -65,7 +65,7 @@ function AdminReviewsPage() {
       });
       setRows(data);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "تعذّر تحميل التقييمات");
+      toast.error("تعذّر تحميل التقييمات" + (e instanceof Error ? ": " + e.message : ""));
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ function AdminReviewsPage() {
       toast.success(decision === "approved" ? "تم الاعتماد" : "تم الرفض");
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "فشلت العملية");
+      toast.error("فشلت العملية" + (e instanceof Error ? ": " + e.message : ""));
     } finally {
       setActingId(null);
     }
@@ -340,7 +340,7 @@ function DeleteReviewModal({
       toast.success("تم حذف التقييم");
       onDone();
     } catch (e) {
-      toast.error("فشل الحذف: " + (e as Error).message);
+      toast.error("فشل الحذف: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }

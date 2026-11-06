@@ -57,7 +57,7 @@ const HOMEPAGE_FAQ = [
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: buildMeta({
-      title: "احجز موعد طبيب أونلاين 24/7 — 2,500+ طبيب موثّق | طبانا",
+      title: "احجز موعد طبيب أونلاين 24/7 — أطباء موثّقون | طبانا",
       description:
         "احجز موعدك مع أفضل الأطباء في الوطن العربي خلال دقائق — استشارة فيديو آمنة، أسعار شفافة، تأكيد فوري. جرّب طبانا مجاناً اليوم.",
       path: "/",
@@ -123,8 +123,8 @@ function HeroSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRT
             </h1>
             <p className="mt-6 text-lg leading-8 text-muted-foreground">
               {t(
-                "Tebana connects you with 2,500+ licensed doctors across the Arab world — book in-person visits or secure video consultations, compare prices, read genuine reviews, and manage your medical records on one trusted platform.",
-                "منصة طبانا تربطك بأكثر من 2,500 طبيب مرخّص في الوطن العربي — احجز كشف حضوري أو استشارة فيديو آمنة، قارن الأسعار، اقرأ تقييمات حقيقية، وأدر سجلك الطبي على منصة موثوقة واحدة."
+                "Tebana connects you with licensed doctors across the Arab world — book in-person visits or secure video consultations, compare prices, read genuine reviews, and manage your medical records on one trusted platform.",
+                "منصة طبانا تربطك بأطباء مرخّصين في الوطن العربي — احجز كشف حضوري أو استشارة فيديو آمنة، قارن الأسعار، اقرأ تقييمات حقيقية، وأدر سجلك الطبي على منصة موثوقة واحدة."
               )}
             </p>
 
@@ -158,7 +158,7 @@ function HeroSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRT
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Star className="h-5 w-5 text-teal" />
-                {t("Trusted by 10K+", "يثق به 10 آلاف+")}
+                {t("Genuine patient reviews", "تقييمات حقيقية من المرضى")}
               </div>
             </div>
           </div>
@@ -180,11 +180,13 @@ function HeroSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRT
 }
 
 function StatsSection({ t }: { t: (en: string, ar: string) => string }) {
+  // Product facts, not counters: the old "2,500+ doctors / 50,000+ patients /
+  // 100,000+ appointments" figures were hard-coded and far from the real data.
   const stats = [
-    { icon: Stethoscope, value: "2,500+", label: t("Verified Doctors", "طبيب موثوق") },
-    { icon: Users, value: "50,000+", label: t("Happy Patients", "مريض سعيد") },
-    { icon: Calendar, value: "100,000+", label: t("Appointments", "موعد محجوز") },
-    { icon: Globe, value: "15+", label: t("Cities", "مدينة") },
+    { icon: Stethoscope, value: t("Verified", "موثّقون"), label: t("Licence-reviewed doctors", "أطباء بعد مراجعة الترخيص") },
+    { icon: Calendar, value: "24/7", label: t("Online booking", "حجز أونلاين على مدار الساعة") },
+    { icon: Users, value: t("Video", "فيديو"), label: t("Secure online consultations", "استشارات أونلاين آمنة") },
+    { icon: Globe, value: t("Arabic", "عربي"), label: t("Built for Arab patients", "مصمَّم للمرضى العرب") },
   ];
 
   return (

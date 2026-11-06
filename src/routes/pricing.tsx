@@ -62,7 +62,11 @@ function PricingPage() {
             </p>
             {isActive && subscription?.plan_code && (
               <p className="mt-2 text-sm text-success">
-                خطتك الحالية: <strong>{subscription.plan_code}</strong>
+                خطتك الحالية:{" "}
+                <strong>
+                  {DOCTOR_PLANS.find((p) => p.code === subscription.plan_code)?.nameAr ??
+                    subscription.plan_code}
+                </strong>
               </p>
             )}
           </div>

@@ -37,6 +37,7 @@ type SeedRowInput = {
 };
 
 const NUM_FIELDS = new Set(["lat", "lng", "external_rating", "external_review_cnt"]);
+const SOURCE_KINDS: readonly SourceKind[] = ["syndicate", "referral", "public_listing"];
 
 /** Parse pasted JSON array OR simple CSV (header row) into seed rows. */
 function parseInput(text: string, defaultSource: SourceKind): SeedRowInput[] {
@@ -46,9 +47,12 @@ function parseInput(text: string, defaultSource: SourceKind): SeedRowInput[] {
   const normalize = (o: Record<string, unknown>): SeedRowInput | null => {
     const name = String(o.full_name ?? "").trim();
     if (!name) return null;
+    // Only the lawful sources the server accepts; anything else (e.g. "gmaps")
+    // falls back to the selected default instead of failing the whole batch.
+    const rawSource = String(o.source ?? "").trim();
     const row: Record<string, unknown> = {
       full_name: name,
-      source: (o.source as SourceKind) || defaultSource,
+      source: SOURCE_KINDS.find((k) => k === rawSource) ?? defaultSource,
     };
     for (const key of ["specialty", "phone", "address", "city", "governorate", "source_ref"]) {
       const v = o[key];
@@ -95,6 +99,10 @@ function SeedDirectoryPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ received: number; inserted: number; skipped: number } | null>(null);
 
+  useEffect(() => {
+    if (!authLoading && !roleLoading && !user) void navigate({ to: "/login" });
+  }, [authLoading, roleLoading, user, navigate]);
+
   if (authLoading || roleLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -102,10 +110,7 @@ function SeedDirectoryPage() {
       </div>
     );
   }
-  if (!user) {
-    navigate({ to: "/login" });
-    return null;
-  }
+  if (!user) return null;
   if (!isAdmin) {
     return (
       <div className="mx-auto max-w-md px-4 py-24 text-center" dir="rtl">
@@ -120,7 +125,7 @@ function SeedDirectoryPage() {
     try {
       rows = parseInput(text, source);
     } catch (e) {
-      toast.error("تنسيق غير صالح: " + (e as Error).message);
+      toast.error("تنسيق غير صالح: " + (e instanceof Error ? e.message : String(e)));
       return;
     }
     if (rows.length === 0) {
@@ -138,7 +143,7 @@ function SeedDirectoryPage() {
       setResult(res);
       toast.success(`تم: أُضيف ${res.inserted}، تخطّى ${res.skipped} (مكرر/موجود).`);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error("فشل الاستيراد: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
@@ -253,9 +258,9 @@ function SeededListing({ refreshKey }: { refreshKey: number }) {
       setLoading(true);
       try {
         const res = await list({ data: { status: s } });
-        setRows(res.rows as SeededRow[]);
+        setRows(res.rows);
       } catch (e) {
-        toast.error((e as Error).message);
+        toast.error("تعذّر تحميل الدليل: " + (e instanceof Error ? e.message : String(e)));
       } finally {
         setLoading(false);
       }

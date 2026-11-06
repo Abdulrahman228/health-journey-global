@@ -33,7 +33,7 @@ async function myProfileId(userId: string): Promise<string | null> {
     .select("id")
     .eq("user_id", userId)
     .maybeSingle();
-  return (data?.id as string | null) ?? null;
+  return data?.id ?? null;
 }
 
 export const getLabOrderResults = createServerFn({ method: "GET" })
@@ -56,27 +56,28 @@ export const getLabOrderResults = createServerFn({ method: "GET" })
     const paid = order.payment_status === "paid";
     const me = await myProfileId(data.userId);
 
-    // admin?
-    const { data: adminRow } = await supabaseAdmin
+    // admin? (admin + super_admin users have two rows → limit(1), not maybeSingle)
+    const { data: adminRows } = await supabaseAdmin
       .from("user_roles")
       .select("role")
       .eq("user_id", data.userId)
       .in("role", ["admin", "super_admin"])
-      .maybeSingle();
+      .limit(1);
+    const isAdminUser = (adminRows ?? []).length > 0;
 
     // lab owner?
     const { data: fac } = await supabaseAdmin
-      .from("lab_facilities" as never)
+      .from("lab_facilities")
       .select("owner_user_id")
       .eq("id", order.lab_id)
       .maybeSingle();
-    const isLabOwner = (fac as { owner_user_id?: string } | null)?.owner_user_id === data.userId;
+    const isLabOwner = fac?.owner_user_id === data.userId;
 
     const isPatient = me != null && me === order.patient_profile_id;
     const isAuthorizedDoctor =
       me != null && order.patient_authorized === true && me === order.authorized_doctor_profile_id;
 
-    const allowed = !!adminRow || isLabOwner || (isPatient && paid) || (isAuthorizedDoctor && paid);
+    const allowed = isAdminUser || isLabOwner || (isPatient && paid) || (isAuthorizedDoctor && paid);
     if (!allowed) return [];
 
     const { data: rows } = await supabaseAdmin
@@ -90,13 +91,13 @@ export const getLabOrderResults = createServerFn({ method: "GET" })
       rows.map(async (r) => {
         const { data: signed } = await supabaseAdmin.storage
           .from(BUCKET)
-          .createSignedUrl(r.file_url as string, SIGNED_URL_TTL);
+          .createSignedUrl(r.file_url, SIGNED_URL_TTL);
         return {
-          id: r.id as string,
-          type: r.type as string,
-          fileName: r.file_name as string,
-          notes: (r.notes as string | null) ?? null,
-          createdAt: r.created_at as string,
+          id: r.id,
+          type: r.type,
+          fileName: r.file_name ?? "file",
+          notes: r.notes ?? null,
+          createdAt: r.created_at,
           signedUrl: signed?.signedUrl,
         } satisfies LabResultFile;
       }),

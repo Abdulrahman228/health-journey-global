@@ -11,13 +11,9 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { submitDoctorUrls, submitArticleUrls, submitUrls } from "@/lib/indexnow";
 import { CITIES, cityMatchTerms } from "@/lib/cities";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { isAdmin } from "./_authz";
-
-async function assertAdmin(userId: string) {
-  if (!(await isAdmin(userId))) {
-    throw new Error("Unauthorized: admin only");
-  }
-}
+// Shared gate: reads ALL admin rows. (_authz.isAdmin uses .maybeSingle() over
+// admin+super_admin, which errors -> false for users holding both roles.)
+import { assertAdmin } from "./admin/_kit";
 
 /**
  * Generic IndexNow ping — accepts an arbitrary URL list. Used by
@@ -62,18 +58,18 @@ export const pingIndexNowForDoctor = createServerFn({ method: "POST" })
       const { data: spec } = await supabaseAdmin
         .from("specialties")
         .select("slug")
-        .or(`name_ar.eq.${d.specialty},name_en.eq.${d.specialty}`)
+        // Quote the value: names like "الأورام (الباطني)" break an unquoted .or().
+        .or(`name_ar.eq."${d.specialty.replace(/"/g, "")}",name_en.eq."${d.specialty.replace(/"/g, "")}"`)
+        .limit(1)
         .maybeSingle();
       specialtySlug = spec?.slug ?? null;
     }
 
     // Resolve city slug
     let citySlug: string | null = null;
-    const { data: prof } = await supabaseAdmin
-      .from("profiles")
-      .select("city")
-      .eq("id", d.profile_id)
-      .maybeSingle();
+    const { data: prof } = d.profile_id
+      ? await supabaseAdmin.from("profiles").select("city").eq("id", d.profile_id).maybeSingle()
+      : { data: null };
     const cityName = prof?.city?.trim();
     if (cityName) {
       const matched = CITIES.find((c) => cityMatchTerms(c).includes(cityName));

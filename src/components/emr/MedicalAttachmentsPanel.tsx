@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  createAttachmentUploadUrl,
   deleteAttachment,
   listAttachments,
   recordAttachment,
@@ -40,6 +41,18 @@ const TYPE_OPTIONS: Array<{ v: AttachmentRow["type"]; l: string }> = [
   { v: "prescription", l: "وصفة سابقة" },
   { v: "other", l: "أخرى" },
 ];
+
+/** Server-fn error codes → Arabic for the toast. */
+const ERRORS_AR: Record<string, string> = {
+  Unauthorized: "غير مصرح لك بإدارة مرفقات هذا المريض",
+  Forbidden: "لا يمكنك حذف مرفق رفعه شخص آخر",
+  "Not found": "المرفق غير موجود",
+  "No profile": "أكمل ملفك الشخصي أولاً",
+  "Path mismatch": "مسار الملف غير صالح",
+  "Record mismatch": "الزيارة لا تخص هذا المريض",
+};
+const arError = (code: string | undefined, fallback: string) =>
+  (code && ERRORS_AR[code]) || fallback;
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME = [
@@ -77,15 +90,20 @@ export function MedicalAttachmentsPanel({
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const rows = await listAttachments({
-      data: {
-        userId: user.id,
-        patientProfileId,
-        medicalRecordId: medicalRecordId ?? undefined,
-      },
-    });
-    setItems(rows);
-    setLoading(false);
+    try {
+      const rows = await listAttachments({
+        data: {
+          userId: user.id,
+          patientProfileId,
+          medicalRecordId: medicalRecordId ?? undefined,
+        },
+      });
+      setItems(rows);
+    } catch {
+      toast.error("تعذّر تحميل المرفقات");
+    } finally {
+      setLoading(false);
+    }
   }, [user, patientProfileId, medicalRecordId]);
 
   useEffect(() => {
@@ -113,21 +131,27 @@ export function MedicalAttachmentsPanel({
     setStatus("جارٍ الرفع…");
     try {
       const ext = (file.name.split(".").pop() || "bin").toLowerCase();
-      const uuid =
-        typeof crypto.randomUUID === "function"
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const recordFolder = medicalRecordId ?? "inbox";
-      const path = `${patientProfileId}/${recordFolder}/${uuid}.${ext}`;
+      // One-time signed upload URL, minted server-side after the same
+      // authorization as the list (works for any linked doctor, not only
+      // one who already wrote a visit for this patient).
+      const slot = await createAttachmentUploadUrl({
+        data: {
+          userId: user.id,
+          patientProfileId,
+          medicalRecordId: medicalRecordId ?? null,
+          ext,
+        },
+      });
+      if (!slot.ok) throw new Error(arError(slot.error, "تعذّر تجهيز رفع الملف"));
+      const path = slot.path;
 
       const { error: upErr } = await supabase.storage
         .from("medical-attachments")
-        .upload(path, file, {
+        .uploadToSignedUrl(path, slot.token, file, {
           cacheControl: "3600",
-          upsert: false,
           contentType: file.type || undefined,
         });
-      if (upErr) throw upErr;
+      if (upErr) throw new Error("فشل رفع الملف: " + upErr.message);
 
       const res = await recordAttachment({
         data: {
@@ -143,9 +167,10 @@ export function MedicalAttachmentsPanel({
         },
       });
       if (!res.ok) {
-        // best effort cleanup
+        // best effort cleanup (may be refused by storage RLS for a doctor —
+        // an orphan object is harmless: it is never listed or signed).
         await supabase.storage.from("medical-attachments").remove([path]);
-        throw new Error(res.error);
+        throw new Error(arError(res.error, "تعذّر حفظ بيانات المرفق"));
       }
 
       setStatus("تم الرفع بنجاح");
@@ -165,15 +190,19 @@ export function MedicalAttachmentsPanel({
   const onDelete = async (id: string) => {
     if (!user) return;
     if (!confirm("حذف هذا المرفق نهائياً؟")) return;
-    const res = await deleteAttachment({
-      data: { userId: user.id, attachmentId: id },
-    });
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
+    try {
+      const res = await deleteAttachment({
+        data: { userId: user.id, attachmentId: id },
+      });
+      if (!res.ok) {
+        toast.error(arError(res.error, "تعذّر حذف المرفق"));
+        return;
+      }
+      toast.success("تم الحذف");
+      await load();
+    } catch {
+      toast.error("تعذّر حذف المرفق");
     }
-    toast.success("تم الحذف");
-    await load();
   };
 
   const body = (

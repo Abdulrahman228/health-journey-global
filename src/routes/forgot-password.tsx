@@ -26,10 +26,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
-    meta: [
-      { title: "Forgot Password — Tebana" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
+    meta: [{ title: "Forgot Password — Tebana" }, { name: "robots", content: "noindex, nofollow" }],
   }),
   component: ForgotPasswordPage,
 });
@@ -39,6 +36,7 @@ function ForgotPasswordPage() {
   const submit = useServerFn(requestPasswordReset);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const {
     register,
@@ -48,17 +46,30 @@ function ForgotPasswordPage() {
 
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
+    setError(null);
     try {
       const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/reset-password`
-          : undefined;
+        typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
       await submit({ data: { email: values.email, redirectTo } });
-    } catch {
-      // Server fn always returns ok; ignore network blips silently.
+      setSubmitted(true);
+    } catch (e) {
+      // The server fn itself always answers ok (anti-enumeration), so a throw
+      // here is the rate limiter or the network — say so instead of claiming
+      // that a mail was sent.
+      const m = e instanceof Error ? e.message.toLowerCase() : "";
+      setError(
+        m.includes("too many")
+          ? t(
+              "Too many requests — wait 15 minutes and try again.",
+              "طلبات كثيرة — انتظر 15 دقيقة ثم حاول مرة أخرى.",
+            )
+          : t(
+              "Couldn't send the request — check your connection and try again.",
+              "تعذّر إرسال الطلب — تحقّق من الاتصال وحاول مرة أخرى.",
+            ),
+      );
     } finally {
       setLoading(false);
-      setSubmitted(true);
     }
   };
 
@@ -67,7 +78,11 @@ function ForgotPasswordPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <img src="/logo-mark.png" alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`} className="h-10 w-10 rounded-xl object-cover" />
+            <img
+              src="/logo-mark.png"
+              alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
+              className="h-10 w-10 rounded-xl object-cover"
+            />
             <span className="text-2xl font-bold tracking-tight text-foreground">
               {siteConfig.brand.en}
             </span>
@@ -104,6 +119,14 @@ function ForgotPasswordPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              {error && (
+                <div
+                  role="alert"
+                  className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                >
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-foreground">
                   {t("Email", "البريد الإلكتروني")}
@@ -120,7 +143,7 @@ function ForgotPasswordPage() {
                 </div>
                 {errors.email && (
                   <p className="mt-1 text-xs text-destructive">
-                    {errors.email.message}
+                    {t("Enter a valid e-mail address.", "أدخل بريداً إلكترونياً صحيحاً.")}
                   </p>
                 )}
               </div>
@@ -141,10 +164,7 @@ function ForgotPasswordPage() {
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           {t("Remembered your password?", "تذكرت كلمة المرور؟")}{" "}
-          <Link
-            to="/login"
-            className="font-medium text-primary hover:text-primary/80"
-          >
+          <Link to="/login" className="font-medium text-primary hover:text-primary/80">
             {t("Sign in", "تسجيل الدخول")}
           </Link>
         </p>

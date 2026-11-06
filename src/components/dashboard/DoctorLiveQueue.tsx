@@ -1,15 +1,26 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useLanguage } from "@/hooks/useLanguage";
-import { Users, Play, CheckCircle2, ChevronRight, Building2, Loader2, XCircle, Clock } from "lucide-react";
+import {
+  Users,
+  Play,
+  CheckCircle2,
+  ChevronRight,
+  Building2,
+  Loader2,
+  XCircle,
+  Clock,
+  FilePlus2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 type ClinicLite = { id: string; name: string; city: string | null };
 
 type QueueAppt = {
   id: string;
-  queue_number: number;
+  queue_number: number | null;
   status: string;
   estimated_start_at: string | null;
   called_at: string | null;
@@ -19,7 +30,18 @@ type QueueAppt = {
   patient?: { full_name: string | null; phone: string | null } | null;
 };
 
-const TODAY = () => new Date().toISOString().split("T")[0];
+// LOCAL calendar day (YYYY-MM-DD). toISOString() is the UTC date, which in
+// Egypt (UTC+2/+3) is still "yesterday" until 02:00/03:00 — advance_queue
+// would then look at the wrong day's queue.
+const TODAY = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+/** RPC errors are mostly Arabic already; prefix the English ones. */
+const queueError = (e: Error) =>
+  /[؀-ۿ]/.test(e.message) ? e.message : `تعذّر تنفيذ الإجراء — ${e.message}`;
 
 // Local-day window [00:00, next 00:00) as ISO — matches how the dashboard counts
 // "today" (by scheduled_at), so the queue and the dashboard agree. Filtering by
@@ -76,7 +98,7 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
         .in("status", ["pending", "confirmed", "waiting", "called", "in_progress", "completed"])
         .order("queue_number", { nullsFirst: false });
       if (error) throw error;
-      return (data ?? []) as any;
+      return data ?? [];
     },
   });
 
@@ -106,12 +128,13 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
       if (error) throw error;
       return data;
     },
-    onSuccess: (row: any) => {
-      if (!row) toast.info("لا يوجد مرضى في الانتظار");
-      else toast.success(`تم نداء المريض #${row.queue_number}`);
+    onSuccess: (row) => {
+      // An empty queue comes back as an all-NULL row (plpgsql composite), not null.
+      if (!row?.id) toast.info("لا يوجد مرضى في الانتظار");
+      else toast.success(`تم نداء المريض #${row.queue_number ?? ""}`);
       queryClient.invalidateQueries({ queryKey: ["doctor-queue"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(queueError(e)),
   });
 
   const startVisit = useMutation({
@@ -120,7 +143,7 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["doctor-queue"] }),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(queueError(e)),
   });
 
   const completeVisit = useMutation({
@@ -132,7 +155,7 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
       toast.success("تم إنهاء الكشف");
       queryClient.invalidateQueries({ queryKey: ["doctor-queue"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(queueError(e)),
   });
 
   const cancelAppt = useMutation({
@@ -144,7 +167,7 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
       toast.success("تم الإلغاء");
       queryClient.invalidateQueries({ queryKey: ["doctor-queue"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(queueError(e)),
   });
 
   // Check a scheduled (confirmed) patient into the live queue.
@@ -157,7 +180,7 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
       toast.success("تم تسجيل الحضور");
       queryClient.invalidateQueries({ queryKey: ["doctor-queue"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(queueError(e)),
   });
 
   const scheduled  = queue.filter((q) => q.status === "confirmed" || q.status === "pending"); // booked, not checked in
@@ -281,7 +304,12 @@ export function DoctorLiveQueue({ doctorDetailsId }: { doctorDetailsId: string }
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-muted-foreground">قائمة الانتظار</h3>
               {waiting.map((q) => (
-                <QueueRow key={q.id} q={q} onCancel={() => cancelAppt.mutate(q.id)} />
+                <QueueRow
+                  key={q.id}
+                  q={q}
+                  onCancel={() => cancelAppt.mutate(q.id)}
+                  cancelPending={cancelAppt.isPending}
+                />
               ))}
             </div>
           ) : null}
@@ -339,19 +367,38 @@ function ActiveCard({
           <Play className="h-4 w-4" /> بدء الكشف
         </button>
       ) : (
-        <button
-          onClick={onComplete}
-          disabled={isCompletePending}
-          className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1"
-        >
-          <CheckCircle2 className="h-4 w-4" /> إنهاء الكشف
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Writing the visit with ?appointmentId completes this appointment
+              server-side (createMedicalRecord) — the documented revenue path. */}
+          <Link
+            to="/dashboard/visit/new"
+            search={{ patientId: appt.patient_id, appointmentId: appt.id }}
+            className="px-4 py-2 rounded-lg border border-primary text-primary text-sm font-medium hover:bg-primary/10 flex items-center gap-1"
+          >
+            <FilePlus2 className="h-4 w-4" /> كتابة الكشف والوصفة
+          </Link>
+          <button
+            onClick={onComplete}
+            disabled={isCompletePending}
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1"
+          >
+            <CheckCircle2 className="h-4 w-4" /> إنهاء الكشف
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-function QueueRow({ q, onCancel }: { q: QueueAppt; onCancel: () => void }) {
+function QueueRow({
+  q,
+  onCancel,
+  cancelPending,
+}: {
+  q: QueueAppt;
+  onCancel: () => void;
+  cancelPending: boolean;
+}) {
   return (
     <div className="flex items-center gap-3 bg-muted/30 rounded-lg px-3 py-2">
       <div className="text-lg font-bold text-muted-foreground w-10 text-center">
@@ -368,8 +415,10 @@ function QueueRow({ q, onCancel }: { q: QueueAppt; onCancel: () => void }) {
       </div>
       <button
         onClick={onCancel}
-        className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10"
+        disabled={cancelPending}
+        className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 disabled:opacity-50"
         title="إلغاء"
+        aria-label="إلغاء الموعد"
       >
         <XCircle className="h-4 w-4" />
       </button>

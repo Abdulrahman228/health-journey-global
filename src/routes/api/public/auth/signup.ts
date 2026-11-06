@@ -54,6 +54,10 @@ export const Route = createFileRoute("/api/public/auth/signup")({
           if (/invalid/i.test(message) && /email/i.test(message)) {
             return json({ ok: false, error: "email_invalid" }, 400);
           }
+          if (message === "confirmation_email_failed") {
+            // Account was rolled back — the app can simply retry later.
+            return json({ ok: false, error: "email_send_failed" }, 503);
+          }
           console.error("[api/public/auth/signup]", message);
           return json({ ok: false, error: "signup_failed" }, 500);
         }

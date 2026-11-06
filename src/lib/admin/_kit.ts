@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Database } from "@/integrations/supabase/types";
 
 type Json = Database["public"]["Tables"]["audit_logs"]["Insert"]["metadata"];
+/** JSON-serializable object accepted by audit_logs.metadata (jsonb). */
+export type AuditMetadata = { [key: string]: Json | undefined };
 
 // -----------------------------------------------------------------------------
 // Admin Kit — shared foundation for every admin server function.
@@ -90,7 +92,7 @@ export interface AuditEntry {
   action: string;
   resourceType: string;
   resourceId?: string | null;
-  metadata?: Record<string, unknown> | null;
+  metadata?: AuditMetadata | null;
 }
 
 /**
@@ -105,7 +107,7 @@ export async function writeAudit(entry: AuditEntry): Promise<void> {
     resource_id: entry.resourceId ?? null,
     ip_address: entry.actor.ip,
     user_agent: entry.actor.ua,
-    metadata: (entry.metadata ?? null) as unknown as Json,
+    metadata: entry.metadata ?? null,
   });
   if (error) {
     console.error(`[audit] failed to persist "${entry.action}":`, error.message);
@@ -125,7 +127,7 @@ export async function runAdminAction<R>(opts: {
   mutate: () => Promise<{
     resourceId?: string | null;
     summary?: string;
-    metadata?: Record<string, unknown>;
+    metadata?: AuditMetadata;
     result: R;
   }>;
 }): Promise<R> {

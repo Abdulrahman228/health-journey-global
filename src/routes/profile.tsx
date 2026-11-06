@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { HeartPulse, User, Mail, Shield } from "lucide-react";
@@ -19,6 +21,21 @@ export const Route = createFileRoute("/profile")({
 function ProfilePage() {
   const { user, profile, role, isAuthenticated, isLoading } = useAuth();
   const { t } = useLanguage();
+
+  // Real account status (admins can ban) instead of a hard-coded "Active".
+  const { data: accountStatus } = useQuery({
+    queryKey: ["my-profile-status", profile?.id],
+    enabled: !!profile?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("status")
+        .eq("id", profile!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.status ?? "active";
+    },
+  });
 
   if (isLoading) {
     return (
@@ -53,7 +70,7 @@ function ProfilePage() {
             <h1 className="text-xl font-bold text-foreground">
               {t("Your Profile", "ملفك الشخصي")}
             </h1>
-            <p className="text-sm text-muted-foreground">{user?.email}</p>
+            <p className="text-sm text-muted-foreground">{user?.email ?? user?.phone}</p>
           </div>
         </div>
 
@@ -62,7 +79,7 @@ function ProfilePage() {
             <Mail className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="text-sm font-medium text-foreground">{t("Email", "البريد الإلكتروني")}</p>
-              <p className="text-sm text-muted-foreground">{user?.email}</p>
+              <p className="text-sm text-muted-foreground">{user?.email || "—"}</p>
             </div>
           </div>
 
@@ -70,7 +87,13 @@ function ProfilePage() {
             <Shield className="h-5 w-5 text-teal" />
             <div>
               <p className="text-sm font-medium text-foreground">{t("Account Status", "حالة الحساب")}</p>
-              <p className="text-sm text-muted-foreground">{t("Active", "نشط")}</p>
+              <p className="text-sm text-muted-foreground">
+                {accountStatus === undefined
+                  ? "—"
+                  : accountStatus === "banned"
+                    ? t("Suspended", "موقوف")
+                    : t("Active", "نشط")}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-lg bg-accent p-4">

@@ -83,18 +83,25 @@ function PatientDetailPage() {
   // consented to shared care (RLS-gated in the RPC).
   useEffect(() => {
     (async () => {
+      // Best effort: no rows (or an error) simply hides the co-doctors strip.
       const { data } = await supabase.rpc("list_care_doctors_for_patient", {
         p_patient_profile_id: patientProfileId,
       });
-      setCoDoctors(
-        (data as {
-          doctor_profile_id: string;
-          full_name: string | null;
-          specialty: string | null;
-        }[]) ?? [],
-      );
+      setCoDoctors(data ?? []);
     })();
   }, [patientProfileId]);
+
+  // Claim / invite RPC + edge-function error codes → Arabic.
+  const INVITE_ERRORS: Record<string, string> = {
+    no_phone: "لا يوجد رقم هاتف صالح لهذا المريض",
+    already_registered: "هذا المريض أنشأ حسابه بالفعل",
+    already_sent_today: "أُرسلت الدعوة اليوم بالفعل — يمكن إعادة الإرسال غداً",
+    opted_out: "هذا الرقم طلب عدم استقبال رسائل",
+    not_your_patient: "هذا المريض غير مرتبط بحسابك",
+    not_a_doctor: "هذه الميزة للأطباء فقط",
+    no_profile: "أكمل ملفك الشخصي أولاً",
+    daily_cap: "تم بلوغ الحد اليومي للرسائل — حاول غداً",
+  };
 
   // Managed (unclaimed) patient only: generate a claim link the patient uses to
   // adopt this profile and inherit their history.
@@ -104,9 +111,13 @@ function PatientDetailPage() {
       const { data, error } = await supabase.rpc("get_or_create_claim_link", {
         p_patient_profile_id: patientProfileId,
       });
-      if (error) throw error;
+      if (error) throw new Error(INVITE_ERRORS[error.message] ?? "تعذّر إنشاء رابط الدعوة");
       const link = `${window.location.origin}/claim/${data}`;
-      await navigator.clipboard.writeText(link);
+      try {
+        await navigator.clipboard.writeText(link);
+      } catch {
+        throw new Error("تعذّر النسخ تلقائياً — انسخ الرابط يدوياً: " + link);
+      }
       toast.success("تم نسخ رابط الدعوة — أرسله للمريض عبر واتساب/رسالة");
     } catch (e) {
       toast.error((e as Error).message || "تعذّر إنشاء الرابط");
@@ -117,20 +128,13 @@ function PatientDetailPage() {
 
   // (Re)send the invite to the patient by WhatsApp/SMS through the outbox
   // (edge function send-claim-sms → request_patient_invite → send-outbox).
-  const INVITE_ERRORS: Record<string, string> = {
-    no_phone: "لا يوجد رقم هاتف صالح لهذا المريض",
-    already_registered: "هذا المريض أنشأ حسابه بالفعل",
-    already_sent_today: "أُرسلت الدعوة اليوم بالفعل — يمكن إعادة الإرسال غداً",
-    opted_out: "هذا الرقم طلب عدم استقبال رسائل",
-    not_your_patient: "هذا المريض غير مرتبط بحسابك",
-  };
   const handleSmsInvite = async () => {
     setInviting(true);
     try {
       const { data, error } = await supabase.functions.invoke("send-claim-sms", {
         body: { patientProfileId },
       });
-      if (error) throw error;
+      if (error) throw new Error("تعذّر الاتصال بخدمة الرسائل — حاول لاحقاً");
       const res = (data ?? {}) as {
         ok?: boolean;
         error?: string;
@@ -164,7 +168,7 @@ function PatientDetailPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const [{ data: hdr }, prof, hist] = await Promise.all([
+      const [{ data: hdr, error: hdrErr }, prof, hist] = await Promise.all([
         supabase
           .from("profiles")
           .select("full_name, city, avatar_url, user_id")
@@ -173,18 +177,21 @@ function PatientDetailPage() {
         getPatientMedicalProfile({ data: { patientProfileId } }),
         getPatientHistoryForDoctor({ data: { patientProfileId } }),
       ]);
+      if (hdrErr) throw hdrErr;
       setHeader(
         hdr
           ? {
-              fullName: (hdr.full_name as string | null) ?? "—",
-              city: (hdr.city as string | null) ?? null,
-              avatarUrl: (hdr.avatar_url as string | null) ?? null,
-              userId: (hdr.user_id as string | null) ?? null,
+              fullName: hdr.full_name ?? "—",
+              city: hdr.city ?? null,
+              avatarUrl: hdr.avatar_url ?? null,
+              userId: hdr.user_id ?? null,
             }
           : null,
       );
-      setProfile(prof as MedicalProfile | null);
-      setVisits(hist as MedicalRecord[]);
+      setProfile(prof);
+      setVisits(hist);
+    } catch {
+      toast.error("تعذّر تحميل ملف المريض — حاول مرة أخرى");
     } finally {
       setLoading(false);
     }
@@ -235,12 +242,13 @@ function PatientDetailPage() {
           if (!recordId || !visitIds.has(recordId)) return;
           getPrescriptionsForRecord({
             data: { medicalRecordId: recordId },
-          }).then((items) => {
-            setRxByVisit((prev) => ({
-              ...prev,
-              [recordId]: items as Prescription[],
-            }));
-          });
+          })
+            .then((items) => {
+              setRxByVisit((prev) => ({ ...prev, [recordId]: items }));
+            })
+            .catch(() => {
+              /* the open card keeps its last list; a reload refetches */
+            });
         },
       )
       .subscribe();
@@ -253,8 +261,13 @@ function PatientDetailPage() {
   const loadRxFor = useCallback(
     async (recordId: string) => {
       if (rxByVisit[recordId]) return;
-      const items = await getPrescriptionsForRecord({ data: { medicalRecordId: recordId } });
-      setRxByVisit((prev) => ({ ...prev, [recordId]: items as Prescription[] }));
+      try {
+        const items = await getPrescriptionsForRecord({ data: { medicalRecordId: recordId } });
+        setRxByVisit((prev) => ({ ...prev, [recordId]: items }));
+      } catch {
+        toast.error("تعذّر تحميل الوصفات");
+        setRxByVisit((prev) => ({ ...prev, [recordId]: [] }));
+      }
     },
     [rxByVisit],
   );

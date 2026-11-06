@@ -37,7 +37,7 @@ function MissingDrugsPage() {
   const [resolved, setResolved] = useState<"all" | "open" | "resolved">("open");
   const [locating, setLocating] = useState(false);
 
-  const { data: posts, isLoading } = useQuery({
+  const { data: posts, isLoading, isError: postsFailed } = useQuery({
     queryKey: ["missing-drugs", { drugName, city, resolved }],
     queryFn: () =>
       listPosts({
@@ -236,6 +236,10 @@ function MissingDrugsPage() {
             {isLoading ? (
               <div className="flex justify-center py-16">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : postsFailed ? (
+              <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center text-sm text-destructive">
+                {t("Could not load reports. Please try again.", "تعذّر تحميل البلاغات. حاول مرة أخرى.")}
               </div>
             ) : !posts || posts.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border bg-card/30 p-12 text-center">

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import {
   toggleReaction,
   getUserReactions,
   setResolved,
+  toAuthorRole,
   deletePost,
   type FeedPost,
   type FeedReply,
@@ -52,7 +53,8 @@ export const Route = createFileRoute("/feed/post/$id")({
 function PostPage() {
   const { id } = Route.useParams();
   const { t, language } = useLanguage();
-  const { user, role, isAuthenticated } = useAuth();
+  const { user, roles, isAuthenticated } = useAuth();
+  const userId = user?.id ?? null;
   const navigate = useNavigate();
 
   const [post, setPost] = useState<FeedPost | null>(null);
@@ -62,64 +64,87 @@ function PostPage() {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [posting, setPosting] = useState(false);
+  const [liking, setLiking] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     Promise.all([getPost(id), listReplies(id)])
       .then(async ([p, r]) => {
         if (cancelled) return;
-        if (!p) throw notFound();
+        // p === null → the "Post not found" view below.
         setPost(p);
         setReplies(r);
-        if (user) {
-          const reacted = await getUserReactions(user.id, [id]);
+        if (p && userId) {
+          const reacted = await getUserReactions(userId, [id]);
           if (!cancelled) setLiked(reacted.has(id));
         }
       })
-      .catch(() => {})
+      .catch((e) => {
+        console.error("[feed/post] load failed:", e);
+        if (!cancelled) setLoadError(true);
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [id, user]);
+  }, [id, userId]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     supabase
       .from("profiles")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.error("[feed/post] profile lookup failed:", error.message);
         if (data) setProfileId(data.id);
       });
-  }, [user]);
+  }, [userId]);
 
   const handleLike = async () => {
     if (!isAuthenticated || !user || !post) {
       toast.error(t("Sign in to react", "سجّل دخول للتفاعل"));
       return;
     }
+    if (liking) return;
     const prev = liked;
+    const prevPost = post;
+    setLiking(true);
     setLiked(!liked);
     setPost({ ...post, reactions_count: post.reactions_count + (liked ? -1 : 1) });
     try {
       await toggleReaction(post.id, user.id);
     } catch {
       setLiked(prev);
+      setPost(prevPost);
+      toast.error(t("Couldn't update reaction", "تعذّر تحديث التفاعل"));
+    } finally {
+      setLiking(false);
     }
   };
 
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !profileId || !replyText.trim() || !post) return;
+    if (!user || !replyText.trim() || !post) return;
+    if (!profileId) {
+      toast.error(
+        t(
+          "Your profile isn't ready yet — reload the page.",
+          "ملفك الشخصي غير جاهز بعد — أعد تحميل الصفحة.",
+        ),
+      );
+      return;
+    }
     setPosting(true);
     try {
       await createReply({
         postId: post.id,
         authorProfileId: profileId,
-        authorRole: (role ?? "patient") as "doctor" | "patient" | "admin",
+        authorRole: toAuthorRole(roles),
         body: replyText.trim(),
       });
       setReplyText("");
@@ -128,7 +153,8 @@ function PostPage() {
       setPost({ ...post, replies_count: r.length });
       toast.success(t("Reply posted", "تم نشر الرد"));
     } catch (err) {
-      toast.error(t("Failed", "فشل") + ": " + (err instanceof Error ? err.message : ""));
+      console.error("[feed/post] reply failed:", err);
+      toast.error(t("Couldn't post your reply — try again.", "تعذّر نشر الرد — حاول مرة أخرى."));
     } finally {
       setPosting(false);
     }
@@ -145,7 +171,7 @@ function PostPage() {
           : t("Marked as resolved", "تم تحديده كمحلول"),
       );
     } catch {
-      toast.error("Failed");
+      toast.error(t("Couldn't update the post.", "تعذّر تحديث البوست."));
     }
   };
 
@@ -157,7 +183,7 @@ function PostPage() {
       toast.success(t("Deleted", "تم الحذف"));
       navigate({ to: "/feed" });
     } catch {
-      toast.error("Failed");
+      toast.error(t("Couldn't delete the post.", "تعذّر حذف البوست."));
     }
   };
 
@@ -165,6 +191,25 @@ function PostPage() {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-8">
         <div className="h-96 animate-pulse rounded-2xl bg-muted" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto w-full max-w-2xl px-4 py-16 text-center">
+        <p className="text-destructive">
+          {t(
+            "Couldn't load this post. Check your connection.",
+            "تعذّر تحميل البوست. تحقّق من الاتصال.",
+          )}
+        </p>
+        <Link
+          to="/feed"
+          className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
+          {t("Back to community", "العودة للمجتمع")}
+        </Link>
       </div>
     );
   }
@@ -311,6 +356,7 @@ function PostPage() {
         <div className="mt-4 flex items-center gap-4 border-t border-border pt-3">
           <button
             onClick={handleLike}
+            disabled={liking}
             className={`inline-flex items-center gap-1.5 text-sm ${liked ? "text-rose-600" : "text-muted-foreground hover:text-rose-600"}`}
           >
             <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />

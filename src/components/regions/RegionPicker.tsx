@@ -44,6 +44,8 @@ export function RegionPicker({
   const [cities, setCities] = useState<RegionRow[]>([]);
   const [districts, setDistricts] = useState<RegionRow[]>([]);
   const [loadingLevel, setLoadingLevel] = useState<number | null>(null);
+  // A failed load used to look exactly like "no regions registered".
+  const [loadError, setLoadError] = useState(false);
 
   const fetchChildren = useCallback(
     async (parentId: string | null, type: RegionRow["type"]) => {
@@ -57,6 +59,7 @@ export function RegionPicker({
       q = parentId ? q.eq("parent_id", parentId) : q.is("parent_id", null);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
+      setLoadError(false);
       return (data ?? []) as RegionRow[];
     },
     [],
@@ -67,7 +70,10 @@ export function RegionPicker({
     setLoadingLevel(0);
     fetchChildren(null, "country")
       .then(setCountries)
-      .catch(() => setCountries([]))
+      .catch(() => {
+        setCountries([]);
+        setLoadError(true);
+      })
       .finally(() => setLoadingLevel(null));
   }, [fetchChildren]);
 
@@ -82,7 +88,10 @@ export function RegionPicker({
     setLoadingLevel(1);
     fetchChildren(value.countryId, "governorate")
       .then(setGovernorates)
-      .catch(() => setGovernorates([]))
+      .catch(() => {
+        setGovernorates([]);
+        setLoadError(true);
+      })
       .finally(() => setLoadingLevel(null));
   }, [value.countryId, fetchChildren]);
 
@@ -95,7 +104,10 @@ export function RegionPicker({
     setLoadingLevel(2);
     fetchChildren(value.governorateId, "city")
       .then(setCities)
-      .catch(() => setCities([]))
+      .catch(() => {
+        setCities([]);
+        setLoadError(true);
+      })
       .finally(() => setLoadingLevel(null));
   }, [value.governorateId, fetchChildren]);
 
@@ -107,7 +119,10 @@ export function RegionPicker({
     setLoadingLevel(3);
     fetchChildren(value.cityId, "district")
       .then(setDistricts)
-      .catch(() => setDistricts([]))
+      .catch(() => {
+        setDistricts([]);
+        setLoadError(true);
+      })
       .finally(() => setLoadingLevel(null));
   }, [value.cityId, fetchChildren]);
 
@@ -217,6 +232,12 @@ export function RegionPicker({
           )}
         </div>
       </div>
+
+      {loadError && (
+        <p role="alert" className="text-xs text-destructive sm:col-span-2">
+          تعذّر تحميل قائمة المناطق — تحقّق من الاتصال وأعد المحاولة.
+        </p>
+      )}
     </div>
   );
 }

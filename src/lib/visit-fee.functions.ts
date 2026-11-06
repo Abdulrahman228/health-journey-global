@@ -81,13 +81,14 @@ export const determineVisitFee = createServerFn({ method: "GET" })
     // 1) Fetch doctor base fee + profile id
     const { data: dd } = await supabaseAdmin
       .from("doctor_details")
-      .select("id, profile_id, consultation_fee")
+      .select("id, profile_id, consultation_fee, currency")
       .eq("id", data.doctorDetailsId)
       .maybeSingle();
 
     const baseFee = Number(dd?.consultation_fee ?? 0);
     const doctorProfileId = (dd?.profile_id as string | undefined) ?? "";
-    const currency = "EGP";
+    // The doctor's own currency (BookingCard shows this decision's currency).
+    const currency = dd?.currency || "EGP";
 
     if (!doctorProfileId) {
       return {
@@ -244,13 +245,13 @@ export const updateMyFollowupSettings = createServerFn({ method: "POST" })
       .select("id")
       .eq("user_id", data.userId)
       .maybeSingle();
-    if (!prof) return { ok: false as const, error: "no_profile" };
+    if (!prof) return { ok: false as const, error: "لم يتم العثور على الملف الشخصي" };
     const { data: dd } = await supabaseAdmin
       .from("doctor_details")
       .select("id")
       .eq("profile_id", prof.id)
       .maybeSingle();
-    if (!dd) return { ok: false as const, error: "not_a_doctor" };
+    if (!dd) return { ok: false as const, error: "هذا الحساب ليس حساب طبيب" };
     const { error } = await supabaseAdmin
       .from("doctor_followup_settings")
       .upsert(

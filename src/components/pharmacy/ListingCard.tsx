@@ -49,7 +49,7 @@ export function ListingCard({ listing }: { listing: DrugListing }) {
         {listing.price != null && (
           <p className="mt-2 text-sm">
             <span className="font-medium text-foreground">{listing.price}</span>{" "}
-            <span className="text-muted-foreground">{listing.currency}</span>
+            <span className="text-muted-foreground">{listing.currency ?? "EGP"}</span>
           </p>
         )}
         {listing.notes && <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{listing.notes}</p>}

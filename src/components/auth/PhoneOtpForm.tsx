@@ -21,6 +21,8 @@ export type PhoneBootstrapResult = {
   success: boolean;
   isNew: boolean;
   role: "doctor" | "patient";
+  /** Every role the account holds (multi-role users: doctor+admin, lab, …). */
+  roles: string[];
   adopted: boolean;
   doctors: string[];
 };
@@ -42,6 +44,15 @@ const RESEND_SECONDS = 45;
 
 function mapAuthError(message: string, t: (en: string, ar: string) => string): string {
   const m = message.toLowerCase();
+  if (
+    m.includes("invalid_phone") ||
+    m.includes("phone_not_verified") ||
+    m.includes("invalid phone")
+  )
+    return t(
+      "This mobile number could not be verified — check it and try again.",
+      "تعذّر التحقق من رقم الموبايل — راجعه وحاول مرة أخرى.",
+    );
   if (m.includes("signups not allowed") || m.includes("user not found"))
     return t(
       "No account with this number — create one first.",
@@ -65,7 +76,9 @@ function mapAuthError(message: string, t: (en: string, ar: string) => string): s
       "This number is already registered — sign in instead.",
       "هذا الرقم مسجّل بالفعل — سجّل الدخول.",
     );
-  return message;
+  if (m.includes("failed to fetch") || m.includes("network"))
+    return t("No internet connection — try again.", "لا يوجد اتصال بالإنترنت — حاول مرة أخرى.");
+  return t(message, "حدث خطأ غير متوقع — حاول مرة أخرى.");
 }
 
 export function PhoneOtpForm({
@@ -86,6 +99,7 @@ export function PhoneOtpForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  const [verified, setVerified] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -152,19 +166,24 @@ export function PhoneOtpForm({
     setBusy(true);
     setError("");
     try {
-      const { error: vErr } = await supabase.auth.verifyOtp({
-        phone: phoneE164,
-        token,
-        type: "sms",
-      });
-      if (vErr) throw vErr;
-      const result = (await bootstrap({
+      // The code is single-use: if a previous attempt verified it but the
+      // bootstrap call failed, retry only the bootstrap with the live session.
+      if (!verified) {
+        const { error: vErr } = await supabase.auth.verifyOtp({
+          phone: phoneE164,
+          token,
+          type: "sms",
+        });
+        if (vErr) throw vErr;
+        setVerified(true);
+      }
+      const result: PhoneBootstrapResult = await bootstrap({
         data: {
           ...(mode === "signup"
             ? { role, fullName: fullName?.trim() || undefined, city: city?.trim() || undefined }
             : {}),
         },
-      })) as PhoneBootstrapResult;
+      });
       await onDone(result);
     } catch (err) {
       setError(mapAuthError(err instanceof Error ? err.message : String(err), t));
@@ -191,6 +210,7 @@ export function PhoneOtpForm({
             onClick={() => {
               setStep("phone");
               setError("");
+              setVerified(false);
             }}
             className="ms-2 font-medium text-primary hover:underline"
           >

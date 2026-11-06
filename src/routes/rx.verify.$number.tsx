@@ -33,17 +33,24 @@ function VerifyRxPage() {
   const [data, setData] = useState<PrescriptionVerification | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const v = await verifyPrescription({
-        data: { prescriptionNumber: number },
-      });
-      if (cancelled) return;
-      if (!v) setNotFound(true);
-      else setData(v);
-      setLoading(false);
+      try {
+        const v = await verifyPrescription({
+          data: { prescriptionNumber: number },
+        });
+        if (cancelled) return;
+        if (!v) setNotFound(true);
+        else setData(v);
+      } catch {
+        // Network / server error: do NOT tell a pharmacist the Rx is fake.
+        if (!cancelled) setFailed(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -68,7 +75,18 @@ function VerifyRxPage() {
         </p>
       </header>
 
-      {notFound || !data ? (
+      {failed ? (
+        <div
+          role="alert"
+          className="rounded-xl border-2 border-amber-300 bg-amber-50 p-6 text-center dark:bg-amber-950"
+        >
+          <AlertTriangle className="mx-auto h-10 w-10 text-amber-600" aria-hidden="true" />
+          <h2 className="mt-3 text-lg font-bold">تعذّر التحقق الآن</h2>
+          <p className="mt-1 text-sm text-foreground">
+            حدث خطأ في الاتصال أثناء التحقق من الوصفة. أعد المحاولة بعد قليل.
+          </p>
+        </div>
+      ) : notFound || !data ? (
         <div
           role="alert"
           className="rounded-xl border-2 border-destructive bg-destructive/5 p-6 text-center"

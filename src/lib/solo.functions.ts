@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { getDoctorForUser, getProfileIdForUser, isDoctorLinkedToPatient } from "@/lib/_identity";
+import { getDoctorForUser } from "@/lib/_identity";
 
 /**
  * Toggle solo (white-label) mode + branding for the doctor's L3 subdomain.
@@ -15,11 +15,11 @@ export const updateSoloMode = createServerFn({ method: "POST" })
       enabled: z.boolean(),
       brandColor: z
         .string()
-        .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")
+        .regex(/^#[0-9a-fA-F]{6}$/, "اللون يجب أن يكون بصيغة #RRGGBB")
         .nullable()
         .optional(),
-      logoUrl: z.string().url().nullable().optional(),
-      clinicName: z.string().max(100).nullable().optional(),
+      logoUrl: z.string().url("رابط الشعار غير صالح").nullable().optional(),
+      clinicName: z.string().max(100, "اسم العيادة طويل جداً").nullable().optional(),
     }).parse,
   )
   .handler(async ({ data, context }) => {
@@ -33,8 +33,8 @@ export const updateSoloMode = createServerFn({ method: "POST" })
           "00000000-0000-0000-0000-000000000000",
       )
       .maybeSingle();
-    if (ddErr) throw new Error(ddErr.message);
-    if (!dd) throw new Error("Doctor profile not found");
+    if (ddErr) throw new Error("تعذّر تحميل بيانات الطبيب: " + ddErr.message);
+    if (!dd) throw new Error("لم يتم العثور على ملف الطبيب لهذا الحساب");
 
     const update: {
       solo_mode_enabled: boolean;
@@ -49,7 +49,7 @@ export const updateSoloMode = createServerFn({ method: "POST" })
     if (data.clinicName !== undefined) update.solo_clinic_name = data.clinicName;
 
     const { error } = await admin.from("doctor_details").update(update).eq("id", dd.id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("تعذّر حفظ الإعدادات: " + error.message);
     return { ok: true };
   });
 

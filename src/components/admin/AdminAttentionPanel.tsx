@@ -19,21 +19,24 @@ interface Item {
 export function AdminAttentionPanel() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     (async () => {
       const head = { count: "exact" as const, head: true };
       const [verif, subs, withdrawals, tickets, apptPay] = await Promise.all([
+        // Same queue /admin/verifications shows on its "pending" tab.
         supabase
           .from("doctor_details")
           .select("id", head)
-          .or("is_verified.is.false,verification_status.eq.pending"),
+          .eq("verification_status", "pending"),
         supabase.from("subscriptions").select("id", head).eq("is_manual", true).eq("access_status", "pending"),
         supabase.from("doctor_withdrawals").select("id", head).eq("status", "requested"),
         supabase.from("support_tickets").select("id", head).eq("status", "open"),
         supabase.rpc("list_appointment_payment_reviews"),
       ]);
 
+      setFailed([verif, subs, withdrawals, tickets, apptPay].some((r) => r.error));
       const apptCount = Array.isArray(apptPay.data) ? apptPay.data.length : 0;
       const next: Item[] = [
         { key: "verif", label: "توثيقات أطباء بانتظار الاعتماد", count: verif.count ?? 0, to: "/admin/verifications", icon: BadgeCheck },
@@ -64,12 +67,17 @@ export function AdminAttentionPanel() {
         )}
       </div>
 
-      {items.length === 0 ? (
+      {failed && (
+        <p className="mb-2 text-xs text-destructive">
+          تعذّر تحميل بعض العدادات — قد تكون الأرقام غير مكتملة.
+        </p>
+      )}
+      {items.length === 0 && !failed ? (
         <div className="flex items-center gap-2 rounded-xl bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="h-4 w-4" />
           كل الطوابير فارغة — لا يوجد ما يحتاج إجراءً الآن.
         </div>
-      ) : (
+      ) : items.length === 0 ? null : (
         <ul className="grid gap-2 sm:grid-cols-2">
           {items.map((i) => {
             const Icon = i.icon;
