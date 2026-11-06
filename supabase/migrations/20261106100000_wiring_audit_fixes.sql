@@ -223,7 +223,8 @@ END; $$;
 --    withdrawable wallet money / "online" ledger income. Gold also resolved to
 --    15 % because the newest gold plan row (doctor_gold_yearly) says 15 while
 --    /pricing and plans.ts promise 10 %.
---    (Already-posted wrong fees are NOT rewritten here — owner decision.)
+--    Already-posted wrong fees are re-priced separately by
+--    supabase/data_fixes/20261106_commission_backfill_qa_cleanup.sql.
 -- ----------------------------------------------------------------------------
 UPDATE public.subscription_plans SET commission_pct = 10.00
  WHERE code = 'doctor_gold_yearly' AND commission_pct <> 10.00;

@@ -11,11 +11,13 @@ $ErrorActionPreference = "Continue"
 $ref = "wqrrwvaxovrjjiilqkmt"
 Set-Location "C:\lovable\health-journey-global"
 # Already applied: 20261104120000_booking_timezone, 20261104130000_identity_fixes,
-# 20261104140000_visit_status_rules. Order matters: 100000 -> 110000 -> 120000.
+# 20261104140000_visit_status_rules. Order matters: 100000 -> 110000 -> 120000,
+# then the one-off data fix (commission back-fill + QA account cleanup).
 $migrations = @(
   "supabase\migrations\20261106100000_wiring_audit_fixes.sql",
   "supabase\migrations\20261106110000_doctor_search_nearby.sql",
-  "supabase\migrations\20261106120000_app_audit_db_fixes.sql"
+  "supabase\migrations\20261106120000_app_audit_db_fixes.sql",
+  "supabase\data_fixes\20261106_commission_backfill_qa_cleanup.sql"
 )
 # Edge functions changed on 2026-11-06 (auth-send-sms, send-claim-sms and
 # send-outbox share _shared/messaging.ts). Deployed only if all migrations succeed.
