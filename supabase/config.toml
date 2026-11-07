@@ -12,3 +12,8 @@ verify_jwt = false
 
 [functions.send-outbox]
 verify_jwt = false
+
+#   send-push       – called by the notifications DB trigger (pg_net) with the
+#                     mandatory x-webhook-secret header; no user JWT available
+[functions.send-push]
+verify_jwt = false

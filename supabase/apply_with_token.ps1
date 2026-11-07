@@ -11,17 +11,31 @@ $ErrorActionPreference = "Continue"
 $ref = "wqrrwvaxovrjjiilqkmt"
 Set-Location "C:\lovable\health-journey-global"
 # Already applied: 20261104120000_booking_timezone, 20261104130000_identity_fixes,
-# 20261104140000_visit_status_rules. Order matters: 100000 -> 110000 -> 120000,
-# then the one-off data fix (commission back-fill + QA account cleanup).
+# 20261104140000_visit_status_rules. Order matters: 100000 -> 110000 -> 120000
+# -> 20261107100000 (appointment notifications + push trigger), then the one-off
+# data fix (commission back-fill + QA account cleanup).
 $migrations = @(
   "supabase\migrations\20261106100000_wiring_audit_fixes.sql",
   "supabase\migrations\20261106110000_doctor_search_nearby.sql",
   "supabase\migrations\20261106120000_app_audit_db_fixes.sql",
+  "supabase\migrations\20261107100000_notifications_push_wiring.sql",
   "supabase\data_fixes\20261106_commission_backfill_qa_cleanup.sql"
 )
 # Edge functions changed on 2026-11-06 (auth-send-sms, send-claim-sms and
-# send-outbox share _shared/messaging.ts). Deployed only if all migrations succeed.
-$functions = @("places-search", "paymob-initiate", "paymob-webhook", "auth-send-sms", "send-claim-sms", "send-outbox")
+# send-outbox share _shared/messaging.ts); send-push re-deployed 2026-11-07 with
+# verify_jwt=false (config.toml) so the DB trigger can call it with its shared
+# secret. Deployed only if all migrations succeed.
+$functions = @("places-search", "paymob-initiate", "paymob-webhook", "auth-send-sms", "send-claim-sms", "send-outbox", "send-push")
+# Secrets every edge function needs (names only are printed at the end).
+$requiredSecrets = [ordered]@{
+  "Google Maps (clinic search)"   = @("PLACES_API_KEY")
+  "Paymob payments"               = @("PAYMOB_API_KEY", "PAYMOB_INTEGRATION_ID", "PAYMOB_IFRAME_ID", "PAYMOB_HMAC")
+  "Video consultations (LiveKit)" = @("LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_WS_URL")
+  "AI assistant"                  = @("OPENAI_API_KEY")
+  "Mobile push notifications"     = @("FCM_SERVICE_ACCOUNT", "PUSH_WEBHOOK_SECRET")
+  "SMS / phone OTP (Twilio)"      = @("SEND_SMS_HOOK_SECRET", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN")
+  "Automatic patient messages"    = @("OUTBOX_WORKER_SECRET", "SITE_URL")
+}
 
 Write-Host ""
 Write-Host "=== Tebana: apply database updates ===" -ForegroundColor Cyan
@@ -86,6 +100,78 @@ for ($try = 1; $try -le 5; $try++) {
       if ($LASTEXITCODE -ne 0) { Write-Host $out; Write-Host "FAILED to deploy: $fn" -ForegroundColor Red; $failed = $true; break }
       Write-Host "OK: $fn" -ForegroundColor Green
     }
+  }
+
+  if (-not $failed) {
+    # --- Push notifications: ONE shared secret, on the function (PUSH_WEBHOOK_SECRET)
+    #     and in the database Vault (push_webhook_secret, read by the notifications
+    #     trigger). A fresh value is generated on every run (the 11-02 value was
+    #     never saved locally); the Vault entry is updated in place.
+    Write-Host "`n>>> Push: linking the notifications trigger to send-push" -ForegroundColor Cyan
+    $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+    $bytes = New-Object byte[] 24; $rng.GetBytes($bytes)
+    $pushSecret = ([BitConverter]::ToString($bytes)).Replace("-", "").ToLower()
+    $out = & cmd /c "npx -y supabase@3.0.0 secrets set PUSH_WEBHOOK_SECRET=$pushSecret --remote=$ref --yes 2>&1" | Out-String
+    if ($LASTEXITCODE -ne 0) { Write-Host $out; Write-Host "FAILED: secrets set PUSH_WEBHOOK_SECRET" -ForegroundColor Red; $failed = $true }
+    else {
+      $vaultSql = Join-Path $env:TEMP "tebana_push_vault.sql"
+      [IO.File]::WriteAllText($vaultSql,
+        "DO `$`$ DECLARE v_id uuid; BEGIN`n" +
+        "  SELECT id INTO v_id FROM vault.secrets WHERE name = 'push_webhook_secret' LIMIT 1;`n" +
+        "  IF v_id IS NULL THEN PERFORM vault.create_secret('$pushSecret', 'push_webhook_secret', 'x-webhook-secret for send-push (notifications trigger)');`n" +
+        "  ELSE PERFORM vault.update_secret(v_id, '$pushSecret'); END IF;`n" +
+        "END `$`$;`n" +
+        "SELECT 'vault-ok' AS probe;", (New-Object System.Text.UTF8Encoding($false)))
+      $v = Run-Query $vaultSql
+      Remove-Item $vaultSql -ErrorAction SilentlyContinue
+      if ($v.out -notmatch "vault-ok") { Write-Host $v.out; Write-Host "FAILED: storing push secret in Vault" -ForegroundColor Red; $failed = $true }
+      else {
+        $devVars = ".dev.vars"
+        $keep = @(); if (Test-Path $devVars) { $keep = Get-Content $devVars | Where-Object { $_ -notmatch '^PUSH_WEBHOOK_SECRET=' } }
+        Set-Content -Path $devVars -Value ($keep + "PUSH_WEBHOOK_SECRET=$pushSecret") -Encoding utf8
+        Write-Host "OK: push secret set on send-push + Vault (copy kept in .dev.vars, git-ignored)" -ForegroundColor Green
+      }
+    }
+    $pushSecret = $null
+
+    # --- Firebase service account (needed once; Enter to skip if already set) --
+    Write-Host ""
+    Write-Host "Firebase Console -> Project settings -> Service accounts -> 'Generate new private key'"
+    Write-Host "downloads a .json file. Paste its full path to store it as FCM_SERVICE_ACCOUNT,"
+    Write-Host "or press Enter to skip (keeps whatever is set now)."
+    $saPath = Read-Host "Service-account .json path"
+    $saPath = $saPath.Trim().Trim('"')
+    if ($saPath -and (Test-Path $saPath)) {
+      try {
+        $sa = Get-Content $saPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not ($sa.client_email -and $sa.private_key -and $sa.project_id)) { throw "not a Firebase service-account file (client_email / private_key / project_id missing)" }
+        $saJson = $sa | ConvertTo-Json -Compress -Depth 10
+        $envFile = Join-Path $env:TEMP "tebana_fcm.env"
+        # Single quotes: the CLI keeps the \n escapes inside private_key literal.
+        [IO.File]::WriteAllText($envFile, "FCM_SERVICE_ACCOUNT='$saJson'`n", (New-Object System.Text.UTF8Encoding($false)))
+        $out = & cmd /c "npx -y supabase@3.0.0 secrets set --env-file `"$envFile`" --remote=$ref --yes 2>&1" | Out-String
+        Remove-Item $envFile -ErrorAction SilentlyContinue
+        if ($LASTEXITCODE -ne 0) { Write-Host $out; Write-Host "FAILED: secrets set FCM_SERVICE_ACCOUNT" -ForegroundColor Red }
+        else { Write-Host "OK: FCM_SERVICE_ACCOUNT set (project $($sa.project_id))" -ForegroundColor Green }
+      } catch { Write-Host "Skipped FCM_SERVICE_ACCOUNT: $($_.Exception.Message)" -ForegroundColor Yellow }
+    } elseif ($saPath) { Write-Host "File not found, skipped: $saPath" -ForegroundColor Yellow }
+
+    # --- Which secrets are still missing (names only; values are never shown) --
+    Write-Host "`n>>> Edge-function secrets check" -ForegroundColor Cyan
+    $out = & cmd /c "npx -y supabase@3.0.0 secrets list --remote=$ref 2>&1" | Out-String
+    $present = @([regex]::Matches($out, '(?m)^\s*([A-Z][A-Z0-9_]+)\s*\|') | ForEach-Object { $_.Groups[1].Value })
+    if ($present.Count -eq 0) { Write-Host "Could not read the secrets list: $($out.Trim())" -ForegroundColor Yellow }
+    else {
+      $anyMissing = $false
+      foreach ($feature in $requiredSecrets.Keys) {
+        $missing = @($requiredSecrets[$feature] | Where-Object { $present -notcontains $_ })
+        if ($feature -like "SMS*" -and ($present -notcontains "TWILIO_FROM") -and ($present -notcontains "TWILIO_MESSAGING_SERVICE_SID")) { $missing += "TWILIO_FROM (or TWILIO_MESSAGING_SERVICE_SID)" }
+        if ($missing.Count -gt 0) { $anyMissing = $true; Write-Host ("  {0}: missing {1}" -f $feature, ($missing -join ", ")) -ForegroundColor Yellow }
+        else { Write-Host ("  {0}: OK" -f $feature) -ForegroundColor Green }
+      }
+      if ($anyMissing) { Write-Host "  Set a missing one with:  npx -y supabase@3.0.0 secrets set NAME=value --remote=$ref --yes" -ForegroundColor Yellow }
+    }
+    Write-Host "`nManual (dashboard -> Edge Functions): remove the orphan 'quick-responder' - it is a July copy of paymob-initiate." -ForegroundColor Yellow
   }
   Remove-Item Env:SUPABASE_ACCESS_TOKEN -ErrorAction SilentlyContinue
   if ($failed) { Write-Host "`nSend Claude a screenshot of the red line." -ForegroundColor Red }
