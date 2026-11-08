@@ -17,6 +17,7 @@ const EXT: Record<string, string> = {
 const PLAN_LABEL: Record<string, string> = {
   doctor_gold_monthly: "Gold شهري",
   doctor_gold_yearly: "Gold سنوي",
+  doctor_gold_lifetime: "Gold مدى الحياة",
 };
 
 type Phase = "idle" | "uploading" | "done";

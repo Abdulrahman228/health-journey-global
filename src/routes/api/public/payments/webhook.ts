@@ -29,6 +29,7 @@ function resolvePriceId(item: any): string | null {
 const PRICE_TO_PLAN: Record<string, string> = {
   doctor_gold_monthly: "doctor_gold_monthly",
   doctor_gold_yearly: "doctor_gold_yearly",
+  doctor_gold_lifetime: "doctor_gold_lifetime",
   // Legacy → Gold (keeps existing subscribers on a valid plan code).
   doctor_pro_monthly: "doctor_gold_monthly",
   doctor_pro_plus_monthly: "doctor_gold_yearly",
@@ -40,6 +41,7 @@ const PRICE_TO_PLAN: Record<string, string> = {
 const GOLD_PLAN_CODES = new Set<string>([
   "doctor_gold_monthly",
   "doctor_gold_yearly",
+  "doctor_gold_lifetime",
   "doctor_pro_monthly",
   "doctor_pro_plus_monthly",
   "doctor_premium_monthly",

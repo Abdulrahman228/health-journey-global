@@ -193,11 +193,13 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: 'Inter', 'Cairo', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', 'IBM Plex Sans Arabic', system-ui, -apple-system, sans-serif;
   }
 
+  /* One Arabic family site-wide (IBM Plex Sans Arabic); Cairo is no longer
+     loaded — it cost ~100 KB of fonts on every page for the same look. */
   html[lang="ar"] body {
-    font-family: 'Cairo', 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'IBM Plex Sans Arabic', 'Inter', system-ui, -apple-system, sans-serif;
   }
 
   /* Arabic typography fixes:

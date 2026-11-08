@@ -81,7 +81,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { name: "theme-color", content: "#1d4ed8" },
+      { name: "theme-color", content: "#0f7f7c" },
       { name: "color-scheme", content: "light" },
       { name: "format-detection", content: "telephone=no" },
       { name: "mobile-web-app-capable", content: "yes" },
@@ -94,12 +94,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "author", content: `${siteConfig.brand.en} — ${siteConfig.brand.ar}` },
       { name: "application-name", content: `${siteConfig.brand.en} — ${siteConfig.brand.ar}` },
       { httpEquiv: "x-ua-compatible", content: "IE=edge" },
-      ...buildMeta({
-        title: `${siteConfig.brand.ar} ${siteConfig.brand.en} | ${siteConfig.tagline.ar} — حجز طبيب أونلاين`,
-        description: siteConfig.defaultDescription.ar,
-        path: "/",
-        keywords: [...siteConfig.defaultKeywords],
-      }),
+      // Fallback title/description only. Every indexable route sets its own
+      // buildMeta() + buildSeoLinks(); emitting a full homepage meta set here
+      // duplicated og:url/canonical on every page (2026-11 audit).
+      { title: `${siteConfig.brand.ar} ${siteConfig.brand.en} | ${siteConfig.tagline.ar}` },
+      { name: "description", content: siteConfig.defaultDescription.ar },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -109,8 +108,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       // Fonts are injected asynchronously by the inline script below to avoid
-      // render-blocking. <noscript> fallback added via scripts array.
-      ...buildSeoLinks("/"),
+      // render-blocking. Canonical links come from each route's head().
     ],
     scripts: [
       {
@@ -124,7 +122,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         // text renders immediately, then swaps to the web fonts on load.
         // IBM Plex Sans Arabic = the doctor system UI family (see styles.css).
         children:
-          "(function(){var h='https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap';var l=document.createElement('link');l.rel='stylesheet';l.href=h;l.media='print';l.onload=function(){this.media='all';this.onload=null};(document.head||document.documentElement).appendChild(l);})();",
+          "(function(){var h='https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap';var l=document.createElement('link');l.rel='stylesheet';l.href=h;l.media='print';l.onload=function(){this.media='all';this.onload=null};(document.head||document.documentElement).appendChild(l);})();",
       },
       {
         // Register service worker for offline-first PWA experience.

@@ -5,22 +5,55 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { DOCTOR_PLANS, formatEgp, annualSavingsEgp, type PlanCode } from "@/lib/plans";
+import { buildMeta, buildSeoLinks, canonicalUrl, siteConfig } from "@/lib/seo";
+import { jsonLdString } from "@/lib/schema";
+
+const PRICING_DESCRIPTION =
+  "خطة جولد لطبانا: كل المزايا الاحترافية للأطباء. اشترك شهرياً (999 ج.م)، سنوياً (9999 ج.م) أو مدى الحياة بدفعة واحدة (19999 ج.م). تجربة مجانية 30 يوماً، وألغِ في أي وقت.";
+
+// Product + one Offer per billing period, so the plans can show as rich results.
+function pricingSchema() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: "طبانا جولد للأطباء",
+    description: PRICING_DESCRIPTION,
+    brand: { "@type": "Brand", name: siteConfig.brand.ar },
+    offers: DOCTOR_PLANS.map((p) => ({
+      "@type": "Offer",
+      name: p.nameAr,
+      price: p.priceEgp,
+      priceCurrency: "EGP",
+      url: canonicalUrl("/pricing"),
+      availability: "https://schema.org/InStock",
+      seller: { "@id": `${siteConfig.url}/#organization` },
+    })),
+  };
+}
 
 export const Route = createFileRoute("/pricing")({
   component: PricingPage,
   head: () => ({
-    meta: [
-      { title: "خطة جولد للأطباء - طبانا" },
-      {
-        name: "description",
-        content:
-          "خطة جولد لطبانا: كل المزايا الاحترافية للأطباء. اشترك شهرياً (999 ج.م) أو سنوياً (9999 ج.م) ووفّر أكثر. تجربة مجانية 30 يوماً، وألغِ في أي وقت.",
-      },
-    ],
+    meta: buildMeta({
+      title: "خطة جولد للأطباء — شهري، سنوي أو مدى الحياة | طبانا",
+      description: PRICING_DESCRIPTION,
+      path: "/pricing",
+    }),
+    links: buildSeoLinks("/pricing"),
+    scripts: [{ type: "application/ld+json", children: jsonLdString(pricingSchema()) }],
   }),
 });
 
-const PAID_PLAN_CODES = new Set<PlanCode>(["doctor_gold_monthly", "doctor_gold_yearly"]);
+const PAID_PLAN_CODES = new Set<PlanCode>([
+  "doctor_gold_monthly",
+  "doctor_gold_yearly",
+  "doctor_gold_lifetime",
+]);
+const PERIOD_LABEL_AR: Record<string, string> = {
+  monthly: "ج.م / شهرياً",
+  yearly: "ج.م / سنوياً",
+  lifetime: "ج.م مرة واحدة",
+};
 
 function PricingPage() {
   const { user } = useAuth();
@@ -58,7 +91,7 @@ function PricingPage() {
               كل المزايا الاحترافية في خطة واحدة
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-              اختر الفوترة الشهرية أو السنوية. تجربة مجانية 30 يوماً، وألغِ في أي وقت.
+              اختر الفوترة الشهرية أو السنوية، أو ادفع مرة واحدة مدى الحياة. تجربة مجانية 30 يوماً، وألغِ في أي وقت.
             </p>
             {isActive && subscription?.plan_code && (
               <p className="mt-2 text-sm text-success">
@@ -71,8 +104,8 @@ function PricingPage() {
             )}
           </div>
 
-          {/* Billing-period selector (two Gold options) */}
-          <div className="mx-auto mt-10 grid max-w-2xl gap-4 sm:grid-cols-2">
+          {/* Billing-period selector (monthly / yearly / lifetime) */}
+          <div className="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-3">
             {DOCTOR_PLANS.map((plan) => {
               const isSel = plan.code === selected;
               const isYearly = plan.billingPeriod === "yearly";
@@ -99,7 +132,7 @@ function PricingPage() {
                       {formatEgp(plan.priceEgp, "en")}
                     </span>
                     <span className="text-sm text-muted-foreground">
-                      {isYearly ? "ج.م / سنوياً" : "ج.م / شهرياً"}
+                      {PERIOD_LABEL_AR[plan.billingPeriod]}
                     </span>
                   </div>
                   {isYearly && savings > 0 && (

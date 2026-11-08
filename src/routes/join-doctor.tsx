@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useEffect, useState } from "react";
-import { buildMeta } from "@/lib/seo";
+import { buildMeta, buildSeoLinks } from "@/lib/seo";
 import {
   Stethoscope,
   Wallet,
@@ -34,9 +34,10 @@ export const Route = createFileRoute("/join-doctor")({
     meta: buildMeta({
       title: "انضم كطبيب — طبانا | Join as Doctor on Tebana",
       description:
-        "انضم لأكبر منصة استشارات طبية أونلاين فى مصر والعالم العربى. تسجيل مجانى، روشتة إلكترونية، فيديو HD مدمج، ودخل إضافى من الكشف الأونلاين.",
+        "أدِر عيادتك على طبانا: حجز بالدور والمواعيد، روشتة إلكترونية، سجل طبي لكل مريض، واستشارات فيديو. تسجيل مجاني و0% عمولة على كشف العيادة.",
       path: "/join-doctor",
     }),
+    links: buildSeoLinks("/join-doctor"),
   }),
   component: JoinDoctorPage,
 });

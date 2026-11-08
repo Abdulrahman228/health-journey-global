@@ -29,6 +29,7 @@ const HMAC_FIELDS = [
 const PLAN_PERIOD_DAYS: Record<string, number> = {
   doctor_gold_monthly: 30,
   doctor_gold_yearly: 365,
+  doctor_gold_lifetime: 36_500, // one payment; 100 years = never expires in practice
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -182,7 +183,11 @@ Deno.serve(async (req) => {
       return new Response("unmapped order", { status: 200 });
     }
 
-    const expectedPlanCents: Record<string, number> = { doctor_gold_monthly: 999_00, doctor_gold_yearly: 9999_00 };
+    const expectedPlanCents: Record<string, number> = {
+      doctor_gold_monthly: 999_00,
+      doctor_gold_yearly: 9999_00,
+      doctor_gold_lifetime: 19999_00,
+    };
     if (currency !== "EGP" || amountCents < (expectedPlanCents[planCode] ?? Number.MAX_SAFE_INTEGER)) {
       console.error("[paymob-webhook] plan amount mismatch", { userId, planCode, amountCents, currency });
       return new Response("amount mismatch", { status: 200 });

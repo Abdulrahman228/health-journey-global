@@ -133,7 +133,9 @@ function BillingPage() {
     (subscription?.stripe_customer_id?.startsWith("manual_") ?? false);
   const isLifetime = isActive && !subscription?.current_period_end;
   const planLabel =
-    subscription?.plan_code === "doctor_gold_yearly"
+    subscription?.plan_code === "doctor_gold_lifetime"
+      ? t("Gold (Lifetime)", "الخطة الذهبية — مدى الحياة")
+      : subscription?.plan_code === "doctor_gold_yearly"
       ? t("Gold (Yearly)", "الخطة الذهبية — سنوي")
       : subscription?.plan_code === "doctor_gold_monthly"
       ? t("Gold", "الخطة الذهبية")

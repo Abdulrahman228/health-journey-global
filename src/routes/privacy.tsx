@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useLanguage } from "@/hooks/useLanguage";
 import { Shield } from "lucide-react";
-import { buildMeta, siteConfig } from "@/lib/seo";
+import { buildMeta, buildSeoLinks, siteConfig } from "@/lib/seo";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/privacy")({
         "سياسة الخصوصية وحماية البيانات الطبية لمنصة طبانا. معلومات عن جمع البيانات، استخدامها، تشفيرها، وحقوقك القانونية.",
       path: "/privacy",
     }),
+    links: buildSeoLinks("/privacy"),
   }),
   component: PrivacyPage,
 });

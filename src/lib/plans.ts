@@ -1,11 +1,19 @@
 // Single source of truth for doctor subscription plans.
 // Used by /pricing and /join-doctor.
 //
-// Model: Gold is the single paid tier, offered Monthly (999) or Yearly (9999).
+// Model: Gold is the single paid tier, offered Monthly (999), Yearly (9999) or
+// Lifetime (19999, one payment, never expires — stored as a subscription with a
+// NULL current_period_end, which doctor_active_tier() treats as "never expires").
 // (doctor_free remains a valid code for the default/unsubscribed tier and legacy
 // references, but is not shown as a purchasable option.)
 
-export type PlanCode = "doctor_free" | "doctor_gold_monthly" | "doctor_gold_yearly";
+export type PlanCode =
+  | "doctor_free"
+  | "doctor_gold_monthly"
+  | "doctor_gold_yearly"
+  | "doctor_gold_lifetime";
+
+export type BillingPeriod = "monthly" | "yearly" | "lifetime";
 
 export interface PlanFeature {
   en: string;
@@ -19,7 +27,7 @@ export interface DoctorPlan {
   descriptionAr: string;
   descriptionEn: string;
   priceEgp: number; // 0 for free
-  billingPeriod: "monthly" | "yearly";
+  billingPeriod: BillingPeriod;
   featured?: boolean;
   badgeEn?: string;
   badgeAr?: string;
@@ -30,6 +38,12 @@ export interface DoctorPlan {
 
 export const GOLD_MONTHLY_PRICE_EGP = 999;
 export const GOLD_YEARLY_PRICE_EGP = 9999;
+export const GOLD_LIFETIME_PRICE_EGP = 19999;
+
+/** True for plan codes that never expire. */
+export function isLifetimePlan(code: string | null | undefined): boolean {
+  return code === "doctor_gold_lifetime";
+}
 
 /**
  * Annual savings from paying yearly instead of monthly-for-a-year:
@@ -42,8 +56,8 @@ export function annualSavingsEgp(
   return Math.max(0, monthly * 12 - yearly);
 }
 
-// Gold's full feature set — identical for Monthly and Yearly (same tier, only the
-// billing period differs).
+// Gold's full feature set — identical for every billing period (same tier, only
+// how long it lasts differs).
 const GOLD_FEATURES: PlanFeature[] = [
   { en: "Everything in Free", ar: "كل مميزات الخطة المجانية" },
   { en: "Higher organic search ranking", ar: "ترتيب أعلى في نتائج البحث العضوية" },
@@ -91,6 +105,20 @@ export const DOCTOR_PLANS: DoctorPlan[] = [
     badgeAr: "أفضل قيمة",
     ctaEn: "Subscribe yearly",
     ctaAr: "اشترك سنوياً",
+    features: GOLD_FEATURES,
+  },
+  {
+    code: "doctor_gold_lifetime",
+    nameEn: "Gold Lifetime",
+    nameAr: "جولد مدى الحياة",
+    descriptionEn: "Pay once, keep every Gold feature for life.",
+    descriptionAr: "ادفع مرة واحدة واحتفظ بكل مزايا جولد مدى الحياة.",
+    priceEgp: GOLD_LIFETIME_PRICE_EGP,
+    billingPeriod: "lifetime",
+    badgeEn: "One payment",
+    badgeAr: "دفعة واحدة",
+    ctaEn: "Get lifetime access",
+    ctaAr: "اشترك مدى الحياة",
     features: GOLD_FEATURES,
   },
 ];

@@ -1,3 +1,7 @@
 # Apple requires this file to be served as JSON (it has no extension).
 /.well-known/apple-app-site-association
   Content-Type: application/json
+
+# Hashed build assets never change: cache for a year.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

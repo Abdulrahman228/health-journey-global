@@ -28,6 +28,7 @@ const PAYMOB_BASE = "https://accept.paymob.com/api";
 const PLAN_AMOUNT_CENTS: Record<string, number> = {
   doctor_gold_monthly: 999_00,
   doctor_gold_yearly: 9999_00,
+  doctor_gold_lifetime: 19999_00,
 };
 
 const cors = {

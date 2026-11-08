@@ -40,7 +40,9 @@ function specialtyFaq(s: SpecialtySeoData) {
   return [
     {
       question: `كم تكلفة الكشف عند أطباء ${s.nameAr} على طبانا؟`,
-      answer: `الأسعار تختلف بين الأطباء، ويظهر سعر الكشف بوضوح في ملف كل طبيب قبل الحجز. على طبانا حالياً ${s.doctorCount}+ طبيب ${s.nameAr} موثّق بأسعار شفافة بدون رسوم خفية.`,
+      answer:
+        `الأسعار تختلف بين الأطباء، ويظهر سعر الكشف بوضوح في ملف كل طبيب قبل الحجز، بدون رسوم خفية.` +
+        (s.doctorCount > 0 ? ` على طبانا حالياً ${s.doctorCount} طبيب ${s.nameAr} موثّق.` : ""),
     },
     {
       question: `هل أستطيع الاستشارة أونلاين بالفيديو مع طبيب ${s.nameAr}؟`,
@@ -54,7 +56,7 @@ function specialtyFaq(s: SpecialtySeoData) {
     {
       question: `هل بياناتي الصحية آمنة عند الحجز مع طبيب ${s.nameAr}؟`,
       answer:
-        "نعم. كل سجلاتك مشفّرة بمعايير HIPAA وتُحفظ بأمان. لا يطّلع عليها سوى الطبيب الذي تختار مشاركتها معه.",
+        "نعم. سجلّك الطبي مشفّر أثناء التخزين والنقل، ولا يطّلع عليه سوى الطبيب الذي تختار مشاركته معه، ويمكنك طلب حذفه في أي وقت.",
     },
   ];
 }
@@ -86,15 +88,8 @@ export const Route = createFileRoute("/specialty/$slug")({
           }),
         ),
       });
-      scripts.push({
-        type: "application/ld+json",
-        children: jsonLdString(
-          breadcrumbSchema([
-            { name: "الأطباء", path: "/doctors" },
-            { name: s.nameAr, path },
-          ]),
-        ),
-      });
+      // BreadcrumbList is emitted once by the <Breadcrumbs> component in the
+      // page body (Home › الأطباء › specialty); a second one here conflicted.
       scripts.push({
         type: "application/ld+json",
         children: jsonLdString(faqSchema(specialtyFaq(s))),
@@ -288,8 +283,8 @@ function SpecialtyPillarPage() {
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {t(
-                `Talk to a ${specialty.nameEn} doctor over secure video — no app install, full encryption, HIPAA-grade privacy.`,
-                `تحدّث مع طبيب ${specialty.nameAr} عبر فيديو آمن — بدون تثبيت تطبيق، تشفير كامل، خصوصية بمعايير HIPAA.`,
+                `Talk to a ${specialty.nameEn} doctor over secure video — no app install, fully encrypted, seen only by your doctor.`,
+                `تحدّث مع طبيب ${specialty.nameAr} عبر فيديو آمن — بدون تثبيت تطبيق، تشفير كامل، ولا يراه إلا طبيبك.`,
               )}
             </p>
             <Link

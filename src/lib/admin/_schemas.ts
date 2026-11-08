@@ -56,7 +56,9 @@ export type AdminReviewManualSubscriptionInput = z.infer<
  */
 export const AdminGrantSubscriptionSchema = z.object({
   profileId: z.string().uuid(),
-  planCode: z.enum(["doctor_gold_monthly", "doctor_gold_yearly"]).default("doctor_gold_monthly"),
+  planCode: z
+    .enum(["doctor_gold_monthly", "doctor_gold_yearly", "doctor_gold_lifetime"])
+    .default("doctor_gold_monthly"),
   months: z.number().int().min(1).max(120).nullable(),
 });
 export type AdminGrantSubscriptionInput = z.infer<typeof AdminGrantSubscriptionSchema>;

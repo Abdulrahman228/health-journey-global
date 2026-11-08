@@ -9,7 +9,7 @@
 export const MANUAL_ACCESS_GRACE_HOURS = 24;
 
 /** Gold plan codes eligible for the manual receipt flow. */
-export const MANUAL_GOLD_PLAN_CODES = ["doctor_gold_monthly", "doctor_gold_yearly"] as const;
+export const MANUAL_GOLD_PLAN_CODES = ["doctor_gold_monthly", "doctor_gold_yearly", "doctor_gold_lifetime"] as const;
 export type ManualGoldPlanCode = (typeof MANUAL_GOLD_PLAN_CODES)[number];
 
 export interface AccessBearing {

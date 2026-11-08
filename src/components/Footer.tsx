@@ -94,7 +94,7 @@ export function Footer() {
           <div className="lg:col-span-4">
             <Link to="/" className="inline-flex items-center gap-3" aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}>
               <img
-                src="/logo-mark.png"
+                src="/logo-mark-192.webp"
                 alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
                 width={48}
                 height={48}

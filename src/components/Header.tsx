@@ -40,7 +40,7 @@ export function Header() {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2.5" aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}>
           <img
-            src="/logo-mark.png"
+            src="/logo-mark-192.webp"
             alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
             width={40}
             height={40}

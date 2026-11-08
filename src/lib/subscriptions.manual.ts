@@ -76,8 +76,13 @@ export const submitManualSubscription = createServerFn({ method: "POST" })
 
     const now = new Date();
     const grantedAt = now.toISOString();
-    const isYearly = data.planCode.includes("yearly");
-    const periodEnd = new Date(now.getTime() + (isYearly ? 365 : 30) * 86_400_000).toISOString();
+    // Lifetime never expires: doctor_active_tier() treats a NULL period end as
+    // "always valid" (same convention as the admin lifetime grant).
+    const periodEnd = data.planCode.includes("lifetime")
+      ? null
+      : new Date(
+          now.getTime() + (data.planCode.includes("yearly") ? 365 : 30) * 86_400_000,
+        ).toISOString();
 
     // Synthetic identifiers for the NOT-NULL Stripe columns; the `manual_`
     // prefix guarantees they never collide with real Stripe webhook rows.

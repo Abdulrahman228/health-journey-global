@@ -44,8 +44,6 @@ export const siteConfig = {
   brandAliases: [
     "طبانا",
     "Tebana",
-    "Tibana",
-    "Tabana",
     "طبانا للخدمات الإلكترونية",
     "تطبيق طبانا",
     "موقع طبانا",
@@ -89,7 +87,7 @@ export const siteConfig = {
   ogImage: "/og/tabibi-og-default.jpg",
   // TODO(rebrand): social handle and support email not yet decided by the owner — keep as-is.
   twitterHandle: "@tabibi_health",
-  locale: { primary: "ar_AR", alternate: "en_US" },
+  locale: { primary: "ar_EG", alternate: "en_US" },
   organization: {
     legalName: "طبانا للخدمات الإلكترونية",
     legalNameEn: "Tebana for Electronic Services",
@@ -231,14 +229,9 @@ export function buildMeta(input: SeoMetaInput) {
  * `x-default` is the global fallback for any other Arabic locale.
  */
 export function buildSeoLinks(path: string = "/") {
-  const canonical = canonicalUrl(path);
-  // All hreflang variants currently point to the same canonical because
-  // we don't have a separate /en URL tree yet. When the English variant
-  // ships, swap the `en-*` entries to their `/en${path}` equivalents.
-  const arRegions = ["ar", "ar-EG", "ar-SA", "ar-AE", "ar-QA", "ar-KW", "ar-BH", "ar-OM", "ar-JO"];
-  return [
-    { rel: "canonical", href: canonical },
-    ...arRegions.map((lang) => ({ rel: "alternate", hrefLang: lang, href: canonical })),
-    { rel: "alternate", hrefLang: "x-default", href: canonical },
-  ];
+  // Canonical only. hreflang is for DIFFERENT URLs per language/region; with a
+  // single URL per page (UI language is a user preference) the nine regional
+  // variants were noise that the 2026-11 audit flagged. Add hreflang back only
+  // when an /en URL tree exists.
+  return [{ rel: "canonical", href: canonicalUrl(path) }];
 }

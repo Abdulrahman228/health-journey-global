@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useLanguage } from "@/hooks/useLanguage";
 import { FileText } from "lucide-react";
-import { buildMeta, siteConfig } from "@/lib/seo";
+import { buildMeta, buildSeoLinks, siteConfig } from "@/lib/seo";
 
 export const Route = createFileRoute("/terms")({
   head: () => ({
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/terms")({
         "شروط استخدام منصة طبانا للاستشارات الطبية أونلاين، مسؤوليات المستخدم، حدود المسؤولية، والسياسات القانونية.",
       path: "/terms",
     }),
+    links: buildSeoLinks("/terms"),
   }),
   component: TermsPage,
 });

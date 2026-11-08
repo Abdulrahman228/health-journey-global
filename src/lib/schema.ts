@@ -21,7 +21,7 @@ import { siteConfig, canonicalUrl } from "./seo";
 export function organizationSchema() {
   return {
     "@context": "https://schema.org",
-    "@type": ["Organization", "MedicalBusiness"],
+    "@type": ["Organization", "MedicalOrganization"],
     "@id": `${siteConfig.url}/#organization`,
     name: siteConfig.brand.en,
     legalName: siteConfig.organization.legalName,
@@ -38,11 +38,12 @@ export function organizationSchema() {
     image: `${siteConfig.url}${siteConfig.ogImage}`,
     description: siteConfig.defaultDescription.ar,
     foundingDate: siteConfig.organization.foundingDate,
+    // Members of schema.org/MedicalSpecialty only.
     medicalSpecialty: [
-      "GeneralPractice",
+      "PrimaryCare",
       "Cardiovascular",
       "Dermatology",
-      "Pediatrics",
+      "Pediatric",
       "Psychiatric",
     ],
     address: {
@@ -56,7 +57,7 @@ export function organizationSchema() {
       availableLanguage: ["Arabic", "English"],
     },
     sameAs: [
-      "https://twitter.com/tabibi_health",
+      "https://x.com/tabibi_health",
       "https://facebook.com/tabibi.health",
       "https://instagram.com/tabibi.health",
     ],
@@ -416,14 +417,23 @@ export function medicalSpecialtySchema(opts: {
   doctorCount: number;
 }) {
   const url = canonicalUrl(`/specialty/${opts.slug}`);
+  // A specialty landing page is a web page ABOUT a specialty. MedicalSpecialty
+  // itself is an enumeration, so url/isPartOf/potentialAction belong on the page.
   return {
     "@context": "https://schema.org",
-    "@type": "MedicalSpecialty",
-    "@id": `${url}#specialty`,
-    name: opts.nameAr,
-    alternateName: opts.nameEn,
+    "@type": ["CollectionPage", "MedicalWebPage"],
+    "@id": `${url}#page`,
     url,
+    name: `أطباء ${opts.nameAr} — ${siteConfig.brand.ar}`,
+    inLanguage: "ar",
     ...(opts.description ? { description: opts.description } : {}),
+    about: {
+      "@type": "MedicalSpecialty",
+      name: opts.nameAr,
+      alternateName: opts.nameEn,
+    },
+    isPartOf: { "@id": `${siteConfig.url}/#website` },
+    publisher: { "@id": `${siteConfig.url}/#organization` },
     ...(opts.doctorCount > 0
       ? {
           potentialAction: {
@@ -433,6 +443,5 @@ export function medicalSpecialtySchema(opts: {
           },
         }
       : {}),
-    isPartOf: { "@id": `${siteConfig.url}/#organization` },
   };
 }
