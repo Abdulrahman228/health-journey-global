@@ -1,15 +1,20 @@
-// places-search — compliant Google Places (New) proxy for clinic onboarding.
+// places-search — clinic address lookup for all three clients, on OpenStreetMap.
 //
-// Why this exists: doctors verify THEIR OWN clinic against Google Maps during
-// onboarding. This is autocomplete + a single details lookup per clinic — NOT
-// bulk harvesting. Google Maps Platform ToS forbid scraping / building a
-// competing directory, so we only ever fetch the minimal fields a doctor needs
-// to confirm their listing, and we store only what Google permits (place_id +
-// the doctor-confirmed address/lat/lng of their own clinic).
+// 2026-11-08: Google Places was replaced by OpenStreetMap data so the platform
+// needs no Google Cloud billing. Same request/response contract as before, so
+// the Android and iOS apps keep working unchanged.
 //
-// Security: the billed API key lives in the PLACES_API_KEY secret and never
-// reaches the browser or the mobile app. Only authenticated Supabase users may
-// call this function.
+//   autocomplete  text → suggestions           Photon (komoot) — built for typing
+//   details       placeId → confirmed place    Nominatim /lookup
+//   geocode       address → lat/lng (+ parts)  Nominatim /search   (web clinic form)
+//   reverse       lat/lng → address (+ parts)  Nominatim /reverse  (map click, "near me")
+//
+// Nominatim usage policy: max 1 request/second, identify the app in User-Agent,
+// no autocomplete (that is why typing goes to Photon). Calls are serialized here.
+//
+// placeId format: "osm:<N|W|R>:<id>" (OpenStreetMap node / way / relation).
+// mapsUri stays a Google Maps *link* (free deep link, no API) because patients
+// use it to navigate to the clinic.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,15 +22,36 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PLACES_BASE = "https://places.googleapis.com/v1";
+const PHOTON = "https://photon.komoot.io/api/";
+const NOMINATIM = "https://nominatim.openstreetmap.org";
+const USER_AGENT = "Tabibi-Tebana/1.0 (+https://mytabibi.com)";
+// Egypt bounding box (minLon,minLat,maxLon,maxLat) — keeps suggestions local.
+const EGYPT_BBOX = "24.6,21.9,37.1,31.8";
 
 type Body = {
-  action?: "autocomplete" | "details";
+  action?: "autocomplete" | "details" | "geocode" | "reverse";
   input?: string;
   placeId?: string;
-  // Client-generated UUID that groups an autocomplete session + its final
-  // details call so Google bills the session once. Optional.
+  address?: string;
+  lat?: number;
+  lng?: number;
+  // Kept for compatibility with the mobile clients; unused by OSM.
   sessionToken?: string;
+};
+
+type Place = {
+  placeId: string;
+  name: string;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+  mapsUri: string | null;
+  phone: string | null;
+  city: string | null;
+  country: string | null;
+  countryCode: string | null;
+  governorate: string | null;
+  district: string | null;
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -35,8 +61,7 @@ function jsonResponse(payload: unknown, status = 200): Response {
   });
 }
 
-// Confirm the caller is a real, signed-in Supabase user (protects our billed key).
-// Returns the user id, or null.
+// Confirm the caller is a signed-in Supabase user. Returns the user id, or null.
 async function authenticatedUserId(authHeader: string | null): Promise<string | null> {
   if (!authHeader) return null;
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -54,56 +79,92 @@ async function authenticatedUserId(authHeader: string | null): Promise<string | 
   }
 }
 
-// Best-effort per-user limit (per function instance): typing a clinic name is a
-// few dozen calls; this stops one account from draining the Places quota.
+// Best-effort per-caller limit (per function instance).
 const RATE_LIMIT = 60;
 const RATE_WINDOW_MS = 60_000;
 const calls = new Map<string, { start: number; count: number }>();
-function allow(userId: string): boolean {
+function allow(key: string, limit = RATE_LIMIT): boolean {
   const now = Date.now();
-  const entry = calls.get(userId);
+  const entry = calls.get(key);
   if (!entry || now - entry.start > RATE_WINDOW_MS) {
-    calls.set(userId, { start: now, count: 1 });
+    calls.set(key, { start: now, count: 1 });
     return true;
   }
   entry.count += 1;
-  return entry.count <= RATE_LIMIT;
+  return entry.count <= limit;
 }
 
-type AddressComponent = { longText?: string; types?: string[] };
-
-function extractCityCountry(components: AddressComponent[] = []): {
-  city: string | null;
-  country: string | null;
-} {
-  let city: string | null = null;
-  let admin2: string | null = null;
-  let admin1: string | null = null;
-  let country: string | null = null;
-  for (const c of components) {
-    const t = c.types ?? [];
-    if (t.includes("locality")) city = c.longText ?? city;
-    else if (t.includes("administrative_area_level_2")) admin2 = c.longText ?? admin2;
-    else if (t.includes("administrative_area_level_1")) admin1 = c.longText ?? admin1;
-    if (t.includes("country")) country = c.longText ?? country;
-  }
-  return { city: city ?? admin2 ?? admin1, country };
+// Nominatim allows one request per second: serialize and space the calls.
+let nominatimChain: Promise<unknown> = Promise.resolve();
+let lastNominatimAt = 0;
+function nominatim(path: string, params: Record<string, string>): Promise<unknown> {
+  const run = async () => {
+    const wait = lastNominatimAt + 1100 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastNominatimAt = Date.now();
+    const qs = new URLSearchParams({ format: "jsonv2", addressdetails: "1", "accept-language": "ar", ...params });
+    const res = await fetch(`${NOMINATIM}${path}?${qs}`, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error(`nominatim ${path} ${res.status}`);
+    return res.json();
+  };
+  const next = nominatimChain.then(run, run);
+  nominatimChain = next.catch(() => undefined);
+  return next;
 }
+
+type NominatimRow = {
+  osm_type?: string;
+  osm_id?: number | string;
+  lat?: string;
+  lon?: string;
+  name?: string;
+  display_name?: string;
+  address?: Record<string, string>;
+  extratags?: Record<string, string>;
+};
+
+function osmPlaceId(type: string | undefined, id: number | string | undefined): string {
+  const t = (type ?? "").toString().charAt(0).toUpperCase(); // node/way/relation → N/W/R
+  return `osm:${t || "N"}:${id ?? ""}`;
+}
+
+function mapsLink(lat: number | null, lng: number | null): string | null {
+  return lat != null && lng != null
+    ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+    : null;
+}
+
+function toPlace(row: NominatimRow, fallbackId?: string): Place {
+  const a = row.address ?? {};
+  const lat = row.lat != null ? Number(row.lat) : null;
+  const lng = row.lon != null ? Number(row.lon) : null;
+  const name = row.name || a.amenity || a.healthcare || a.building || "";
+  return {
+    placeId: fallbackId ?? osmPlaceId(row.osm_type, row.osm_id),
+    name,
+    address: row.display_name ?? "",
+    lat: Number.isFinite(lat as number) ? lat : null,
+    lng: Number.isFinite(lng as number) ? lng : null,
+    mapsUri: mapsLink(lat, lng),
+    phone: row.extratags?.phone ?? row.extratags?.["contact:phone"] ?? null,
+    city: a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? null,
+    country: a.country ?? null,
+    countryCode: a.country_code ? a.country_code.toUpperCase() : null,
+    governorate: a.state ?? null,
+    district: a.suburb ?? a.city_district ?? a.neighbourhood ?? a.quarter ?? a.district ?? null,
+  };
+}
+
+type PhotonFeature = {
+  geometry?: { coordinates?: [number, number] };
+  properties?: Record<string, string | number | undefined>;
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405);
-
-  const apiKey = Deno.env.get("PLACES_API_KEY");
-  if (!apiKey) return jsonResponse({ error: "places_key_not_configured" }, 500);
-
-  const userId = await authenticatedUserId(req.headers.get("Authorization"));
-  if (!userId) {
-    return jsonResponse({ error: "unauthorized" }, 401);
-  }
-  if (!allow(userId)) {
-    return jsonResponse({ error: "rate_limited" }, 429);
-  }
 
   let body: Body;
   try {
@@ -112,80 +173,78 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "invalid_json" }, 400);
   }
 
-  const sessionToken = typeof body.sessionToken === "string" ? body.sessionToken : undefined;
+  // Everything except `reverse` is for signed-in users (doctors editing their
+  // clinic). `reverse` also serves visitors ("near me" → city), per IP.
+  const userId = await authenticatedUserId(req.headers.get("Authorization"));
+  if (!userId && body.action !== "reverse") return jsonResponse({ error: "unauthorized" }, 401);
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const limitKey = userId ?? `ip:${ip}`;
+  if (!allow(limitKey, userId ? RATE_LIMIT : 20)) return jsonResponse({ error: "rate_limited" }, 429);
 
   try {
-    // --- Autocomplete: query text -> place suggestions (Egypt-biased, Arabic) ---
+    // --- Autocomplete: typing → suggestions (Photon, Egypt box) ----------------
     if (body.action === "autocomplete") {
       const input = (body.input ?? "").trim();
       if (input.length < 2) return jsonResponse({ suggestions: [] });
-
-      const res = await fetch(`${PLACES_BASE}/places:autocomplete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Goog-Api-Key": apiKey },
-        body: JSON.stringify({
-          input,
-          languageCode: "ar",
-          regionCode: "EG",
-          includedRegionCodes: ["eg"],
-          ...(sessionToken ? { sessionToken } : {}),
-        }),
-      });
+      const qs = new URLSearchParams({ q: input, limit: "7", bbox: EGYPT_BBOX });
+      if (typeof body.lat === "number" && typeof body.lng === "number") {
+        qs.set("lat", String(body.lat));
+        qs.set("lon", String(body.lng));
+      }
+      const res = await fetch(`${PHOTON}?${qs}`, { headers: { "User-Agent": USER_AGENT } });
       if (!res.ok) {
-        console.error("places api error", res.status, await res.text());
+        console.error("photon error", res.status, await res.text());
         return jsonResponse({ error: "places_error", status: res.status }, 502);
       }
-      const data = await res.json();
-      const suggestions = (data.suggestions ?? [])
-        .map((s: Record<string, any>) => s.placePrediction)
-        .filter(Boolean)
-        .map((p: Record<string, any>) => ({
-          placeId: p.placeId as string,
-          description: (p.text?.text as string) ?? "",
-          main: (p.structuredFormat?.mainText?.text as string) ?? "",
-          secondary: (p.structuredFormat?.secondaryText?.text as string) ?? "",
-        }));
+      const data = (await res.json()) as { features?: PhotonFeature[] };
+      const seen = new Set<string>();
+      const suggestions = (data.features ?? []).flatMap((f) => {
+        const p = f.properties ?? {};
+        const placeId = osmPlaceId(String(p.osm_type ?? "N"), p.osm_id as number | undefined);
+        if (!p.osm_id || seen.has(placeId)) return [];
+        seen.add(placeId);
+        const street = [p.street, p.housenumber].filter(Boolean).join(" ");
+        const main = String(p.name ?? street ?? "");
+        const secondary = [p.name ? street : null, p.district, p.city ?? p.county, p.state]
+          .filter((v) => v && v !== main)
+          .join("، ");
+        return [{ placeId, description: [main, secondary].filter(Boolean).join("، "), main, secondary }];
+      });
       return jsonResponse({ suggestions });
     }
 
-    // --- Details: place_id -> minimal fields for the doctor to confirm ---
+    // --- Details: placeId → confirmed place (Nominatim lookup) ------------------
     if (body.action === "details") {
-      const placeId = (body.placeId ?? "").trim();
-      if (!placeId) return jsonResponse({ error: "place_id_required" }, 400);
+      const m = /^osm:([NWR]):(\d+)$/.exec((body.placeId ?? "").trim());
+      if (!m) return jsonResponse({ error: "place_id_required" }, 400);
+      const rows = (await nominatim("/lookup", {
+        osm_ids: `${m[1]}${m[2]}`,
+        extratags: "1",
+      })) as NominatimRow[];
+      if (!rows?.[0]) return jsonResponse({ error: "place_not_found" }, 404);
+      return jsonResponse({ place: toPlace(rows[0], `osm:${m[1]}:${m[2]}`) });
+    }
 
-      const params = new URLSearchParams({ languageCode: "ar", regionCode: "EG" });
-      if (sessionToken) params.set("sessionToken", sessionToken);
+    // --- Geocode: typed address → one place (Nominatim search, Egypt) -----------
+    if (body.action === "geocode") {
+      const q = (body.address ?? "").trim();
+      if (q.length < 3) return jsonResponse({ error: "address_required" }, 400);
+      const rows = (await nominatim("/search", { q, limit: "1", countrycodes: "eg" })) as NominatimRow[];
+      return jsonResponse({ place: rows?.[0] ? toPlace(rows[0]) : null });
+    }
 
-      const res = await fetch(
-        `${PLACES_BASE}/places/${encodeURIComponent(placeId)}?${params.toString()}`,
-        {
-          headers: {
-            "X-Goog-Api-Key": apiKey,
-            // Only the fields a doctor needs to confirm their own clinic.
-            "X-Goog-FieldMask":
-              "id,displayName,formattedAddress,location,googleMapsUri,internationalPhoneNumber,addressComponents",
-          },
-        },
-      );
-      if (!res.ok) {
-        console.error("places api error", res.status, await res.text());
-        return jsonResponse({ error: "places_error", status: res.status }, 502);
+    // --- Reverse: lat/lng → address (Nominatim reverse) --------------------------
+    if (body.action === "reverse") {
+      if (typeof body.lat !== "number" || typeof body.lng !== "number") {
+        return jsonResponse({ error: "lat_lng_required" }, 400);
       }
-      const d = await res.json();
-      const { city, country } = extractCityCountry(d.addressComponents);
-      return jsonResponse({
-        place: {
-          placeId: d.id as string,
-          name: (d.displayName?.text as string) ?? "",
-          address: (d.formattedAddress as string) ?? "",
-          lat: (d.location?.latitude as number) ?? null,
-          lng: (d.location?.longitude as number) ?? null,
-          mapsUri: (d.googleMapsUri as string) ?? null,
-          phone: (d.internationalPhoneNumber as string) ?? null,
-          city,
-          country,
-        },
-      });
+      const row = (await nominatim("/reverse", {
+        lat: String(body.lat),
+        lon: String(body.lng),
+        zoom: "18",
+      })) as NominatimRow & { error?: string };
+      if (!row || row.error) return jsonResponse({ place: null });
+      return jsonResponse({ place: toPlace(row) });
     }
 
     return jsonResponse({ error: "unknown_action" }, 400);

@@ -4,7 +4,7 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
 import { PlacePicker } from "@/components/maps/PlacePicker";
 import { ClinicMap } from "@/components/maps/ClinicMap";
-import { useGoogleMaps } from "@/hooks/useGoogleMaps";
+import { geocodeAddress, reverseGeocode as lookupAddress } from "@/lib/geo";
 import { RegionPicker, type RegionSelection } from "@/components/regions/RegionPicker";
 import { Building2, Plus, Trash2, Save, Loader2, Clock, CalendarOff, Navigation, MapPin, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -183,7 +183,6 @@ function NewClinicForm({
   pending: boolean;
 }) {
   const { t } = useLanguage();
-  const { ready: mapsReady } = useGoogleMaps();
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<{
     address: string;
@@ -201,48 +200,25 @@ function NewClinicForm({
   } | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
 
-  // Reverse-geocode a (lat, lng) into our `picked` shape using Google Geocoder.
+  // Reverse-geocode a (lat, lng) into our `picked` shape (OpenStreetMap).
   // Used by: map click, marker drag-end, "use my current location".
+  // A pin placed by hand is not a verified listing, so no placeId/name/phone.
   async function reverseGeocode(lat: number, lng: number) {
-    if (!mapsReady) {
+    const r = await lookupAddress(lat, lng);
+    if (!r) {
       setPicked({ address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng });
       return;
     }
-    try {
-      const geocoder = new google.maps.Geocoder();
-      const res = await geocoder.geocode({ location: { lat, lng } });
-      const r = res.results?.[0];
-      if (!r) {
-        setPicked({ address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng });
-        return;
-      }
-      const components = r.address_components ?? [];
-      const cityComp = components.find(
-        (c) => c.types.includes("locality") || c.types.includes("administrative_area_level_2"),
-      );
-      const countryComp = components.find((c) => c.types.includes("country"));
-      const govComp = components.find((c) => c.types.includes("administrative_area_level_1"));
-      const districtComp = components.find(
-        (c) =>
-          c.types.includes("sublocality_level_1") ||
-          c.types.includes("sublocality") ||
-          c.types.includes("neighborhood") ||
-          c.types.includes("administrative_area_level_3"),
-      );
-      setPicked({
-        address: r.formatted_address,
-        lat,
-        lng,
-        city: cityComp?.long_name,
-        country: countryComp?.long_name,
-        countryCode: countryComp?.short_name,
-        governorate: govComp?.long_name,
-        district: districtComp?.long_name,
-      });
-    } catch (e) {
-      console.error("reverse geocode failed", e);
-      setPicked({ address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng });
-    }
+    setPicked({
+      address: r.address,
+      lat,
+      lng,
+      city: r.city,
+      country: r.country,
+      countryCode: r.countryCode,
+      governorate: r.governorate,
+      district: r.district,
+    });
   }
 
   function useMyLocation() {
@@ -288,7 +264,6 @@ function NewClinicForm({
   // (region dropdown / street) — never from the reverse resolve, so picking "My
   // location" keeps its precise pin.
   async function geocodeFromRegion(sel: RegionSelection, streetVal: string) {
-    if (!mapsReady) return;
     if (!sel.governorateId && !sel.cityId) return;
     try {
       const ids = [sel.governorateId, sel.cityId, sel.districtId].filter(Boolean) as string[];
@@ -309,16 +284,13 @@ function NewClinicForm({
         Boolean,
       ) as string[];
       if (parts.length < 2) return;
-      const geocoder = new google.maps.Geocoder();
-      const res = await geocoder.geocode({ address: parts.join("، "), region: "eg" });
-      const r = res.results?.[0];
+      const r = await geocodeAddress(parts.join("، "));
       if (!r) return;
-      const loc = r.geometry.location;
       skipRegionResolveRef.current = true; // don't re-resolve region from this pin
       setPicked({
-        address: r.formatted_address,
-        lat: loc.lat(),
-        lng: loc.lng(),
+        address: r.address,
+        lat: r.lat,
+        lng: r.lng,
         city: cityName,
         governorate: gov,
         district: districtName,
@@ -458,7 +430,7 @@ function NewClinicForm({
           {picked?.placeId && (
             <p className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
               <BadgeCheck className="h-3 w-3" />
-              {t("Verified from Google Maps", "موثّقة من خرائط جوجل")}
+              {t("Verified on the map", "موثّقة على الخريطة")}
             </p>
           )}
         </div>
@@ -696,15 +668,11 @@ function ClinicCard({
     let city: string | undefined;
     let country: string | undefined;
     try {
-      if (typeof google !== "undefined" && google.maps?.Geocoder) {
-        const r = await new google.maps.Geocoder().geocode({ location: { lat, lng } });
-        const top = r.results?.[0];
-        if (top) {
-          address = top.formatted_address;
-          const cc = top.address_components ?? [];
-          city = cc.find((c) => c.types.includes("locality"))?.long_name;
-          country = cc.find((c) => c.types.includes("country"))?.long_name;
-        }
+      const r = await lookupAddress(lat, lng);
+      if (r) {
+        address = r.address;
+        city = r.city;
+        country = r.country;
       }
     } catch {
       // ignore — coords alone are still saved
@@ -723,10 +691,10 @@ function ClinicCard({
               <BadgeCheck className="h-3 w-3" />
               {clinic.google_maps_uri ? (
                 <a href={clinic.google_maps_uri} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                  {t("Verified from Google Maps", "موثّقة من خرائط جوجل")}
+                  {t("Verified on the map", "موثّقة على الخريطة")}
                 </a>
               ) : (
-                t("Verified from Google Maps", "موثّقة من خرائط جوجل")
+                t("Verified on the map", "موثّقة على الخريطة")
               )}
             </span>
           )}

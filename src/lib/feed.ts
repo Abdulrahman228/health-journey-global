@@ -1,3 +1,4 @@
+import { reverseGeocode } from "@/lib/geo";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -203,30 +204,9 @@ export async function reverseGeocodeCity(
   lat: number,
   lng: number,
 ): Promise<{ city: string | null; country: string | null }> {
-  if (typeof window === "undefined" || !window.google?.maps) return { city: null, country: null };
-  const geocoder = new window.google.maps.Geocoder();
-  return new Promise((resolve) => {
-    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-      if (status !== "OK" || !results || results.length === 0) {
-        resolve({ city: null, country: null });
-        return;
-      }
-      let city: string | null = null;
-      let country: string | null = null;
-      for (const r of results) {
-        for (const c of r.address_components) {
-          if (
-            !city &&
-            (c.types.includes("locality") || c.types.includes("administrative_area_level_2"))
-          )
-            city = c.long_name;
-          if (!country && c.types.includes("country")) country = c.long_name;
-        }
-        if (city && country) break;
-      }
-      resolve({ city, country });
-    });
-  });
+  if (typeof window === "undefined") return { city: null, country: null };
+  const r = await reverseGeocode(lat, lng);
+  return { city: r?.city ?? null, country: r?.country ?? null };
 }
 
 export async function getPost(id: string): Promise<FeedPost | null> {

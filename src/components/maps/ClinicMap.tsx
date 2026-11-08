@@ -1,6 +1,6 @@
-/// <reference types="google.maps" />
 import { useEffect, useRef, useState } from "react";
-import { useGoogleMaps } from "@/hooks/useGoogleMaps";
+import type { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
+import { useLeaflet, OSM_TILE_URL, OSM_ATTRIBUTION } from "@/hooks/useLeaflet";
 import { MapPin, AlertTriangle } from "lucide-react";
 
 interface MapMarker {
@@ -23,22 +23,9 @@ interface ClinicMapProps {
   onMarkerDragEnd?: (lat: number, lng: number) => void;
 }
 
-// Listen for Google Maps "auth failure" so we can render a graceful fallback
-// (no `Oops! Something went wrong` overlay). This fires once per page load
-// when the API key is invalid / referrer not allowed / billing disabled.
-declare global {
-  interface Window {
-    gm_authFailure?: () => void;
-    __tabibiGmAuthFailed?: boolean;
-  }
-}
-if (typeof window !== "undefined" && !window.gm_authFailure) {
-  window.gm_authFailure = () => {
-    window.__tabibiGmAuthFailed = true;
-    window.dispatchEvent(new CustomEvent("tabibi:gm-auth-failed"));
-  };
-}
+const CAIRO = { lat: 30.0444, lng: 31.2357 };
 
+/** OpenStreetMap map (Leaflet). Same props as the former Google Maps version. */
 export function ClinicMap({
   markers,
   center,
@@ -48,74 +35,70 @@ export function ClinicMap({
   draggable,
   onMarkerDragEnd,
 }: ClinicMapProps) {
-  const { ready, error } = useGoogleMaps();
+  const { L, ready, error } = useLeaflet();
   const elRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markerRefs = useRef<google.maps.Marker[]>([]);
-  const [authFailed, setAuthFailed] = useState<boolean>(
-    typeof window !== "undefined" && !!window.__tabibiGmAuthFailed,
-  );
+  const mapRef = useRef<LeafletMap | null>(null);
+  const markerRefs = useRef<LeafletMarker[]>([]);
+  const onClickRef = useRef(onClick);
+  const onDragRef = useRef(onMarkerDragEnd);
+  const [initFailed, setInitFailed] = useState(false);
+  onClickRef.current = onClick;
+  onDragRef.current = onMarkerDragEnd;
 
+  // Init map once Leaflet is loaded
   useEffect(() => {
-    function onAuthFail() {
-      setAuthFailed(true);
-    }
-    window.addEventListener("tabibi:gm-auth-failed", onAuthFail);
-    return () => window.removeEventListener("tabibi:gm-auth-failed", onAuthFail);
-  }, []);
-
-  // Init map
-  useEffect(() => {
-    if (!ready || authFailed || !elRef.current || mapRef.current) return;
-    const fallback = center ?? markers[0] ?? { lat: 30.0444, lng: 31.2357 }; // Cairo
+    if (!L || !elRef.current || mapRef.current) return;
+    const start = center ?? markers[0] ?? CAIRO;
     try {
-      mapRef.current = new google.maps.Map(elRef.current, {
-        center: fallback,
+      const map = L.map(elRef.current, { attributionControl: true, zoomControl: true }).setView(
+        [start.lat, start.lng],
         zoom,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-      });
-      if (onClick) {
-        mapRef.current.addListener("click", (e: google.maps.MapMouseEvent) => {
-          if (e.latLng) onClick(e.latLng.lat(), e.latLng.lng());
-        });
-      }
-    } catch {
-      setAuthFailed(true);
+      );
+      L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION }).addTo(map);
+      map.on("click", (e) => onClickRef.current?.(e.latlng.lat, e.latlng.lng));
+      mapRef.current = map;
+      // The container is often laid out after mount (tabs, dialogs): re-measure.
+      window.setTimeout(() => map.invalidateSize(), 0);
+    } catch (e) {
+      console.error("map init failed", e);
+      setInitFailed(true);
     }
-  }, [ready, authFailed, center, zoom, markers, onClick]);
+    return () => {
+      mapRef.current?.remove();
+      mapRef.current = null;
+      markerRefs.current = [];
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [L]);
 
-  // Sync markers
+  // Sync markers + view
   useEffect(() => {
-    if (!ready || authFailed || !mapRef.current) return;
-    markerRefs.current.forEach((m) => m.setMap(null));
+    const map = mapRef.current;
+    if (!L || !map) return;
+    markerRefs.current.forEach((m) => m.remove());
     markerRefs.current = markers.map((m, i) => {
       const isDraggable = !!draggable && markers.length === 1 && i === 0;
-      const marker = new google.maps.Marker({
-        position: { lat: m.lat, lng: m.lng },
-        map: mapRef.current!,
-        title: m.title,
-        draggable: isDraggable,
-      });
-      if (isDraggable && onMarkerDragEnd) {
-        marker.addListener("dragend", () => {
-          const pos = marker.getPosition();
-          if (pos) onMarkerDragEnd(pos.lat(), pos.lng());
+      const marker = L.marker([m.lat, m.lng], { title: m.title, draggable: isDraggable }).addTo(map);
+      if (m.title) marker.bindPopup(m.title);
+      if (isDraggable) {
+        marker.on("dragend", () => {
+          const pos = marker.getLatLng();
+          onDragRef.current?.(pos.lat, pos.lng);
         });
       }
       return marker;
     });
     if (markers.length > 0) {
       const c = center ?? markers[0];
-      mapRef.current.setCenter(c);
       // Zoom in to the pin when the map is still zoomed out (e.g. right after
       // "My location" or filling the address). Keeps a closer user-set zoom.
-      if ((mapRef.current.getZoom() ?? 0) < 13) mapRef.current.setZoom(16);
+      map.setView([c.lat, c.lng], map.getZoom() < 13 ? 16 : map.getZoom());
+    } else if (center) {
+      map.setView([center.lat, center.lng]);
     }
-  }, [ready, authFailed, markers, center, draggable, onMarkerDragEnd]);
+  }, [L, ready, markers, center, draggable]);
 
-  if (error || authFailed) {
+  if (error || initFailed) {
     return (
       <div
         className={`flex flex-col items-center justify-center gap-3 bg-muted/40 text-xs text-muted-foreground rounded-lg p-4 ${className ?? "h-48"}`}
@@ -141,5 +124,11 @@ export function ClinicMap({
     );
   }
 
-  return <div ref={elRef} className={`rounded-lg overflow-hidden ${className ?? "h-48"} bg-muted`} />;
+  return (
+    <div
+      ref={elRef}
+      dir="ltr"
+      className={`rounded-lg overflow-hidden ${className ?? "h-48"} bg-muted z-0`}
+    />
+  );
 }

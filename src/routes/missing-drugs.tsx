@@ -5,7 +5,6 @@ import { Pill, Search, MapPin, Plus, Loader2, Filter, Building2 } from "lucide-r
 import { PostCard } from "@/components/feed/PostCard";
 import { ListingCard } from "@/components/pharmacy/ListingCard";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 import { listPosts, reverseGeocodeCity } from "@/lib/feed";
 import { listDrugListings } from "@/lib/pharmacy";
 import { toast } from "sonner";
@@ -30,7 +29,6 @@ export const Route = createFileRoute("/missing-drugs")({
 
 function MissingDrugsPage() {
   const { t, language } = useLanguage();
-  const { ready: mapsReady } = useGoogleMaps();
 
   const [drugName, setDrugName] = useState("");
   const [city, setCity] = useState("");
@@ -164,7 +162,7 @@ function MissingDrugsPage() {
               </div>
               <button
                 onClick={handleNearMe}
-                disabled={!mapsReady || locating}
+                disabled={locating}
                 className="md:col-span-3 inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
               >
                 {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}

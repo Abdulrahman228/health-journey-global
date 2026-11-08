@@ -1,4 +1,5 @@
 ﻿$Host.UI.RawUI.WindowTitle = "Tebana - Google Maps keys"
+# OBSOLETE (2026-11-08): maps and address search now run on OpenStreetMap (no Google key, no billing). Kept for history only - do not run.
 # ============================================================================
 # Tebana - install the two Google Maps keys in one step.
 #   1) Browser key -> .env VITE_GOOGLE_MAPS_BROWSER_KEY, then rebuild + deploy the website
