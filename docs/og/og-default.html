@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@500;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    background: #ffffff;
+    color: #12303a;
+    position: relative;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(15,127,124,.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15,127,124,.08) 1px, transparent 1px);
+    background-size: 40px 40px;
+    -webkit-mask-image: radial-gradient(ellipse at 25% 40%, black 30%, transparent 75%);
+  }
+  .blob1 { position: absolute; width: 620px; height: 620px; border-radius: 50%; background: #e3f5f1; filter: blur(60px); top: -220px; right: -160px; }
+  .blob2 { position: absolute; width: 420px; height: 420px; border-radius: 50%; background: rgba(242,107,78,.14); filter: blur(60px); bottom: -200px; left: -120px; }
+  .wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 84px; }
+  .text { max-width: 640px; }
+  .pill { display: inline-flex; align-items: center; gap: 10px; border: 1.5px solid #cfe6e2; background: #fff; border-radius: 999px; padding: 8px 18px; font-size: 22px; font-weight: 500; color: #0f7f7c; }
+  h1 { margin: 26px 0 0; font-size: 74px; line-height: 1.2; font-weight: 700; }
+  h1 span { color: #0f7f7c; display: block; }
+  p { margin: 22px 0 0; font-size: 28px; line-height: 1.5; color: #4e6b70; }
+  .brand { position: absolute; bottom: 44px; left: 84px; display: flex; align-items: center; gap: 14px; direction: ltr; font-size: 26px; font-weight: 700; color: #12303a; }
+  .brand small { font-weight: 500; color: #4e6b70; font-size: 20px; }
+  /* logo-mark.png has a white background: make it a deliberate white tile */
+  .mark { width: 300px; height: 300px; object-fit: contain; background: #fff; border-radius: 44px; padding: 18px; box-sizing: border-box; border: 1.5px solid #e2efec; box-shadow: 0 30px 60px -20px rgba(15,127,124,.35); }
+  .ecg { position: absolute; left: 0; right: 0; bottom: 110px; height: 70px; opacity: .35; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="blob1"></div>
+  <div class="blob2"></div>
+  <svg class="ecg" viewBox="0 0 1200 70" preserveAspectRatio="none"><path d="M0 40 H420 L440 40 L452 10 L464 66 L476 40 H780 L792 40 L802 24 L814 58 L826 40 H1200" fill="none" stroke="#0f7f7c" stroke-width="3" stroke-linejoin="round"/></svg>
+  <div class="wrap">
+    <div class="text">
+      <span class="pill">✓ منصة طبية مصرية · أطباء موثّقون يدويًا</span>
+      <h1>احجز طبيبك الموثّق <span>في دقائق</span></h1>
+      <p>في العيادة أو بالفيديو — السعر معلن قبل الحجز، وسجلّك الطبي معك.</p>
+    </div>
+    <img class="mark" src="file:///C:/lovable/health-journey-global/public/logo-mark.png" alt="" />
+  </div>
+  <div class="brand">mytabibi.com <small>· طبانا Tebana</small></div>
+</body>
+</html>
