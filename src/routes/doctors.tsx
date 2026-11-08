@@ -22,7 +22,13 @@ import { buildMeta, buildSeoLinks } from "@/lib/seo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SponsoredDoctorsRow } from "@/components/doctors/SponsoredDoctorsRow";
 import { TierBadge, type DoctorTier } from "@/components/TierBadge";
-import { HeroHierarchicalSearch } from "@/components/HeroHierarchicalSearch";
+
+// Quick-filter chips: the most requested specialties, in this order. The full
+// list stays available in the dropdown and the collapsed links block.
+const QUICK_SPECIALTY_SLUGS = [
+  "internal", "pediatrics", "dentistry", "dermatology", "gynecology", "cardiology",
+  "orthopedics", "ophthalmology", "ent", "neurology", "psychiatry", "general",
+];
 
 /** Seeded/demo doctors that must never appear in the public patient-facing list. */
 const DEMO_DOCTOR_NAMES = new Set(["Dr. Test", "د. تجربة الطبيب"]);
@@ -399,49 +405,43 @@ function DoctorsPage() {
             {t("Browse verified doctors and book in seconds.", "تصفح أطباء موثقين واحجز في ثوانٍ.")}
           </p>
 
-          {/* Detailed hierarchical search (Country → Governorate → City → District + specialty + Near me) */}
-          <div className="mt-6">
-            <HeroHierarchicalSearch language={language} isRTL={isRTL} t={t} />
-          </div>
-
-          {/* Quick refine inside loaded results (name / specialty / city free-text) */}
-          <div className="mt-6">
-            <h2 className="text-sm font-semibold text-muted-foreground mb-2">
-              {t("Refine results", "تصفية النتائج")}
-            </h2>
-            <div className="grid gap-3 md:grid-cols-3 bg-card p-4 rounded-xl shadow-sm border border-border">
-              <div className="relative">
-                <Search className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-muted-foreground" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t("Doctor name or specialty", "اسم الطبيب أو التخصص")}
-                  className="w-full ps-10 pe-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              <select
-                value={specialty}
-                onChange={(e) => setSpecialty(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">{t("All specialties", "كل التخصصات")}</option>
-                {specialties.map((s) => (
-                  <option key={s.id} value={language === "ar" ? s.name_ar : s.name_en}>
-                    {language === "ar" ? s.name_ar : s.name_en}
-                  </option>
-                ))}
-              </select>
-              <div className="relative">
-                <MapPin className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-muted-foreground" />
-                <input
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder={t("City (e.g. Cairo)", "المدينة (مثال: القاهرة)")}
-                  className="w-full ps-10 pe-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
+          {/* One search card: name / specialty. Location comes from "Near me",
+              or from a specialty×city landing page (shown as a removable chip). */}
+          <div className="mt-6 grid gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm md:grid-cols-[1fr_280px]">
+            <div className="relative">
+              <Search className="absolute top-1/2 -translate-y-1/2 start-3.5 h-5 w-5 text-muted-foreground" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("Doctor name, specialty or symptom", "اسم الطبيب أو التخصص أو العرَض")}
+                className="h-12 w-full rounded-xl border border-input bg-background ps-11 pe-3 text-base focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
             </div>
+            <select
+              value={specialty}
+              onChange={(e) => setSpecialty(e.target.value)}
+              className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="">{t("All specialties", "كل التخصصات")}</option>
+              {specialties.map((s) => (
+                <option key={s.id} value={language === "ar" ? s.name_ar : s.name_en}>
+                  {language === "ar" ? s.name_ar : s.name_en}
+                </option>
+              ))}
+            </select>
           </div>
+          {city && (
+            <button
+              type="button"
+              onClick={() => setCity("")}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground"
+            >
+              <MapPin className="h-4 w-4" />
+              {city}
+              <span aria-hidden>✕</span>
+              <span className="sr-only">{t("Clear city", "مسح المدينة")}</span>
+            </button>
+          )}
 
           {/* Advanced filters toolbar */}
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -539,16 +539,14 @@ function DoctorsPage() {
         </div>
       </div>
 
-      {/* Specialty pillar links (Silo internal linking for SEO) */}
+      {/* Specialty pillar links (internal linking to /specialty pages), collapsed
+          so the page is not a wall of 68 chips. */}
       {specialties.length > 0 && (
-        <nav
-          aria-label={t("Browse by specialty", "تصفّح حسب التخصص")}
-          className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8"
-        >
-          <h2 className="text-sm font-semibold text-muted-foreground">
-            {t("Browse doctors by specialty", "تصفّح الأطباء حسب التخصص")}
-          </h2>
-          <div className="mt-2 flex flex-wrap gap-2">
+        <details className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+          <summary className="cursor-pointer text-sm font-semibold text-muted-foreground hover:text-primary">
+            {t(`All specialties (${specialties.length})`, `كل التخصصات (${specialties.length})`)}
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-2">
             {specialties.map((s) => {
               const label = language === "ar" ? s.name_ar : s.name_en;
               return (
@@ -563,10 +561,10 @@ function DoctorsPage() {
               );
             })}
           </div>
-        </nav>
+        </details>
       )}
 
-      {/* Specialty chips */}
+      {/* Quick specialty chips */}
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex gap-2 overflow-x-auto pb-2">
           <button
@@ -579,7 +577,10 @@ function DoctorsPage() {
           >
             {t("All", "الكل")}
           </button>
-          {specialties.map((s) => {
+          {specialties
+            .filter((s) => QUICK_SPECIALTY_SLUGS.includes(s.slug))
+            .sort((a, b) => QUICK_SPECIALTY_SLUGS.indexOf(a.slug) - QUICK_SPECIALTY_SLUGS.indexOf(b.slug))
+            .map((s) => {
             const label = language === "ar" ? s.name_ar : s.name_en;
             const active = specialty === label;
             return (

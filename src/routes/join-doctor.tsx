@@ -99,8 +99,8 @@ function Hero({ t, isAr }: { t: T; isAr: boolean }) {
 
             <h1 className="mt-6 text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
               {t(
-                "Join the largest medical network in Egypt & the Arab world",
-                "انضم لأكبر شبكة استشارات طبية فى مصر والعالم العربى",
+                "Run your clinic on Tebana — bookings, records and prescriptions in one place",
+                "أدِر عيادتك على طبانا — حجوزات وسجلات وروشتات في مكان واحد",
               )}
             </h1>
 
@@ -153,21 +153,21 @@ function Hero({ t, isAr }: { t: T; isAr: boolean }) {
                 </div>
                 <div>
                   <div className="text-lg font-bold">
-                    {t("Dr. Sarah Ahmed", "د. سارة أحمد")}
+                    {t("Your clinic", "عيادتك")}
                   </div>
                   <div className="text-sm text-white/80">
-                    {t("Cardiology • Verified", "قلب وأوعية دموية • موثّقة")}
+                    {t("Verified profile", "ملف موثّق")}
                   </div>
                 </div>
               </div>
               <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-xl bg-white/10 p-3">
-                  <div className="text-xs text-white/70">{t("This month", "هذا الشهر")}</div>
-                  <div className="mt-1 text-2xl font-bold">EGP 18,400</div>
+                  <div className="text-xs text-white/70">{t("Online consultations", "الاستشارات أونلاين")}</div>
+                  <div className="mt-1 text-2xl font-bold">{t("90% yours", "90% لك")}</div>
                 </div>
                 <div className="rounded-xl bg-white/10 p-3">
-                  <div className="text-xs text-white/70">{t("Patients", "مرضى")}</div>
-                  <div className="mt-1 text-2xl font-bold">142</div>
+                  <div className="text-xs text-white/70">{t("Clinic visits", "كشف العيادة")}</div>
+                  <div className="mt-1 text-2xl font-bold">{t("0% fee", "0% عمولة")}</div>
                 </div>
               </div>
               <div className="mt-4 flex items-center gap-2 rounded-xl bg-white/10 p-3 text-sm">
@@ -290,7 +290,7 @@ function HowItWorks({ t }: { t: T }) {
     },
     {
       n: "3",
-      title: t("Get verified in ~24h", "التحقق خلال ~24 ساعة"),
+      title: t("Get verified within 24–48h", "التوثيق خلال 24–48 ساعة"),
       desc: t(
         "Our team reviews and approves your profile.",
         "فريقنا يراجع ملفك ويعتمده ويمنحك شارة التوثيق.",
@@ -633,8 +633,8 @@ function FinalCTA({ t }: { t: T }) {
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-lg text-white/90">
           {t(
-            "Registration takes less than 5 minutes. Get verified in under 24 hours.",
-            "التسجيل أقل من 5 دقائق، والتوثيق فى أقل من 24 ساعة.",
+            "Registration takes less than 5 minutes. Verification usually within 24–48 hours.",
+            "التسجيل أقل من 5 دقائق، والتوثيق عادةً خلال 24–48 ساعة.",
           )}
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">

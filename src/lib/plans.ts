@@ -56,12 +56,12 @@ const GOLD_FEATURES: PlanFeature[] = [
     ar: "نظام محاسبى متكامل (فواتير، مصروفات، تقارير شهرية)",
   },
   { en: "Compete for Sponsored slots (top of results)", ar: "المنافسة على أماكن Sponsored (أعلى النتائج)" },
-  { en: "Custom profile site dr-{name}.mytabibi.com", ar: "موقع بروفايل خاص dr-{name}.mytabibi.com" },
+  { en: "Your own profile page: mytabibi.com/d/your-name", ar: "صفحة خاصة باسمك: mytabibi.com/d/اسمك" },
   { en: "Installable branded PWA for your clinic", ar: "تطبيق PWA قابل للتنصيب باسم عيادتك" },
   { en: "Online lab-results delivery", ar: "نتائج تحاليل أون لاين" },
   {
-    en: "10% commission on online consultations only (lowest in market)",
-    ar: "عمولة 10% على الكشف الأونلاين فقط (الأقل في السوق)",
+    en: "10% commission on online consultations only — 0% on clinic visits",
+    ar: "عمولة 10% على الكشف الأونلاين فقط — و0% على كشف العيادة",
   },
 ];
 
