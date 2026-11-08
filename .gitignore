@@ -70,3 +70,4 @@ deploy.log
 
 # OMC / agent state
 .omc/
+deno.lock
