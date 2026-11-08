@@ -8,9 +8,9 @@ import { buildMeta, buildSeoLinks, siteConfig } from "@/lib/seo";
 export const Route = createFileRoute("/about")({
   head: () => ({
     meta: buildMeta({
-      title: "عن طبانا Tebana — منصة الصحة الرقمية الأولى للوطن العربي",
+      title: "عن طبانا Tebana — منصة مصرية لحجز الأطباء الموثّقين",
       description:
-        "طبانا (Tebana) — تعرّف على رسالتنا ورؤيتنا لربط المرضى بأطباء موثوقين في الوطن العربي عبر استشارات فيديو آمنة وحجوزات فورية.",
+        "طبانا (Tebana) — تعرّف على رسالتنا: ربط المرضى في مصر بأطباء موثّقين يدويًا، كشف في العيادة أو استشارة فيديو، وسجل طبي يبقى مع المريض.",
       path: "/about",
       keywords: [
         "عن طبانا",
@@ -42,8 +42,8 @@ function AboutPage() {
           </h1>
           <p className="mt-3 text-sm font-medium uppercase tracking-wider text-primary">
             {t(
-              "Your Health, Connected — Across the Arab World",
-              "صحتك بين يديك — في كل أنحاء الوطن العربي",
+              "Your health, connected — built in Egypt",
+              "صحتك بين يديك — صُنعت في مصر",
             )}
           </p>
         </header>
@@ -100,10 +100,10 @@ function AboutPage() {
           />
           <PillarCard
             icon={Users}
-            title={t("Arab World", "الوطن العربي")}
+            title={t("Egypt first", "مصر أولًا")}
             body={t(
-              "Egypt today; Gulf, Levant & Maghreb next.",
-              "مصر اليوم؛ الخليج والشام والمغرب العربي قريباً.",
+              "Built for Egyptian clinics and patients: Egyptian pounds, local payment and Arabic first.",
+              "مبنية لعيادات ومرضى مصر: الجنيه المصري، طرق دفع محلية، والعربية أولًا.",
             )}
           />
         </section>

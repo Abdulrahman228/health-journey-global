@@ -111,8 +111,8 @@ function HowItWorksPage() {
     },
     {
       icon: Clock,
-      title: t("24/7 Support", "دعم 24/7"),
-      desc: t("Always-on customer support", "دعم عملاء طوال الوقت"),
+      title: t("Human support", "دعم بشري"),
+      desc: t("A support team that answers from inside the platform", "فريق دعم يردّ عليك من داخل المنصة"),
     },
     {
       icon: CheckCircle2,
@@ -306,8 +306,8 @@ function HowItWorksPage() {
           </h2>
           <p className="mt-3 text-muted-foreground">
             {t(
-              "Read our terms, privacy policy, or contact our 24/7 support team.",
-              "اطّلع على الشروط، سياسة الخصوصية، أو تواصل مع فريق الدعم 24/7.",
+              "Read our terms, privacy policy, or contact the support team.",
+              "اطّلع على الشروط، سياسة الخصوصية، أو تواصل مع فريق الدعم.",
             )}
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -332,8 +332,8 @@ function HowItWorksPage() {
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
             {t(
-              "Tebana is HIPAA-aligned and GDPR-compliant.",
-              "منصة طبانا ملتزمة بمعايير HIPAA وGDPR.",
+              "Medical records are encrypted at rest and in transit, with access limited to the patient and the doctors they choose.",
+              "السجلات الطبية مشفّرة أثناء التخزين والنقل، والوصول إليها مقصور على المريض والأطباء الذين يختارهم.",
             )}
           </p>
         </div>
