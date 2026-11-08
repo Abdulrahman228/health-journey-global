@@ -226,17 +226,6 @@
     padding-top: 0.15em;
     text-wrap: balance;
   }
-
-  /* Elegant heading — used for hero H1 to give a premium feel.
-   * Tajawal is a modern clean Arabic font that pairs well with Cairo body text. */
-  .arabic-elegant {
-    font-family: 'Tajawal', 'Cairo', system-ui, -apple-system, sans-serif;
-    font-weight: 800 !important;
-    line-height: 1.45 !important;
-    letter-spacing: 0 !important;
-    padding-top: 0.1em;
-    text-wrap: balance;
-  }
 }
 
 /* ───────────── Doctor system (app shell) typography ─────────────

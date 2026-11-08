@@ -1,0 +1,28 @@
+# طبانا (Tebana)
+
+> منصة طبية مصرية لحجز الأطباء الموثّقين — كشف في العيادة أو استشارة بالفيديو، سعر معلن قبل الحجز، وسجل طبي يبقى مع المريض. تديرها شركة طبانا للخدمات الإلكترونية. الاسم السابق: طبيبي (Tabibi).
+
+Tebana (formerly Tabibi) is an Egyptian healthcare platform: patients find manually verified doctors, book clinic visits or video consultations with the price shown up front, and keep an encrypted medical record. Doctors run bookings, a waiting-room queue, e-prescriptions and patient records from one dashboard, with 0% commission on clinic visits and 10% on online consultations.
+
+## الصفحات الأساسية / Key pages
+- [الرئيسية / Home](https://mytabibi.com/): search by specialty, doctor name or symptom; "near me" geographic search
+- [الأطباء / Doctors](https://mytabibi.com/doctors): verified doctors list with filters
+- [الأقرب لي / Near me](https://mytabibi.com/nearby): doctors around the patient's location
+- [التخصصات / Specialties](https://mytabibi.com/doctors): one landing page per specialty at https://mytabibi.com/specialty/{slug}
+- [المقالات / Articles](https://mytabibi.com/articles): medical articles written by doctors
+- [للأطباء / For doctors](https://mytabibi.com/join-doctor): how a doctor joins and gets verified
+- [الأسعار / Pricing](https://mytabibi.com/pricing): Free and Gold plans for doctors
+- [كيف تعمل / How it works](https://mytabibi.com/how-it-works)
+- [عن طبانا / About](https://mytabibi.com/about)
+- [تواصل معنا / Contact](https://mytabibi.com/contact)
+
+## حقائق / Facts
+- Country: Egypt. Currency: Egyptian pound (EGP). Languages: Arabic (primary), English.
+- Every doctor's license and certificates are reviewed by hand before the profile is published; verified profiles carry a "موثّق" badge.
+- Booking types: clinic visit (paid at the clinic) and video consultation (paid online).
+- Medical records are encrypted and visible only to the patient and the doctors they choose.
+- Mobile apps: Android and iOS (package com.mytabibi.app).
+
+## سياسات / Policies
+- [سياسة الخصوصية / Privacy](https://mytabibi.com/privacy)
+- [شروط الخدمة / Terms](https://mytabibi.com/terms)

@@ -124,7 +124,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         // text renders immediately, then swaps to the web fonts on load.
         // IBM Plex Sans Arabic = the doctor system UI family (see styles.css).
         children:
-          "(function(){var h='https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap';var l=document.createElement('link');l.rel='stylesheet';l.href=h;l.media='print';l.onload=function(){this.media='all';this.onload=null};(document.head||document.documentElement).appendChild(l);})();",
+          "(function(){var h='https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap';var l=document.createElement('link');l.rel='stylesheet';l.href=h;l.media='print';l.onload=function(){this.media='all';this.onload=null};(document.head||document.documentElement).appendChild(l);})();",
       },
       {
         // Register service worker for offline-first PWA experience.
