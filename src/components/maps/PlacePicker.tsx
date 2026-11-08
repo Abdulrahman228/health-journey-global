@@ -27,11 +27,13 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
   }, [value]);
 
   useEffect(() => {
-    if (!input || input.length < 3) {
+    if (!input || input.trim().length < 2) {
       setSuggestions([]);
       return;
     }
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    // Suggest from the first two letters; spelling variants (ى/ي, ة/ه, أ/ا)
+    // are handled by the server.
     debounceRef.current = window.setTimeout(async () => {
       const id = ++requestRef.current;
       setLoading(true);
@@ -46,7 +48,7 @@ export function PlacePicker({ value, placeholder, onPick, className }: PlacePick
       setSuggestions(result);
       setOpen(true);
       setLookupFailed(false);
-    }, 350);
+    }, 250);
   }, [input]);
 
   async function selectSuggestion(s: GeoSuggestion) {

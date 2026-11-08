@@ -16,17 +16,16 @@
 // mapsUri stays a Google Maps *link* (free deep link, no API) because patients
 // use it to navigate to the clinic.
 
+import { photonAutocomplete } from "./photon.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PHOTON = "https://photon.komoot.io/api/";
 const NOMINATIM = "https://nominatim.openstreetmap.org";
 const USER_AGENT = "Tabibi-Tebana/1.0 (+https://mytabibi.com)";
-// Egypt bounding box (minLon,minLat,maxLon,maxLat) — keeps suggestions local.
-const EGYPT_BBOX = "24.6,21.9,37.1,31.8";
 
 type Body = {
   action?: "autocomplete" | "details" | "geocode" | "reverse";
@@ -157,11 +156,6 @@ function toPlace(row: NominatimRow, fallbackId?: string): Place {
   };
 }
 
-type PhotonFeature = {
-  geometry?: { coordinates?: [number, number] };
-  properties?: Record<string, string | number | undefined>;
-};
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405);
@@ -182,34 +176,17 @@ Deno.serve(async (req) => {
   if (!allow(limitKey, userId ? RATE_LIMIT : 20)) return jsonResponse({ error: "rate_limited" }, 429);
 
   try {
-    // --- Autocomplete: typing → suggestions (Photon, Egypt box) ----------------
+    // --- Autocomplete: typing → suggestions (Photon, Egypt; Arabic spelling
+    //     variants ى/ي, ة/ه, أ/ا handled in photon.ts) ----------------------------
     if (body.action === "autocomplete") {
       const input = (body.input ?? "").trim();
       if (input.length < 2) return jsonResponse({ suggestions: [] });
-      const qs = new URLSearchParams({ q: input, limit: "7", bbox: EGYPT_BBOX });
-      if (typeof body.lat === "number" && typeof body.lng === "number") {
-        qs.set("lat", String(body.lat));
-        qs.set("lon", String(body.lng));
-      }
-      const res = await fetch(`${PHOTON}?${qs}`, { headers: { "User-Agent": USER_AGENT } });
-      if (!res.ok) {
-        console.error("photon error", res.status, await res.text());
-        return jsonResponse({ error: "places_error", status: res.status }, 502);
-      }
-      const data = (await res.json()) as { features?: PhotonFeature[] };
-      const seen = new Set<string>();
-      const suggestions = (data.features ?? []).flatMap((f) => {
-        const p = f.properties ?? {};
-        const placeId = osmPlaceId(String(p.osm_type ?? "N"), p.osm_id as number | undefined);
-        if (!p.osm_id || seen.has(placeId)) return [];
-        seen.add(placeId);
-        const street = [p.street, p.housenumber].filter(Boolean).join(" ");
-        const main = String(p.name ?? street ?? "");
-        const secondary = [p.name ? street : null, p.district, p.city ?? p.county, p.state]
-          .filter((v) => v && v !== main)
-          .join("، ");
-        return [{ placeId, description: [main, secondary].filter(Boolean).join("، "), main, secondary }];
-      });
+      const bias: Record<string, string> =
+        typeof body.lat === "number" && typeof body.lng === "number"
+          ? { lat: String(body.lat), lon: String(body.lng) }
+          : {};
+      const suggestions = await photonAutocomplete(input, bias, USER_AGENT);
+      if (suggestions === null) return jsonResponse({ error: "places_error", status: 502 }, 502);
       return jsonResponse({ suggestions });
     }
 
