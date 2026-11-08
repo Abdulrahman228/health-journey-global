@@ -173,6 +173,10 @@ function DoctorsPage() {
       }
     }
     if (km) setMaxDistanceKm(km);
+    // Free-text search shipped by the homepage search box (doctor name,
+    // specialty or symptom). `q` is already taken by the city name above.
+    const s = params.get("search");
+    if (s) setSearch(s);
   }, [specialties, language]);
 
   const { data: doctors = [], isLoading, isError, refetch } = useQuery({

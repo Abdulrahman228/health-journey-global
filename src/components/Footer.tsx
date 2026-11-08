@@ -1,166 +1,134 @@
 import { Link } from "@tanstack/react-router";
+import { HeartPulse } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { BrandName } from "@/components/BrandName";
 import { siteConfig } from "@/lib/seo";
 
-const footerContent = {
+type FooterLink = { label: string; to: string };
+type Column = { title: string; links: FooterLink[] };
+
+const footerContent: Record<"en" | "ar", { description: string; columns: Column[]; copyright: string; made: string }> = {
   en: {
-    tagline: "Your Health, Connected",
-    description:
-      "Connecting patients with trusted doctors across the Arab world. Book appointments, consult online, and manage your health.",
-    patients: "For Patients",
-    patientsLinks: [
-      { label: "Find a Doctor", to: "/doctors" },
-      { label: "Book Appointment", to: "/doctors" },
-      { label: "Online Consultation", to: "/doctors" },
-      { label: "Medical Records", to: "/profile/medical-history" },
-      { label: "Manual Payment", to: "/pay" },
-    ],
-    doctors: "For Doctors",
-    doctorsLinks: [
-      { label: "Join as Doctor", to: "/join-doctor" },
-      { label: "Doctor Dashboard", to: "/dashboard" },
-      { label: "Pricing", to: "/pricing" },
-    ],
-    company: "Company",
-    companyLinks: [
-      { label: "About Us", to: "/about" },
-      { label: "How It Works", to: "/how-it-works" },
-      { label: "Contact", to: "/contact" },
-    ],
-    legal: "Legal",
-    legalLinks: [
-      { label: "Privacy Policy", to: "/privacy" },
-      { label: "Terms of Service", to: "/terms" },
+    description: "Egyptian platform for booking verified doctors — in the clinic or by video, with a medical record that stays with you.",
+    columns: [
+      {
+        title: "For patients",
+        links: [
+          { label: "Find a doctor", to: "/doctors" },
+          { label: "Doctors near me", to: "/nearby" },
+          { label: "Medical record", to: "/profile/medical-history" },
+          { label: "Community", to: "/feed" },
+          { label: "Rare medications", to: "/missing-drugs" },
+        ],
+      },
+      {
+        title: "For doctors",
+        links: [
+          { label: "Join as a doctor", to: "/join-doctor" },
+          { label: "Plans and pricing", to: "/pricing" },
+          { label: "Doctor dashboard", to: "/dashboard" },
+          { label: "How it works", to: "/how-it-works" },
+        ],
+      },
+      {
+        title: "Tebana",
+        links: [
+          { label: "About", to: "/about" },
+          { label: "Articles", to: "/articles" },
+          { label: "Contact", to: "/contact" },
+          { label: "Privacy policy", to: "/privacy" },
+          { label: "Terms of service", to: "/terms" },
+        ],
+      },
     ],
     copyright: `© 2026 ${siteConfig.organization.legalNameEn} (${siteConfig.brand.ar}). All rights reserved.`,
+    made: "Made in Egypt",
   },
   ar: {
-    tagline: "صحتك، متصلة",
-    description:
-      "نربط المرضى بأطباء موثوق بهم في جميع أنحاء العالم العربي. احجز مواعيد، استشر أونلاين، وادارء صحتك.",
-    patients: "للمرضى",
-    patientsLinks: [
-      { label: "ابحث عن طبيب", to: "/doctors" },
-      { label: "احجز موعد", to: "/doctors" },
-      { label: "استشارة أونلاين", to: "/doctors" },
-      { label: "السجل الطبي", to: "/profile/medical-history" },
-      { label: "ادفع يدوياً", to: "/pay" },
-    ],
-    doctors: "للأطباء",
-    doctorsLinks: [
-      { label: "انضم كطبيب", to: "/join-doctor" },
-      { label: "لوحة تحكم الطبيب", to: "/dashboard" },
-      { label: "الأسعار", to: "/pricing" },
-    ],
-    company: "الشركة",
-    companyLinks: [
-      { label: "من نحن", to: "/about" },
-      { label: "كيف يعمل", to: "/how-it-works" },
-      { label: "تواصل معنا", to: "/contact" },
-    ],
-    legal: "قانوني",
-    legalLinks: [
-      { label: "سياسة الخصوصية", to: "/privacy" },
-      { label: "شروط الخدمة", to: "/terms" },
+    description: "منصة مصرية لحجز الأطباء الموثّقين — في العيادة أو بالفيديو، وسجل طبي يبقى معك.",
+    columns: [
+      {
+        title: "للمرضى",
+        links: [
+          { label: "ابحث عن طبيب", to: "/doctors" },
+          { label: "الأطباء الأقرب لي", to: "/nearby" },
+          { label: "السجل الطبي", to: "/profile/medical-history" },
+          { label: "المجتمع", to: "/feed" },
+          { label: "الأدوية نادرة التوفر", to: "/missing-drugs" },
+        ],
+      },
+      {
+        title: "للأطباء",
+        links: [
+          { label: "انضم كطبيب", to: "/join-doctor" },
+          { label: "الباقات والأسعار", to: "/pricing" },
+          { label: "لوحة الطبيب", to: "/dashboard" },
+          { label: "كيف تعمل المنصة", to: "/how-it-works" },
+        ],
+      },
+      {
+        title: "طبانا",
+        links: [
+          { label: "من نحن", to: "/about" },
+          { label: "المقالات", to: "/articles" },
+          { label: "تواصل معنا", to: "/contact" },
+          { label: "سياسة الخصوصية", to: "/privacy" },
+          { label: "شروط الخدمة", to: "/terms" },
+        ],
+      },
     ],
     copyright: `© 2026 ${siteConfig.organization.legalName} (${siteConfig.brand.en}). جميع الحقوق محفوظة.`,
+    made: "صُنع في مصر",
   },
 };
 
 export function Footer() {
   const { language } = useLanguage();
-  const content =
-    (footerContent as Record<string, typeof footerContent.en>)[language] ?? footerContent.en;
+  const content = footerContent[language === "ar" ? "ar" : "en"];
   const isRTL = language === "ar";
 
   return (
-    <footer className="border-t border-border bg-muted/30">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
-          {/* Brand */}
-          <div className="lg:col-span-2">
-            <Link
-              to="/"
-              className="flex items-center gap-2"
-              aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}
-            >
+    <footer className="border-t border-border bg-surface">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        <div className="grid gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-4">
+            <Link to="/" className="inline-flex items-center gap-3" aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}>
               <img
                 src="/logo-mark.png"
                 alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
-                className="h-14 w-auto object-contain"
+                width={48}
+                height={48}
+                className="h-12 w-12 object-contain"
               />
-              <BrandName
-                variant="wordmark"
-                primary={isRTL ? "ar" : "en"}
-                className="text-xl text-foreground"
-              />
+              <BrandName variant="wordmark" primary={isRTL ? "ar" : "en"} className="text-2xl text-foreground" />
             </Link>
-            <p className="mt-4 max-w-xs text-sm text-muted-foreground">{content.description}</p>
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">{content.description}</p>
           </div>
 
-          {/* Links */}
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">{content.patients}</h2>
-            <ul className="mt-4 space-y-2">
-              {content.patientsLinks.map((link, i) => (
-                <li key={`${link.to}-${i}`}>
-                  <Link
-                    to={link.to}
-                    className="text-sm text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">{content.company}</h2>
-            <ul className="mt-4 space-y-2">
-              {content.companyLinks.map((link, i) => (
-                <li key={`${link.to}-${i}`}>
-                  <Link
-                    to={link.to}
-                    className="text-sm text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-              {content.legalLinks.map((link, i) => (
-                <li key={`${link.to}-${i}`}>
-                  <Link
-                    to={link.to}
-                    className="text-sm text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">{content.doctors}</h2>
-            <ul className="mt-4 space-y-2">
-              {content.doctorsLinks.map((link, i) => (
-                <li key={`${link.to}-${i}`}>
-                  <Link
-                    to={link.to}
-                    className="text-sm text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:col-span-8">
+            {content.columns.map((col) => (
+              <nav key={col.title} aria-label={col.title}>
+                <h2 className="text-sm font-bold text-foreground">{col.title}</h2>
+                <ul className="mt-4 space-y-2.5">
+                  {col.links.map((link, i) => (
+                    <li key={`${link.to}-${i}`}>
+                      <Link to={link.to} className="text-sm text-muted-foreground transition-colors hover:text-primary">
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ))}
           </div>
         </div>
 
-        <div className="mt-12 border-t border-border pt-8">
-          <p className="text-center text-sm text-muted-foreground">{content.copyright}</p>
+        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row">
+          <p>{content.copyright}</p>
+          <p className="inline-flex items-center gap-1.5">
+            <HeartPulse className="h-3.5 w-3.5 text-coral" />
+            {content.made}
+          </p>
         </div>
       </div>
     </footer>

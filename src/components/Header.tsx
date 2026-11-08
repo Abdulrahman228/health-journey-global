@@ -6,24 +6,20 @@ import { hasAdminRole, useAuth, type UserRole } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
 import { siteConfig } from "@/lib/seo";
 
+// Four links only; community, rare medications, about and how-it-works live
+// in the footer so the header stays light.
 const navLinks = {
   en: [
-    { label: "Home", to: "/" },
     { label: "Doctors", to: "/doctors" },
-    { label: "Community", to: "/feed" },
-    { label: "Rare Medications", to: "/missing-drugs" },
-    { label: "Pricing", to: "/pricing" },
-    { label: "How It Works", to: "/how-it-works" },
-    { label: "About", to: "/about" },
+    { label: "Near me", to: "/nearby" },
+    { label: "Articles", to: "/articles" },
+    { label: "For doctors", to: "/join-doctor" },
   ],
   ar: [
-    { label: "الرئيسية", to: "/" },
     { label: "الأطباء", to: "/doctors" },
-    { label: "المجتمع", to: "/feed" },
-    { label: "الأدوية نادرة التوفر", to: "/missing-drugs" },
-    { label: "الأسعار", to: "/pricing" },
-    { label: "كيف يعمل", to: "/how-it-works" },
-    { label: "من نحن", to: "/about" },
+    { label: "الأقرب لي", to: "/nearby" },
+    { label: "المقالات", to: "/articles" },
+    { label: "للأطباء", to: "/join-doctor" },
   ],
 };
 
@@ -39,23 +35,20 @@ export function Header() {
   const currentLang = LANGUAGES.find((l) => l.code === language) ?? LANGUAGES[1];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2" aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}>
+        <Link to="/" className="flex items-center gap-2.5" aria-label={`${siteConfig.brand.ar} - ${siteConfig.brand.en}`}>
           <img
             src="/logo-mark.png"
             alt={`${siteConfig.brand.ar} ${siteConfig.brand.en}`}
-            className="h-14 w-auto object-contain"
+            width={40}
+            height={40}
+            className="h-10 w-10 object-contain"
           />
-          <div className="flex flex-col leading-none">
-            <span className="text-xl font-bold text-foreground">
-              {language === "ar" ? siteConfig.brand.ar : siteConfig.brand.en}
-            </span>
-            <span className="mt-0.5 hidden text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:inline">
-              {language === "ar" ? "صحتك بين يديك" : "Your Health, Connected"}
-            </span>
-          </div>
+          <span className="text-2xl font-bold tracking-tight text-foreground">
+            {language === "ar" ? siteConfig.brand.ar : siteConfig.brand.en}
+          </span>
         </Link>
 
         {/* Desktop Nav */}

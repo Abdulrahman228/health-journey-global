@@ -1,80 +1,95 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useLanguage } from "@/hooks/useLanguage";
+import { useQuery } from "@tanstack/react-query";
 import {
-  HeartPulse,
-  Calendar,
-  Video,
-  Shield,
-  Search,
-  Stethoscope,
-  Clock,
-  Star,
-  ArrowRight,
   ArrowLeft,
-  Users,
-  Award,
-  Globe,
-  BookOpen,
+  ArrowRight,
+  Baby,
+  BadgeCheck,
+  Bone,
+  Brain,
+  Calendar,
+  CheckCircle2,
+  Ear,
+  Eye,
+  FileText,
+  HeartHandshake,
+  HeartPulse,
+  Lock,
+  Search,
+  ShieldCheck,
+  Smile,
+  Sparkles,
+  Stethoscope,
+  Video,
+  Wallet,
 } from "lucide-react";
+import { useLanguage } from "@/hooks/useLanguage";
 import { buildMeta, buildSeoLinks, siteConfig } from "@/lib/seo";
 import { faqSchema, jsonLdString } from "@/lib/schema";
-import heroMedicalTeamImage from "@/assets/hero-medical-team.png";
-import { HeroHierarchicalSearch } from "@/components/HeroHierarchicalSearch";
+import { supabase } from "@/integrations/supabase/client";
+import { PUBLIC_DOCTOR_COLUMNS } from "@/lib/public-columns";
+import { SmartSearch } from "@/components/home/SmartSearch";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 
+type T = (en: string, ar: string) => string;
+
+// Four honest answers — no capacity or coverage claims we cannot back.
 const HOMEPAGE_FAQ = [
   {
-    question: "كيف أحجز موعد مع طبيب على طبانا؟",
+    question: "كيف أحجز موعدًا مع طبيب على طبانا؟",
     answer:
-      "ابحث عن الطبيب المناسب عن طريق التخصص أو المدينة، ثم اختر الموعد المتاح، وأكد الحجز خلال دقائق. ستصلك رسالة تأكيد فورية على البريد الإلكتروني والرسائل النصية.",
+      "ابحث بالتخصص أو اسم الطبيب، اختر موعدًا في العيادة أو استشارة بالفيديو، وأكّد الحجز. يصلك التأكيد برسالة على هاتفك.",
   },
   {
-    question: "هل أستطيع الاستشارة أونلاين بالفيديو؟",
+    question: "هل الأطباء على طبانا موثّقون؟",
     answer:
-      "نعم. منصة طبانا توفر استشارات فيديو آمنة ومشفّرة مع أطباء معتمدين، بدون الحاجة لتثبيت أي تطبيق. تكفي متصفح حديث على الهاتف أو الكمبيوتر.",
+      "نعم. تُراجع رخصة كل طبيب وشهاداته يدويًا قبل ظهوره على المنصة، وتظهر شارة «موثّق» بجانب اسمه بعد اكتمال المراجعة.",
   },
   {
-    question: "هل الأطباء على طبانا موثوقون ومرخّصون؟",
+    question: "كم تكلفة الكشف أو الاستشارة؟",
     answer:
-      "كل طبيب على المنصة يمر بمرحلة تحقق صارمة من الترخيص والشهادات قبل عرض ملفه. تظهر شارة \"موثّق\" بجانب اسم الطبيب الذي اكتمل التحقق منه.",
-  },
-  {
-    question: "كم تكلفة الاستشارة الطبية؟",
-    answer:
-      "الأسعار تختلف حسب الطبيب والتخصص ونوع الاستشارة (حضوري أو فيديو). يظهر السعر بوضوح في ملف كل طبيب قبل تأكيد الحجز، بدون رسوم مخفية.",
+      "السعر معلن في صفحة كل طبيب قبل الحجز ولا توجد رسوم مخفية. كشف العيادة يُدفع في العيادة، والاستشارة أونلاين تُدفع إلكترونيًا.",
   },
   {
     question: "هل بياناتي الصحية آمنة؟",
     answer:
-      "نعم. كل سجلاتك مشفّرة بمعايير HIPAA وتُحفظ بأمان في خوادم مؤمّنة. لا يطّلع عليها سوى الطبيب الذي تختار مشاركتها معه، ويمكنك حذفها في أي وقت.",
+      "سجلّك الطبي مشفّر ولا يطّلع عليه إلا الطبيب الذي تختار مشاركته معه، ويمكنك طلب حذفه في أي وقت.",
   },
-  {
-    question: "في أي دول يعمل تطبيق طبانا؟",
-    answer:
-      "نخدم حالياً مرضى وأطباء في مصر والسعودية والإمارات وقطر والكويت والبحرين وعُمان والأردن، ونتوسع باستمرار لخدمة المزيد من الدول العربية.",
-  },
+];
+
+// Most-requested specialties in Egypt — slugs exist in the `specialties` table.
+const TOP_SPECIALTIES: { slug: string; ar: string; en: string; Icon: typeof Stethoscope }[] = [
+  { slug: "internal", ar: "باطنة", en: "Internal medicine", Icon: Stethoscope },
+  { slug: "pediatrics", ar: "أطفال", en: "Pediatrics", Icon: Baby },
+  { slug: "dentistry", ar: "أسنان", en: "Dentistry", Icon: Smile },
+  { slug: "dermatology", ar: "جلدية", en: "Dermatology", Icon: Sparkles },
+  { slug: "gynecology", ar: "نساء وتوليد", en: "Gynecology", Icon: HeartHandshake },
+  { slug: "cardiology", ar: "قلب", en: "Cardiology", Icon: HeartPulse },
+  { slug: "orthopedics", ar: "عظام", en: "Orthopedics", Icon: Bone },
+  { slug: "ophthalmology", ar: "عيون", en: "Ophthalmology", Icon: Eye },
+  { slug: "ent", ar: "أنف وأذن", en: "ENT", Icon: Ear },
+  { slug: "neurology", ar: "مخ وأعصاب", en: "Neurology", Icon: Brain },
 ];
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: buildMeta({
-      title: "احجز موعد طبيب أونلاين 24/7 — أطباء موثّقون | طبانا",
+      title: "احجز طبيبًا موثّقًا في العيادة أو أونلاين | طبانا",
       description:
-        "احجز موعدك مع أفضل الأطباء في الوطن العربي خلال دقائق — استشارة فيديو آمنة، أسعار شفافة، تأكيد فوري. جرّب طبانا مجاناً اليوم.",
+        "طبانا: منصة طبية مصرية لحجز الأطباء الموثّقين — كشف في العيادة أو استشارة فيديو، سعر معلن قبل الحجز، وسجل طبي يبقى معك.",
       path: "/",
       keywords: [
-        "حجز موعد طبيب",
+        "حجز طبيب",
+        "دكتور قريب مني",
         "طبيب أونلاين",
         "استشارة طبية فيديو",
-        "أطباء معتمدون مصر",
-        "تطبيب عن بعد",
-        "كشف أونلاين",
+        "أطباء موثقون مصر",
+        "كشف عيادة",
         siteConfig.brand.en,
       ],
     }),
     links: buildSeoLinks("/"),
-    scripts: [
-      { type: "application/ld+json", children: jsonLdString(faqSchema(HOMEPAGE_FAQ)) },
-    ],
+    scripts: [{ type: "application/ld+json", children: jsonLdString(faqSchema(HOMEPAGE_FAQ)) }],
   }),
   component: LandingPage,
 });
@@ -82,213 +97,239 @@ export const Route = createFileRoute("/")({
 function LandingPage() {
   const { language, t } = useLanguage();
   const isRTL = language === "ar";
-
   return (
     <div className="flex flex-col">
-      <HeroSection t={t} isRTL={isRTL} />
-      <StatsSection t={t} />
-      <FeaturesSection t={t} isRTL={isRTL} />
-      <HowItWorksSection t={t} isRTL={isRTL} />
-      <ArticlesTeaserSection t={t} isRTL={isRTL} />
-      <FaqSection t={t} />
-      <CTASection t={t} isRTL={isRTL} />
+      <Hero t={t} isRTL={isRTL} />
+      <Specialties t={t} isRTL={isRTL} />
+      <Trust t={t} />
+      <Doctors t={t} isRTL={isRTL} />
+      <ForDoctors t={t} isRTL={isRTL} />
+      <HowItWorks t={t} />
+      <Faq t={t} />
+      <FinalCta t={t} isRTL={isRTL} />
     </div>
   );
 }
 
-function HeroSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRTL: boolean }) {
-  const Arrow = isRTL ? ArrowLeft : ArrowRight;
+/* ───────────────────────── Hero ───────────────────────── */
 
+function Hero({ t, isRTL }: { t: T; isRTL: boolean }) {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-background via-background to-secondary/50 pt-6 pb-12 sm:pt-8 sm:pb-16 lg:pt-10 lg:pb-20">
-      {/* Decorative background elements */}
-      <div className="absolute inset-3 -z-10 overflow-hidden">
-        <div className="absolute -right-20 -top-20 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -left-20 bottom-0 h-72 w-72 rounded-full bg-teal/10 blur-3xl" />
-      </div>
+    <section className="relative overflow-hidden bg-background">
+      <div className="hero-grid pointer-events-none absolute inset-0 -z-10" aria-hidden />
+      <div className="pointer-events-none absolute -top-32 end-[-10%] -z-10 h-[520px] w-[520px] rounded-full bg-secondary blur-3xl" aria-hidden />
+      <div className="pointer-events-none absolute -bottom-40 start-[-10%] -z-10 h-[420px] w-[420px] rounded-full bg-coral/10 blur-3xl" aria-hidden />
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-12 lg:grid-cols-2">
-          {/* Content */}
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary">
-              <HeartPulse className="h-4 w-4" />
-              {t("Now available in Egypt", "متاح الآن في مصر")}
-            </div>
-            <h1 className="arabic-elegant mt-6 text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
-              {t(
-                "Tebana — Book your trusted doctor in minutes. Video consultations & in-person visits",
-                "طبانا — احجز طبيبك الموثّق في دقائق، استشارات فيديو ومواعيد حضورية"
-              )}
-            </h1>
-            <p className="mt-6 text-lg leading-8 text-muted-foreground">
-              {t(
-                "Tebana connects you with licensed doctors across the Arab world — book in-person visits or secure video consultations, compare prices, read genuine reviews, and manage your medical records on one trusted platform.",
-                "منصة طبانا تربطك بأطباء مرخّصين في الوطن العربي — احجز كشف حضوري أو استشارة فيديو آمنة، قارن الأسعار، اقرأ تقييمات حقيقية، وأدر سجلك الطبي على منصة موثوقة واحدة."
-              )}
-            </p>
-
-            {/* Search box — hierarchical Country → Governorate → City → District + Near me */}
-            <HeroHierarchicalSearch language={isRTL ? "ar" : "en"} isRTL={isRTL} t={t} />
-
-            <div className="mt-6 flex flex-wrap gap-4">
-              <Link
-                to="/doctors"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30"
-              >
-                {t("Find a Doctor", "ابحث عن طبيب")}
-                <Arrow className="h-5 w-5" />
-              </Link>
-              <Link
-                to="/join-doctor"
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-3 text-base font-semibold text-foreground transition-all hover:bg-accent"
-              >
-                {t("Join as Doctor", "انضم كطبيب")}
-              </Link>
-            </div>
-            {/* Trust badges */}
-            <div className="mt-10 flex flex-wrap items-center gap-6">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Shield className="h-5 w-5 text-teal" />
-                {t("Verified Doctors", "أطباء موثوق بهم")}
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-5 w-5 text-teal" />
-                {t("24/7 Support", "دعم على مدار الساعة")}
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Star className="h-5 w-5 text-teal" />
-                {t("Genuine patient reviews", "تقييمات حقيقية من المرضى")}
-              </div>
-            </div>
-          </div>
-
-          {/* Visual */}
-          <div className="relative hidden lg:block">
-            <div className="rounded-[2rem] bg-linear-to-br from-primary/10 to-teal/10 p-5 shadow-2xl shadow-primary/10">
-              <img
-                src={heroMedicalTeamImage}
-                alt={t("Doctors using telehealth platform", "أطباء يستخدمون منصة استشارات طبية عن بعد")}
-                className="block aspect-square w-full rounded-[1.5rem] object-cover shadow-xl"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function StatsSection({ t }: { t: (en: string, ar: string) => string }) {
-  // Product facts, not counters: the old "2,500+ doctors / 50,000+ patients /
-  // 100,000+ appointments" figures were hard-coded and far from the real data.
-  const stats = [
-    { icon: Stethoscope, value: t("Verified", "موثّقون"), label: t("Licence-reviewed doctors", "أطباء بعد مراجعة الترخيص") },
-    { icon: Calendar, value: "24/7", label: t("Online booking", "حجز أونلاين على مدار الساعة") },
-    { icon: Users, value: t("Video", "فيديو"), label: t("Secure online consultations", "استشارات أونلاين آمنة") },
-    { icon: Globe, value: t("Arabic", "عربي"), label: t("Built for Arab patients", "مصمَّم للمرضى العرب") },
-  ];
-
-  return (
-    <section className="border-y border-border bg-muted/30 py-12">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 lg:grid-cols-4">
-          {stats.map((stat, i) => (
-            <div key={i} className="text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-                <stat.icon className="h-6 w-6 text-primary" />
-              </div>
-              <p className="mt-3 text-3xl font-bold text-foreground">{stat.value}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FeaturesSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRTL: boolean }) {
-  const Arrow = isRTL ? ArrowLeft : ArrowRight;
-  const features = [
-    {
-      icon: Search,
-      title: t("Find the Right Doctor", "ابحث عن الطبيب المناسب"),
-      description: t(
-        "Search by specialty, city, rating, and availability. Browse verified doctor profiles with reviews from real patients.",
-        "ابحث حسب التخصص والمدينة والتقييم والتوفر. تصفح ملفات الأطباء الموثوقة مع تقييمات من مرضى حقيقيين."
-      ),
-    },
-    {
-      icon: Calendar,
-      title: t("Easy Booking", "حجز سهل"),
-      description: t(
-        "Book in-person or online appointments in minutes. Get instant confirmation via email and SMS reminders.",
-        "احجز مواعيد حضورية أو أونلاين في دقائق. احصل على تأكيد فوري عبر البريد والرسائل النصية."
-      ),
-    },
-    {
-      icon: Video,
-      title: t("Online Consultation", "استشارة أونلاين"),
-      description: t(
-        "Connect with your doctor via secure video call. Get diagnoses, prescriptions, and follow-ups from the comfort of your home.",
-        "تواصل مع طبيبك عبر مكالمة فيديو آمنة. احصل على تشخيص وروشتة ومتابعة من راحة منزلك."
-      ),
-    },
-    {
-      icon: Shield,
-      title: t("Secure Health Records", "سجلات صحية آمنة"),
-      description: t(
-        "Your medical history, allergies, and test results — all stored securely in one place. Access anytime, anywhere.",
-        "تاريخك الطبي وحساسيتك ونتائج تحاليلك — كل ذلك محفوظ بأمان في مكان واحد. اطلع عليه في أي وقت ومن أي مكان."
-      ),
-    },
-    {
-      icon: Star,
-      title: t("Verified Reviews", "تقييمات موثوقة"),
-      description: t(
-        "Read honest reviews from patients who actually visited the doctor. Rate your experience after each consultation.",
-        "اقرأ تقييمات صادقة من مرضى زاروا الطبيب فعلاً. قيّم تجربتك بعد كل استشارة."
-      ),
-    },
-    {
-      icon: Award,
-      title: t("Doctor Network", "شبكة أطباء"),
-      description: t(
-        "Join a growing network of healthcare professionals. Connect with colleagues and build your online presence.",
-        "انضم لشبكة متنامية من المتخصصين في الرعاية الصحية. تواصل مع الزملاء وابنِ حضورك على الإنترنت."
-      ),
-    },
-  ];
-
-  return (
-    <section className="py-20 sm:py-28">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            {t("Everything You Need for Better Healthcare", "كل ما تحتاجه لرعاية صحية أفضل")}
-          </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
+      <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-12 lg:gap-8 lg:px-8 lg:pb-24 lg:pt-16">
+        <div className="lg:col-span-7">
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-primary shadow-sm">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {t("Egyptian medical platform · manually verified doctors", "منصة طبية مصرية · أطباء موثّقون يدويًا")}
+          </span>
+          <h1 className="mt-5 text-4xl font-bold leading-[1.25] text-foreground sm:text-5xl lg:text-[3.4rem]">
+            {t("Book a verified doctor", "احجز طبيبك الموثّق")}
+            <span className="block text-primary">{t("in minutes", "في دقائق")}</span>
+          </h1>
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
             {t(
-              "From finding the right doctor to managing your health records, Tebana simplifies your healthcare journey.",
-              "من إيجاد الطبيب المناسب إلى إدارة سجلاتك الصحية، منصة طبانا تبسّط رحلتك الصحية."
+              "In the clinic or by video. The price is shown before you book, and your medical record stays with you.",
+              "في العيادة أو بالفيديو — السعر معلن قبل الحجز، وسجلّك الطبي معك في كل مرة.",
             )}
           </p>
+
+          <div className="mt-8">
+            <SmartSearch isRTL={isRTL} t={t} />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">{t("Popular:", "الأكثر طلبًا:")}</span>
+            {TOP_SPECIALTIES.slice(0, 4).map((s) => (
+              <Link
+                key={s.slug}
+                to="/specialty/$slug"
+                params={{ slug: s.slug }}
+                className="rounded-full border border-border bg-card px-3 py-1 font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-accent"
+              >
+                {isRTL ? s.ar : s.en}
+              </Link>
+            ))}
+          </div>
         </div>
 
-        <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature, i) => (
-            <div
-              key={i}
-              className="group relative rounded-2xl border border-border bg-card p-6 transition-all hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 transition-colors group-hover:bg-primary/20">
-                <feature.icon className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="mt-4 text-lg font-semibold text-foreground">{feature.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                {feature.description}
-              </p>
+        <div className="relative lg:col-span-5">
+          <HeroMock t={t} />
+        </div>
+      </div>
+
+      <svg
+        className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-24 w-full text-primary/25"
+        viewBox="0 0 1200 100"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <path
+          className="ecg-line"
+          d="M0 60 H300 L330 60 L345 20 L360 95 L375 60 H560 L580 60 L595 35 L610 85 L625 60 H900 L915 60 L925 42 L938 78 L950 60 H1200"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </section>
+  );
+}
+
+/** Product preview built from the real UI language — no stock faces. */
+function HeroMock({ t }: { t: T }) {
+  const slots = ["10:00", "10:30", "11:00", "11:30"];
+  return (
+    <div className="relative mx-auto max-w-md lg:max-w-none" dir="rtl">
+      <div className="rounded-3xl border border-border bg-card p-5 shadow-[0_30px_80px_-30px_oklch(0.50_0.10_192/0.45)]">
+        <div className="flex items-start gap-4">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-secondary text-2xl font-bold text-primary">
+            د
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-lg font-bold text-foreground">{t("Verified doctor", "طبيب موثّق")}</span>
+              <VerifiedBadge verified size="sm" />
+            </div>
+            <p className="mt-0.5 text-sm text-muted-foreground">{t("Internal medicine · Cairo", "باطنة · القاهرة")}</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 font-medium text-secondary-foreground">
+                <Calendar className="h-3.5 w-3.5" /> {t("Clinic", "عيادة")}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 font-medium text-secondary-foreground">
+                <Video className="h-3.5 w-3.5" /> {t("Video", "فيديو")}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-sand px-2.5 py-1 font-medium text-sand-foreground">
+                <Wallet className="h-3.5 w-3.5" /> {t("Price shown", "السعر معلن")}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-2xl bg-surface p-4">
+          <p className="text-xs font-semibold text-muted-foreground">{t("Available today", "مواعيد اليوم")}</p>
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            {slots.map((s, i) => (
+              <span
+                key={s}
+                className={`rounded-xl py-2 text-center text-sm font-semibold tabular-nums ${
+                  i === 1
+                    ? "bg-primary text-primary-foreground shadow"
+                    : "border border-border bg-card text-foreground"
+                }`}
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+          <div className="mt-4 h-11 rounded-xl bg-primary text-center text-sm font-semibold leading-[2.75rem] text-primary-foreground">
+            {t("Confirm booking", "تأكيد الحجز")}
+          </div>
+        </div>
+      </div>
+
+      <div className="absolute -bottom-6 start-2 flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-lg sm:start-[-1.5rem]">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success-soft text-success">
+          <CheckCircle2 className="h-5 w-5" />
+        </span>
+        <div className="text-sm">
+          <p className="font-semibold text-foreground">{t("Booking confirmed", "تم تأكيد حجزك")}</p>
+          <p className="text-xs text-muted-foreground">{t("Sunday · 10:30 AM", "الأحد · 10:30 ص")}</p>
+        </div>
+      </div>
+
+      <div className="absolute -top-5 end-2 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-md sm:end-[-1rem]">
+        <HeartPulse className="h-4 w-4 text-coral" />
+        {t("Your record travels with you", "سجلّك معك في كل زيارة")}
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────── Specialties ───────────────────── */
+
+function Specialties({ t, isRTL }: { t: T; isRTL: boolean }) {
+  const Arrow = isRTL ? ArrowLeft : ArrowRight;
+  return (
+    <section className="border-y border-border bg-surface py-12 sm:py-14" aria-labelledby="home-specialties">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between gap-4">
+          <h2 id="home-specialties" className="text-2xl font-bold text-foreground sm:text-3xl">
+            {t("Find a doctor by specialty", "ابحث بالتخصص")}
+          </h2>
+          <Link to="/doctors" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+            {t("All specialties", "كل التخصصات")}
+            <Arrow className="h-4 w-4" />
+          </Link>
+        </div>
+        <ul className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {TOP_SPECIALTIES.map(({ slug, ar, en, Icon }) => (
+            <li key={slug}>
+              <Link
+                to="/specialty/$slug"
+                params={{ slug }}
+                className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="font-semibold text-foreground">{isRTL ? ar : en}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────────────────── Trust ──────────────────────── */
+
+function Trust({ t }: { t: T }) {
+  const items = [
+    {
+      Icon: ShieldCheck,
+      title: t("Every doctor is verified by hand", "كل طبيب موثّق يدويًا"),
+      body: t(
+        "License and certificates are reviewed before a profile goes live.",
+        "رخصته وشهاداته تُراجع قبل ما يظهر ملفه على المنصة.",
+      ),
+    },
+    {
+      Icon: Lock,
+      title: t("Your record is yours", "سجلّك الطبي ملكك"),
+      body: t(
+        "Encrypted, shared only with the doctor you choose, deletable on request.",
+        "مشفّر، لا يراه إلا الطبيب الذي تختاره، ويمكنك طلب حذفه في أي وقت.",
+      ),
+    },
+    {
+      Icon: BadgeCheck,
+      title: t("The price before the booking", "السعر قبل الحجز"),
+      body: t(
+        "Every profile shows the clinic and video fees up front. No hidden charges.",
+        "كل ملف يعرض سعر الكشف والاستشارة بوضوح، ولا رسوم مخفية.",
+      ),
+    },
+  ];
+  return (
+    <section className="py-16 sm:py-20" aria-labelledby="home-trust">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h2 id="home-trust" className="text-center text-2xl font-bold text-foreground sm:text-3xl">
+          {t("Why patients trust Tebana", "ليه تثق في طبانا")}
+        </h2>
+        <div className="mt-10 grid gap-5 md:grid-cols-3">
+          {items.map(({ Icon, title, body }) => (
+            <div key={title} className="rounded-3xl border border-border bg-card p-6">
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-primary">
+                <Icon className="h-6 w-6" />
+              </span>
+              <h3 className="mt-4 text-lg font-bold text-foreground">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
             </div>
           ))}
         </div>
@@ -297,115 +338,248 @@ function FeaturesSection({ t, isRTL }: { t: (en: string, ar: string) => string; 
   );
 }
 
-function HowItWorksSection({ t, isRTL }: { t: (en: string, ar: string) => string; isRTL: boolean }) {
+/* ─────────────────── Verified doctors ─────────────────── */
+
+interface HomeDoctor {
+  id: string;
+  profile_id: string | null;
+  specialty: string | null;
+  consultation_fee: number | null;
+  rating: number | null;
+  reviews_count: number | null;
+  is_verified: boolean | null;
+}
+interface HomeProfile {
+  id: string;
+  full_name: string | null;
+  city: string | null;
+  avatar_url: string | null;
+}
+
+async function fetchVerifiedDoctors(): Promise<(HomeDoctor & { profile?: HomeProfile })[]> {
+  const { data, error } = await supabase
+    .from("doctor_details")
+    .select(PUBLIC_DOCTOR_COLUMNS)
+    .eq("is_verified", true)
+    .not("profile_id", "is", null)
+    .order("rating", { ascending: false, nullsFirst: false })
+    .limit(6);
+  if (error) throw error;
+  const docs = (data ?? []) as unknown as HomeDoctor[];
+  const ids = docs.map((d) => d.profile_id).filter((v): v is string => !!v);
+  if (ids.length === 0) return docs;
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, full_name, city, avatar_url")
+    .in("id", ids);
+  const byId = new Map((profiles ?? []).map((p) => [p.id, p as HomeProfile]));
+  return docs.map((d) => ({ ...d, profile: d.profile_id ? byId.get(d.profile_id) : undefined }));
+}
+
+function Doctors({ t, isRTL }: { t: T; isRTL: boolean }) {
   const Arrow = isRTL ? ArrowLeft : ArrowRight;
+  const { data, isLoading } = useQuery({ queryKey: ["home-verified-doctors"], queryFn: fetchVerifiedDoctors, staleTime: 5 * 60_000 });
+  const doctors = data ?? [];
+
+  if (!isLoading && doctors.length === 0) return <VerificationSteps t={t} />;
+
+  return (
+    <section className="bg-surface py-16 sm:py-20" aria-labelledby="home-doctors">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between gap-4">
+          <h2 id="home-doctors" className="text-2xl font-bold text-foreground sm:text-3xl">
+            {t("Verified doctors", "أطباء موثّقون")}
+          </h2>
+          <Link to="/doctors" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+            {t("Browse all", "كل الأطباء")}
+            <Arrow className="h-4 w-4" />
+          </Link>
+        </div>
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {isLoading
+            ? Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-40 animate-pulse rounded-3xl border border-border bg-card" />
+              ))
+            : doctors.map((d) => {
+                const name = d.profile?.full_name?.trim() || t("Doctor", "طبيب");
+                const specialty = /^general$/i.test(d.specialty ?? "") ? t("General practice", "طب عام") : d.specialty;
+                return (
+                  <Link
+                    key={d.id}
+                    to="/doctor/$id"
+                    params={{ id: d.id }}
+                    className="group flex gap-4 rounded-3xl border border-border bg-card p-5 transition-all hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    {d.profile?.avatar_url ? (
+                      <img src={d.profile.avatar_url} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover" loading="lazy" />
+                    ) : (
+                      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-secondary text-xl font-bold text-primary">
+                        {name.replace(/^د\.?\s*/, "").charAt(0)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate font-bold text-foreground">{name}</span>
+                        <VerifiedBadge verified={!!d.is_verified} size="sm" />
+                      </div>
+                      <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                        {[specialty, d.profile?.city].filter(Boolean).join(" · ")}
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-primary">
+                        {d.consultation_fee
+                          ? t(`From ${d.consultation_fee} EGP`, `يبدأ من ${d.consultation_fee} ج`)
+                          : t("See prices", "اطّلع على الأسعار")}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function VerificationSteps({ t }: { t: T }) {
   const steps = [
-    {
-      icon: Search,
-      title: t("1. Search", "١. ابحث"),
-      description: t(
-        "Find doctors by specialty, city, or name. Filter by availability and patient ratings.",
-        "ابحث عن أطباء حسب التخصص أو المدينة أو الاسم. رشّح حسب التوفر وتقييمات المرضى."
-      ),
-    },
-    {
-      icon: Calendar,
-      title: t("2. Book", "٢. احجز"),
-      description: t(
-        "Choose a convenient time slot. Book in-person or online video consultation.",
-        "اختر وقتًا مناسبًا. احجز استشارة حضورية أو فيديو أونلاين."
-      ),
-    },
-    {
-      icon: Stethoscope,
-      title: t("3. Consult", "٣. استشر"),
-      description: t(
-        "Meet your doctor at the clinic or via secure video call. Get expert care.",
-        "قابل طبيبك في العيادة أو عبر مكالمة فيديو آمنة. احصل على رعاية متخصصة."
-      ),
-    },
-    {
-      icon: Shield,
-      title: t("4. Follow Up", "٤. تابع"),
-      description: t(
-        "Access your prescription and medical records. Book follow-ups with one click.",
-        "اطلع على روشتتك وسجلاتك الطبية. احجز متابعات بنقرة واحدة."
-      ),
-    },
+    { Icon: FileText, text: t("The doctor uploads license and certificates", "يرفع الطبيب رخصته وشهاداته") },
+    { Icon: Search, text: t("Tebana's team reviews them by hand", "يراجعها فريق طبانا يدويًا") },
+    { Icon: BadgeCheck, text: t("The verified badge appears and booking opens", "تظهر شارة «موثّق» ويُفتح الحجز") },
   ];
-
   return (
-    <section className="bg-gradient-to-b from-secondary/30 to-background py-20 sm:py-28">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            {t("How Tebana Works", "كيف تعمل منصة طبانا")}
-          </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
-            {t(
-              "Simple steps to get the care you need, when you need it.",
-              "خطوات بسيطة للحصول على الرعاية التي تحتاجها، عندما تحتاجها."
-            )}
-          </p>
-        </div>
-
-        <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          {steps.map((step, i) => (
-            <div key={i} className="relative text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/20">
-                <step.icon className="h-8 w-8 text-primary-foreground" />
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-foreground">{step.title}</h3>
-              <p className="mt-2 text-sm text-muted-foreground">{step.description}</p>
-              {i < steps.length - 1 && (
-                <div className="hidden lg:block absolute top-8 -right-4">
-                  <Arrow className="h-6 w-6 text-border" />
-                </div>
-              )}
-            </div>
+    <section className="bg-surface py-16 sm:py-20" aria-labelledby="home-verification">
+      <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
+        <h2 id="home-verification" className="text-2xl font-bold text-foreground sm:text-3xl">
+          {t("How a doctor gets verified", "إزاي بنوثّق الطبيب")}
+        </h2>
+        <ol className="mt-10 grid gap-5 sm:grid-cols-3">
+          {steps.map(({ Icon, text }, i) => (
+            <li key={i} className="rounded-3xl border border-border bg-card p-6">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-primary">
+                <Icon className="h-6 w-6" />
+              </span>
+              <p className="mt-4 text-sm font-semibold text-foreground">
+                <span className="text-primary">{i + 1}. </span>
+                {text}
+              </p>
+            </li>
           ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+/* ───────────────────── For doctors ───────────────────── */
+
+function ForDoctors({ t, isRTL }: { t: T; isRTL: boolean }) {
+  const Arrow = isRTL ? ArrowLeft : ArrowRight;
+  const bullets = [
+    t("Queue and appointment booking from the website and the app", "حجز بالدور والمواعيد من الموقع والتطبيق"),
+    t("E-prescriptions and a medical record for every patient", "روشتة إلكترونية وسجل طبي لكل مريض"),
+    t("0% commission on clinic visits — you only pay on online consultations", "0% عمولة على كشف العيادة — العمولة على الاستشارة أونلاين فقط"),
+  ];
+  return (
+    <section className="py-16 sm:py-20" aria-labelledby="home-for-doctors">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="relative overflow-hidden rounded-[2rem] bg-ink px-6 py-12 text-background sm:px-12 lg:px-16 lg:py-16">
+          <div className="pointer-events-none absolute -end-24 -top-24 h-80 w-80 rounded-full bg-primary/40 blur-3xl" aria-hidden />
+          <div className="pointer-events-none absolute -bottom-24 -start-16 h-64 w-64 rounded-full bg-coral/30 blur-3xl" aria-hidden />
+          <div className="relative grid items-center gap-10 lg:grid-cols-2">
+            <div>
+              <span className="text-sm font-semibold text-coral">{t("For doctors", "للأطباء")}</span>
+              <h2 id="home-for-doctors" className="mt-2 text-3xl font-bold sm:text-4xl">
+                {t("Open your digital clinic", "افتح عيادتك الرقمية")}
+              </h2>
+              <p className="mt-4 max-w-lg text-base leading-relaxed text-background/75">
+                {t(
+                  "Manage bookings, the waiting room, prescriptions and your patients' records from one place.",
+                  "إدارة الحجوزات وغرفة الانتظار والروشتات وسجلات مرضاك من مكان واحد.",
+                )}
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  to="/join-doctor"
+                  className="inline-flex items-center gap-2 rounded-xl bg-coral px-6 py-3 text-base font-semibold text-coral-foreground shadow-lg transition-colors hover:bg-coral/90"
+                >
+                  {t("Join as a doctor", "انضم كطبيب")}
+                  <Arrow className="h-5 w-5" />
+                </Link>
+                <Link
+                  to="/pricing"
+                  className="inline-flex items-center gap-2 rounded-xl border border-background/30 px-6 py-3 text-base font-semibold text-background transition-colors hover:bg-background/10"
+                >
+                  {t("Plans and pricing", "الباقات والأسعار")}
+                </Link>
+              </div>
+            </div>
+            <ul className="space-y-4">
+              {bullets.map((b) => (
+                <li key={b} className="flex items-start gap-3 rounded-2xl bg-background/10 p-4 backdrop-blur">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-coral" />
+                  <span className="text-sm font-medium leading-relaxed">{b}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function FaqSection({ t }: { t: (en: string, ar: string) => string }) {
-  return (
-    <section className="bg-background py-20 sm:py-28" id="faq">
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            {t("Frequently Asked Questions", "الأسئلة الأكثر شيوعاً")}
-          </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
-            {t(
-              "Quick answers about booking, online consultations, security, and pricing.",
-              "إجابات سريعة عن الحجز، الاستشارة أونلاين، الأمان، والأسعار."
-            )}
-          </p>
-        </div>
+/* ──────────────────── How it works ──────────────────── */
 
-        <div className="mt-12 divide-y divide-border rounded-2xl border border-border bg-card">
-          {HOMEPAGE_FAQ.map((item, i) => (
-            <details
-              key={i}
-              className="group p-6 [&_summary::-webkit-details-marker]:hidden"
-            >
-              <summary className="flex cursor-pointer items-start justify-between gap-4 text-right">
-                <h3 className="text-base font-semibold text-foreground sm:text-lg">
-                  {item.question}
-                </h3>
-                <span
-                  aria-hidden
-                  className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-transform group-open:rotate-45"
-                >
+function HowItWorks({ t }: { t: T }) {
+  const steps = [
+    { Icon: Search, title: t("Search", "ابحث"), body: t("By specialty, doctor name or symptom.", "بالتخصص أو اسم الطبيب أو العرَض.") },
+    { Icon: Calendar, title: t("Book", "احجز"), body: t("Pick a clinic slot or a video consultation.", "اختر موعدًا في العيادة أو استشارة فيديو.") },
+    { Icon: HeartPulse, title: t("Get care", "اتعالج"), body: t("Your prescription and record stay in your account.", "روشتتك وسجلّك يبقوا في حسابك.") },
+  ];
+  return (
+    <section className="bg-surface py-16 sm:py-20" aria-labelledby="home-how">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+        <h2 id="home-how" className="text-center text-2xl font-bold text-foreground sm:text-3xl">
+          {t("Three steps", "ثلاث خطوات")}
+        </h2>
+        <ol className="mt-10 grid gap-5 sm:grid-cols-3">
+          {steps.map(({ Icon, title, body }, i) => (
+            <li key={title} className="relative rounded-3xl border border-border bg-card p-6 text-center">
+              <span className="absolute -top-3 start-6 rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold text-primary-foreground">
+                {i + 1}
+              </span>
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-primary">
+                <Icon className="h-6 w-6" />
+              </span>
+              <h3 className="mt-4 text-lg font-bold text-foreground">{title}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+/* ────────────────────────── FAQ ────────────────────────── */
+
+function Faq({ t }: { t: T }) {
+  return (
+    <section className="py-16 sm:py-20" aria-labelledby="home-faq">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <h2 id="home-faq" className="text-center text-2xl font-bold text-foreground sm:text-3xl">
+          {t("Common questions", "أسئلة شائعة")}
+        </h2>
+        <div className="mt-8 divide-y divide-border rounded-3xl border border-border bg-card">
+          {HOMEPAGE_FAQ.map((f) => (
+            <details key={f.question} className="group px-6 py-4 open:bg-surface/60">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-start font-semibold text-foreground [&::-webkit-details-marker]:hidden">
+                {f.question}
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-secondary text-primary transition-transform group-open:rotate-45">
                   +
                 </span>
               </summary>
-              <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
-                {item.answer}
-              </p>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{f.answer}</p>
             </details>
           ))}
         </div>
@@ -414,145 +588,36 @@ function FaqSection({ t }: { t: (en: string, ar: string) => string }) {
   );
 }
 
-function ArticlesTeaserSection({
-  t,
-  isRTL,
-}: {
-  t: (en: string, ar: string) => string;
-  isRTL: boolean;
-}) {
+/* ─────────────────────── Final CTA ─────────────────────── */
+
+function FinalCta({ t, isRTL }: { t: T; isRTL: boolean }) {
   const Arrow = isRTL ? ArrowLeft : ArrowRight;
-  const cards = [
-    {
-      icon: <HeartPulse className="h-6 w-6" />,
-      title: t("Symptoms & red flags", "الأعراض والعلامات المُقلقة"),
-      desc: t(
-        "Know when chest pain, fever or numbness need urgent care.",
-        "اعرف متى يكون ألم الصدر أو الحرارة أو التنميل بحاجة لتدخل عاجل.",
-      ),
-    },
-    {
-      icon: <Stethoscope className="h-6 w-6" />,
-      title: t("When to see which doctor", "متى تستشير طبيب الاختصاص"),
-      desc: t(
-        "Cardiologist, neurologist, pediatrician — pick the right specialty in seconds.",
-        "قلب، مخ وأعصاب، أطفال... اختر التخصص الصحيح في ثوانٍ.",
-      ),
-    },
-    {
-      icon: <Shield className="h-6 w-6" />,
-      title: t("Trusted, doctor-written", "محتوى يكتبه أطباء موثّقون"),
-      desc: t(
-        "Every article is reviewed by a licensed physician on the platform.",
-        "كل مقال يُراجع بواسطة طبيب مرخّص على المنصة.",
-      ),
-    },
-  ];
-
   return (
-    <section className="py-16 sm:py-20" aria-labelledby="articles-teaser-heading">
+    <section className="pb-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/5 via-background to-teal/5 p-8 sm:p-12">
-          <div className="grid items-center gap-10 lg:grid-cols-2">
-            <div>
-              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                <BookOpen className="h-3.5 w-3.5" />
-                {t("Medical Library", "مكتبة طبية")}
-              </span>
-              <h2
-                id="articles-teaser-heading"
-                className="mt-4 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl"
-              >
-                {t(
-                  "Read before you book — answers from real doctors",
-                  "اقرأ قبل ما تحجز — إجابات من أطباء حقيقيين",
-                )}
-              </h2>
-              <p className="mt-4 text-lg leading-8 text-muted-foreground">
-                {t(
-                  "Browse our growing library of medical articles written and reviewed by licensed doctors. Understand symptoms, treatment options, and know when it's time to consult a specialist.",
-                  "تصفح مكتبة المحتوى الطبي المتنامية — مقالات يكتبها ويراجعها أطباء مرخّصون لتفهم الأعراض، الخيارات العلاجية، ومتى يجب استشارة الاختصاصي.",
-                )}
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  to="/articles"
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-xl"
-                >
-                  <BookOpen className="h-5 w-5" />
-                  {t("Browse all articles", "تصفّح كل المقالات")}
-                  <Arrow className="h-5 w-5" />
-                </Link>
-                <Link
-                  to="/doctors"
-                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-3 text-base font-semibold text-foreground transition-all hover:bg-accent"
-                >
-                  {t("Find a doctor", "ابحث عن طبيب")}
-                </Link>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {cards.map((c, i) => (
-                <Link
-                  key={i}
-                  to="/articles"
-                  className="group rounded-2xl border border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-lg"
-                >
-                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                    {c.icon}
-                  </div>
-                  <h3 className="mt-4 text-base font-bold text-foreground">{c.title}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">{c.desc}</p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CTASection({ t, isRTL }: { t: (en: string, ar: string) => string; isRTL: boolean }) {
-  const Arrow = isRTL ? ArrowLeft : ArrowRight;
-
-  return (
-    <section className="py-20 sm:py-28">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-primary/80 px-6 py-16 sm:px-16 sm:py-20 lg:px-20">
-          {/* Decorative elements */}
-          <div className="absolute -right-10 -top-10 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute -bottom-10 -left-10 h-64 w-64 rounded-full bg-teal/20 blur-3xl" />
-
-          <div className="relative mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              {t(
-                "Ready to Take Control of Your Health?",
-                "مستعد للتحكم في صحتك؟"
-              )}
-            </h2>
-            <p className="mt-4 text-lg text-primary-foreground/80">
-              {t(
-                "Join thousands of patients and doctors who trust Tebana for better healthcare.",
-                "انضم لآلاف المرضى والأطباء الذين يثقون بطبانا لرعاية صحية أفضل."
-              )}
-            </p>
-            <div className="mt-8 flex flex-wrap justify-center gap-4">
-              <Link
-                to="/signup"
-                className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-base font-semibold text-primary shadow-lg transition-all hover:bg-white/90 hover:shadow-xl"
-              >
-                {t("Get Started Free", "ابدأ مجاناً")}
-                <Arrow className="h-5 w-5" />
-              </Link>
-              <Link
-                to="/how-it-works"
-                className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-6 py-3 text-base font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20"
-              >
-                {t("Learn More", "اعرف المزيد")}
-              </Link>
-            </div>
+        <div className="relative overflow-hidden rounded-[2rem] bg-primary px-6 py-14 text-center text-primary-foreground sm:px-16">
+          <div className="pointer-events-none absolute -start-20 -top-20 h-64 w-64 rounded-full bg-background/15 blur-3xl" aria-hidden />
+          <div className="pointer-events-none absolute -bottom-24 -end-10 h-72 w-72 rounded-full bg-coral/30 blur-3xl" aria-hidden />
+          <h2 className="relative text-3xl font-bold sm:text-4xl">
+            {t("Your doctor is a search away", "طبيبك على بُعد بحث")}
+          </h2>
+          <p className="relative mx-auto mt-3 max-w-xl text-base text-primary-foreground/85">
+            {t("Verified doctors, clear prices, and a record that stays with you.", "أطباء موثّقون، أسعار واضحة، وسجل يبقى معك.")}
+          </p>
+          <div className="relative mt-8 flex flex-wrap justify-center gap-3">
+            <Link
+              to="/doctors"
+              className="inline-flex items-center gap-2 rounded-xl bg-background px-6 py-3 text-base font-semibold text-primary shadow-lg transition-colors hover:bg-background/90"
+            >
+              {t("Find a doctor", "ابحث عن طبيب")}
+              <Arrow className="h-5 w-5" />
+            </Link>
+            <Link
+              to="/join-doctor"
+              className="inline-flex items-center gap-2 rounded-xl border border-primary-foreground/40 px-6 py-3 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/10"
+            >
+              {t("I'm a doctor", "أنا طبيب")}
+            </Link>
           </div>
         </div>
       </div>

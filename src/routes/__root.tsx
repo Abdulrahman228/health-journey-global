@@ -222,7 +222,9 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex min-h-screen flex-col">
+      {/* .site-public scopes the marketing identity tokens (styles.css) to the
+          public pages; the doctor system and patient screens keep theirs. */}
+      <div className="site-public flex min-h-screen flex-col">
         <Header />
         <main className="flex-1">
           <Outlet />

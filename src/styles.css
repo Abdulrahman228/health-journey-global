@@ -63,6 +63,11 @@
   --color-info-soft: var(--info-soft);
   /* App canvas behind cards (slightly cooler than the page background) */
   --color-surface: var(--surface);
+  /* Public-site brand accents (the heart mark's ECG glow + mint tints) */
+  --color-coral: var(--coral);
+  --color-coral-foreground: var(--coral-foreground);
+  --color-mint: var(--mint);
+  --color-ink: var(--ink);
   /* Single Arabic-first UI family for the doctor system */
   --font-app: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, sans-serif;
 }
@@ -119,9 +124,17 @@
   --info: oklch(0.58 0.14 235);
   --info-foreground: oklch(1 0 0);
   --info-soft: oklch(0.955 0.03 235);
+  --coral: oklch(0.68 0.19 32);
+  --coral-foreground: oklch(1 0 0);
+  --mint: oklch(0.96 0.03 180);
+  --ink: oklch(0.22 0.04 200);
 }
 
 .dark {
+  --coral: oklch(0.74 0.16 35);
+  --coral-foreground: oklch(0.15 0.03 30);
+  --mint: oklch(0.22 0.04 185);
+  --ink: oklch(0.95 0.01 180);
   --surface: oklch(0.135 0.03 260);
   --success: oklch(0.72 0.15 155);
   --success-foreground: oklch(0.12 0.03 260);
@@ -246,6 +259,89 @@
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;
   }
+}
+
+/* ───────────── Public site (marketing pages) identity ─────────────
+ * "Modern clinic": deep teal primary, mint tints, coral highlights that echo
+ * the ECG glow of the heart mark. Scoped to .site-public (the Header/Outlet/
+ * Footer branch in __root) so the doctor system and patient screens keep
+ * their own tokens until the owner approves unifying them. */
+.site-public {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.22 0.04 200);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.04 200);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.04 200);
+  --primary: oklch(0.50 0.10 192);          /* deep teal */
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0.03 180);        /* mint tint */
+  --secondary-foreground: oklch(0.35 0.08 195);
+  --muted: oklch(0.965 0.012 190);
+  --muted-foreground: oklch(0.48 0.035 200);
+  --accent: oklch(0.945 0.035 185);         /* soft mint (hover fills) */
+  --accent-foreground: oklch(0.32 0.08 195);
+  --border: oklch(0.905 0.02 190);
+  --input: oklch(0.93 0.02 190);
+  --ring: oklch(0.50 0.10 192);
+  --medical: oklch(0.50 0.10 192);
+  --teal: oklch(0.58 0.11 190);
+  --surface: oklch(0.985 0.008 185);
+  --sand: oklch(0.975 0.015 80);
+  --sand-foreground: oklch(0.35 0.08 195);
+  font-family: var(--font-app);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+.dark .site-public {
+  --background: oklch(0.15 0.03 200);
+  --foreground: oklch(0.95 0.01 180);
+  --card: oklch(0.20 0.03 200);
+  --card-foreground: oklch(0.95 0.01 180);
+  --popover: oklch(0.20 0.03 200);
+  --popover-foreground: oklch(0.95 0.01 180);
+  --primary: oklch(0.72 0.11 185);
+  --primary-foreground: oklch(0.15 0.03 200);
+  --secondary: oklch(0.24 0.04 190);
+  --secondary-foreground: oklch(0.95 0.01 180);
+  --muted: oklch(0.24 0.03 195);
+  --muted-foreground: oklch(0.70 0.03 190);
+  --accent: oklch(0.27 0.05 185);
+  --accent-foreground: oklch(0.95 0.01 180);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.72 0.11 185);
+  --medical: oklch(0.72 0.11 185);
+  --teal: oklch(0.72 0.11 185);
+  --surface: oklch(0.17 0.03 200);
+  --sand: oklch(0.24 0.03 80);
+  --sand-foreground: oklch(0.95 0.01 180);
+}
+.site-public h1,
+.site-public h2,
+.site-public h3 {
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+/* Faint clinical grid + ECG line behind the hero */
+.site-public .hero-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.50 0.10 192 / 7%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.50 0.10 192 / 7%) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at 70% 30%, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at 70% 30%, black 30%, transparent 75%);
+}
+.site-public .ecg-line {
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: ecg-draw 3.2s ease-out forwards;
+}
+@keyframes ecg-draw {
+  to { stroke-dashoffset: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-public .ecg-line { animation: none; stroke-dashoffset: 0; }
 }
 
 /* RTL Support */
