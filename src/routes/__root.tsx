@@ -94,6 +94,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "author", content: `${siteConfig.brand.en} — ${siteConfig.brand.ar}` },
       { name: "application-name", content: `${siteConfig.brand.en} — ${siteConfig.brand.ar}` },
       { httpEquiv: "x-ua-compatible", content: "IE=edge" },
+      // Google Search Console ownership (URL-prefix property https://mytabibi.com/),
+      // issued by the Site Verification API for the owner's Google account.
+      { name: "google-site-verification", content: "5-Dw-kCaPLRRbC6rmbD59AiksD-UpTdP4agrn2IHvRo" },
       // Fallback title/description only. Every indexable route sets its own
       // buildMeta() + buildSeoLinks(); emitting a full homepage meta set here
       // duplicated og:url/canonical on every page (2026-11 audit).
