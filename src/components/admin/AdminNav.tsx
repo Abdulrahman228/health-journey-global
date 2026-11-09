@@ -45,7 +45,13 @@ const SECTIONS: Section[] = [
       { to: "/admin/seed-directory", label: "استيراد الدليل", icon: UploadCloud },
     ],
   },
-  { label: "المرضى", items: [{ to: "/admin/patients", label: "المرضى", icon: UserRound }] },
+  {
+    label: "المستخدمون",
+    items: [
+      { to: "/admin/users/new", label: "إنشاء مستخدم", icon: UserPlus },
+      { to: "/admin/patients", label: "المرضى", icon: UserRound },
+    ],
+  },
   {
     label: "المالية",
     items: [
