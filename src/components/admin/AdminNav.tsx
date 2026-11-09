@@ -49,6 +49,7 @@ const SECTIONS: Section[] = [
   {
     label: "المالية",
     items: [
+      { to: "/admin/finance", label: "نظرة عامة وأرباح المنصة", icon: Wallet, exact: true },
       { to: "/admin/subscriptions", label: "الاشتراكات", icon: CreditCard },
       { to: "/admin/subscription-requests", label: "طلبات الاشتراك", icon: ClipboardCheck },
       { to: "/admin/appointment-payments", label: "مدفوعات المواعيد", icon: ReceiptText },
