@@ -199,6 +199,20 @@ function RootComponent() {
     installClientErrorHandlers();
   }, []);
 
+  // Admin pages bring their own shell (AdminShell: top bar + grouped sidebar);
+  // the public header/footer would only add noise. Tokens stay .site-public.
+  if (!solo.isSolo && (pathname === "/admin" || pathname.startsWith("/admin/"))) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <div className="site-public">
+          <Outlet />
+        </div>
+        <WebVitalsReporter />
+        <Toaster richColors closeButton position="top-center" />
+      </QueryClientProvider>
+    );
+  }
+
   if (!solo.isSolo && isDoctorAppPath(pathname)) {
     return (
       <QueryClientProvider client={queryClient}>
