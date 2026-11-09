@@ -4,7 +4,7 @@ import { CheckCircle2, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
-import { DOCTOR_PLANS, formatEgp, annualSavingsEgp, type PlanCode } from "@/lib/plans";
+import { DOCTOR_PLANS, FREE_PLAN, TRIAL_DAYS, formatEgp, annualSavingsEgp, periodLabel, type PlanCode } from "@/lib/plans";
 import { buildMeta, buildSeoLinks, canonicalUrl, siteConfig } from "@/lib/seo";
 import { jsonLdString } from "@/lib/schema";
 
@@ -49,11 +49,6 @@ const PAID_PLAN_CODES = new Set<PlanCode>([
   "doctor_gold_yearly",
   "doctor_gold_lifetime",
 ]);
-const PERIOD_LABEL_AR: Record<string, string> = {
-  monthly: "ج.م / شهرياً",
-  yearly: "ج.م / سنوياً",
-  lifetime: "ج.م مرة واحدة",
-};
 
 function PricingPage() {
   const { user } = useAuth();
@@ -91,7 +86,11 @@ function PricingPage() {
               كل المزايا الاحترافية في خطة واحدة
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-              اختر الفوترة الشهرية أو السنوية، أو ادفع مرة واحدة مدى الحياة. تجربة مجانية 30 يوماً، وألغِ في أي وقت.
+              اختر الفوترة الشهرية أو السنوية، أو ادفع مرة واحدة مدى الحياة. ألغِ في أي وقت.
+            </p>
+            <p className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary">
+              <Sparkles className="h-4 w-4" />
+              {`كل طبيب جديد يحصل على Gold مجاناً لمدة ${TRIAL_DAYS} يوماً من تاريخ التسجيل — بدون كارت`}
             </p>
             {isActive && subscription?.plan_code && (
               <p className="mt-2 text-sm text-success">
@@ -104,8 +103,24 @@ function PricingPage() {
             )}
           </div>
 
-          {/* Billing-period selector (monthly / yearly / lifetime) */}
-          <div className="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-3">
+          {/* Free plan (always available) + billing-period selector (monthly / yearly / lifetime) */}
+          <div className="mx-auto mt-10 grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="relative rounded-2xl border border-border bg-background p-6 text-start">
+              <div className="text-lg font-bold text-foreground">{FREE_PLAN.nameAr}</div>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-4xl font-bold text-foreground">0</span>
+                <span className="text-sm text-muted-foreground">{periodLabel("free", "ar")}</span>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{FREE_PLAN.descriptionAr}</p>
+              <ul className="mt-4 space-y-2 text-xs text-foreground/90">
+                {FREE_PLAN.features.map((f) => (
+                  <li key={f.ar} className="flex items-start gap-1.5">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                    <span>{f.ar}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
             {DOCTOR_PLANS.map((plan) => {
               const isSel = plan.code === selected;
               const isYearly = plan.billingPeriod === "yearly";
@@ -132,7 +147,7 @@ function PricingPage() {
                       {formatEgp(plan.priceEgp, "en")}
                     </span>
                     <span className="text-sm text-muted-foreground">
-                      {PERIOD_LABEL_AR[plan.billingPeriod]}
+                      {periodLabel(plan.billingPeriod, "ar")}
                     </span>
                   </div>
                   {isYearly && savings > 0 && (
@@ -183,7 +198,7 @@ function PricingPage() {
           </div>
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
-            الأسعار شاملة جميع الضرائب المطبقة. تبدأ بتجربة مجانية 30 يوماً، ويمكنك الإلغاء في أي وقت
+            الأسعار شاملة جميع الضرائب المطبقة. تبدأ بتجربة Gold مجانية 30 يوماً، ويمكنك الإلغاء في أي وقت
             من لوحة التحكم. راجع{" "}
             <Link to="/terms" className="underline">
               الشروط

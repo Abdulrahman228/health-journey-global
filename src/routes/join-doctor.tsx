@@ -27,7 +27,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { DOCTOR_PLANS, formatEgp } from "@/lib/plans";
+import { ALL_PLANS, TRIAL_DAYS, formatEgp, periodLabel } from "@/lib/plans";
 
 export const Route = createFileRoute("/join-doctor")({
   head: () => ({
@@ -343,15 +343,10 @@ function HowItWorks({ t }: { t: T }) {
 
 /* ─────────────────────── ④ Plans ─────────────────────── */
 function Plans({ t }: { t: T }) {
-  const plans = DOCTOR_PLANS.map((p) => ({
+  const plans = ALL_PLANS.map((p) => ({
     name: t(p.nameEn, p.nameAr),
     price: p.priceEgp === 0 ? "0" : formatEgp(p.priceEgp, "en"),
-    period:
-      p.priceEgp === 0
-        ? t("forever", "للأبد")
-        : p.billingPeriod === "yearly"
-          ? t("EGP / year", "ج.م / سنوياً")
-          : t("EGP / month", "ج.م / شهرياً"),
+    period: t(periodLabel(p.billingPeriod, "en"), periodLabel(p.billingPeriod, "ar")),
     featured: !!p.featured,
     badge: p.badgeEn && p.badgeAr ? t(p.badgeEn, p.badgeAr) : undefined,
     features: p.features.map((f) => t(f.en, f.ar)),
@@ -371,9 +366,16 @@ function Plans({ t }: { t: T }) {
               "ابدأ مجاناً. ارفع باقتك فقط عندما تنمو ممارستك.",
             )}
           </p>
+          <p className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary">
+            <Sparkles className="h-4 w-4" />
+            {t(
+              `Every new doctor gets Gold free for ${TRIAL_DAYS} days — no card needed`,
+              `كل طبيب جديد يحصل على Gold مجاناً لمدة ${TRIAL_DAYS} يوماً من تاريخ التسجيل — بدون كارت`,
+            )}
+          </p>
         </div>
 
-        <div className="mx-auto mt-12 grid max-w-5xl gap-6 lg:grid-cols-3">
+        <div className="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-2 xl:grid-cols-4">
           {plans.map((p, i) => (
             <div
               key={i}

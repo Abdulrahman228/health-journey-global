@@ -13,7 +13,17 @@ export type PlanCode =
   | "doctor_gold_yearly"
   | "doctor_gold_lifetime";
 
-export type BillingPeriod = "monthly" | "yearly" | "lifetime";
+export type BillingPeriod = "free" | "monthly" | "yearly" | "lifetime";
+
+/** Every new doctor gets Gold free for this many days from the join date (DB: grant_doctor_trial_if_absent). */
+export const TRIAL_DAYS = 30;
+
+/** Price suffix for a billing period ("ج.م / شهرياً", "ج.م مرة واحدة", "للأبد"…). */
+export function periodLabel(period: BillingPeriod, lang: "ar" | "en" = "ar"): string {
+  const ar: Record<BillingPeriod, string> = { free: "للأبد", monthly: "ج.م / شهرياً", yearly: "ج.م / سنوياً", lifetime: "ج.م مرة واحدة" };
+  const en: Record<BillingPeriod, string> = { free: "forever", monthly: "EGP / month", yearly: "EGP / year", lifetime: "EGP one-time" };
+  return (lang === "ar" ? ar : en)[period];
+}
 
 export interface PlanFeature {
   en: string;
@@ -79,6 +89,31 @@ const GOLD_FEATURES: PlanFeature[] = [
   },
 ];
 
+// What a doctor gets without paying — honest to the code: only the AI
+// assistant, analytics, the accounting module, sponsored slots and the 10 %
+// commission are Gold-gated.
+export const FREE_PLAN: DoctorPlan = {
+  code: "doctor_free",
+  nameEn: "Free",
+  nameAr: "الخطة المجانية",
+  descriptionEn: "Everything you need to run bookings. No card, no expiry.",
+  descriptionAr: "كل ما تحتاجه لإدارة حجوزاتك. بدون كارت وبلا انتهاء.",
+  priceEgp: 0,
+  billingPeriod: "free",
+  ctaEn: "Start free",
+  ctaAr: "ابدأ مجاناً",
+  features: [
+    { en: "Doctor profile listed in search results", ar: "ملف طبيب يظهر في نتائج البحث" },
+    { en: "Unlimited clinic bookings (queue + appointments) — 0% commission", ar: "حجز بالدور والمواعيد للعيادة بلا حدود — 0% عمولة" },
+    { en: "Live waiting room and queue", ar: "غرفة انتظار ودور مباشر" },
+    { en: "Online video consultations (15% commission)", ar: "استشارات فيديو أونلاين (عمولة 15%)" },
+    { en: "Medical record and e-prescription for every patient", ar: "سجل طبي وروشتة إلكترونية لكل مريض" },
+    { en: "Doctor app on Android and iOS", ar: "تطبيق الطبيب على أندرويد وآيفون" },
+    { en: "Standard support", ar: "دعم فني" },
+  ],
+};
+
+/** Paid plans only (what /pricing lets a doctor buy). */
 export const DOCTOR_PLANS: DoctorPlan[] = [
   {
     code: "doctor_gold_monthly",
@@ -122,6 +157,9 @@ export const DOCTOR_PLANS: DoctorPlan[] = [
     features: GOLD_FEATURES,
   },
 ];
+
+/** Free + paid, for pages that show the whole ladder. */
+export const ALL_PLANS: DoctorPlan[] = [FREE_PLAN, ...DOCTOR_PLANS];
 
 export function formatEgp(amount: number, lang: "ar" | "en" = "ar"): string {
   if (amount === 0) return "0";
