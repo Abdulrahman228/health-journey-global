@@ -17,6 +17,7 @@ import {
 import type { EntityDef } from "@/lib/admin/registry";
 import { ENUM_VALUES, type ColumnMeta } from "@/lib/admin/schema.generated";
 import { adminDeleteRow, adminInsertRow, adminListRows, adminUpdateRow, type AdminRow } from "@/lib/admin/data";
+import { EntityActions } from "@/components/admin/EntityActions";
 
 type Row = AdminRow;
 type JsonValueLike = AdminRow[string];
@@ -301,13 +302,17 @@ export function AdminTable({ entity, initialFilters = [], canCreate = true }: Pr
           onClose={() => setDrawer(null)}
           onSave={(patch) => (drawer.mode === "create" ? insert.mutate(patch) : update.mutate({ id: drawer.row[entity.pk] as string | number, patch }))}
           onDelete={drawer.mode === "edit" && !entity.readOnly ? () => askDelete(drawer.row) : undefined}
+          onActionDone={() => {
+            setDrawer(null);
+            qc.invalidateQueries({ queryKey: ["admin-rows", entity.table] });
+          }}
         />
       )}
     </div>
   );
 }
 
-function RowDrawer({ entity, mode, row, busy, onClose, onSave, onDelete }: {
+function RowDrawer({ entity, mode, row, busy, onClose, onSave, onDelete, onActionDone }: {
   entity: EntityDef;
   mode: "edit" | "create";
   row: Row;
@@ -315,6 +320,7 @@ function RowDrawer({ entity, mode, row, busy, onClose, onSave, onDelete }: {
   onClose: () => void;
   onSave: (patch: Row) => void;
   onDelete?: () => void;
+  onActionDone: () => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(entity.columns.map((c) => [c.name, row[c.name] == null ? "" : typeof row[c.name] === "object" ? JSON.stringify(row[c.name], null, 2) : String(row[c.name])])),
@@ -358,6 +364,12 @@ function RowDrawer({ entity, mode, row, busy, onClose, onSave, onDelete }: {
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-accent" aria-label="إغلاق"><X className="h-5 w-5" /></button>
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+          {mode === "edit" && (
+            <div className="rounded-xl border border-border bg-surface p-3">
+              <p className="mb-2 text-xs font-semibold text-muted-foreground">إجراءات</p>
+              <EntityActions entity={entity} row={row} onDone={onActionDone} />
+            </div>
+          )}
           {entity.columns.map((c) => {
             const disabled = entity.readOnly || (mode === "edit" ? readOnly.has(c.name) : c.name === entity.pk && c.kind !== "text") ;
             const enumVals = c.enum ? ENUM_VALUES[c.enum] : null;
